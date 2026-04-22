@@ -222,7 +222,7 @@ async function apiRead(sheet){
 }
 async function apiWrite(sheet,records){
   const cols=COLS[sheet];const values=[cols];
-  records.forEach(r=>values.push(cols.map(c=>r[c]!==undefined&&r[c]!==null?String(r[c]):''));
+  records.forEach(r=>values.push(cols.map(c=>r[c]!==undefined&&r[c]!==null?String(r[c]):'')));
   const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({sheet,action:'write',values})});
   const d=await res.json();if(d.error)throw new Error(d.error);
 }
