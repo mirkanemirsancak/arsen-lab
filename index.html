@@ -361,6 +361,29 @@ function updateBadges(){
   const n=C.Ekipman.filter(e=>e.kalibrasyonTarihi&&(new Date(e.kalibrasyonTarihi)-bugun)/86400000<=30).length;
   const eb=document.getElementById('ekip-badge');if(n>0){eb.textContent=n;eb.style.display='';}else eb.style.display='none';
 }
+function scheduleHTML(compact=false){
+  const total=Object.values(GOREV_CIZELGE.tasks).reduce((n,arr)=>n+arr.length,0);
+  return`
+    <div class="schedule-meta">
+      <div><div class="schedule-title">${GOREV_CIZELGE.title}</div><div class="schedule-sub">${GOREV_CIZELGE.subtitle} · ${total} görev</div></div>
+      <div class="schedule-legend">
+        <div class="schedule-leg"><span class="schedule-dot red"></span>Kritik</div>
+        <div class="schedule-leg"><span class="schedule-dot amber"></span>Yüksek</div>
+        <div class="schedule-leg"><span class="schedule-dot teal"></span>Devam ediyor</div>
+        <div class="schedule-leg"><span class="schedule-dot blue"></span>Planlı</div>
+      </div>
+    </div>
+    <div class="table-wrap"><table class="schedule-table">
+      <thead><tr><th style="width:130px">Ekip</th>${GOREV_CIZELGE.days.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
+      <tbody>${GOREV_CIZELGE.persons.map(p=>`<tr>
+        <td class="schedule-person"><strong>${p.name}</strong><span>${p.role}</span></td>
+        ${GOREV_CIZELGE.days.map((_,idx)=>{
+          const tasks=GOREV_CIZELGE.tasks[`${p.name}-${idx}`]||[];
+          return`<td>${tasks.length?tasks.map(t=>`<div class="schedule-task"><i class="schedule-priority ${t.p}"></i><span>${t.t}</span></div>`).join(''):'<span class="text-muted text-sm">—</span>'}</td>`;
+        }).join('')}
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
 
 // ── DASHBOARD ──
 function dashboard(){
@@ -390,7 +413,8 @@ function dashboard(){
         ${C.Stok.length===0?`<div class="empty-state"><div class="empty-icon">◉</div><div>Stok yok</div></div>`:
         `<div style="display:flex;flex-direction:column;gap:10px;">${C.Stok.slice(0,8).map(s=>{const pct=s.maksimum>0?Math.min(100,Math.round(s.miktar/s.maksimum*100)):50;const renk=s.miktar<=(s.kritikSeviye||0)?'#e74c3c':s.miktar<=(s.kritikSeviye||0)*2?'#f5a623':'#3ecf8e';return`<div><div class="flex justify-between" style="font-size:12px;margin-bottom:4px"><span>${s.ad}${s.lab?` <span style="color:var(--text3);font-size:10px">[${s.lab}]</span>`:''}</span><span class="text-mono" style="color:${renk}">${s.miktar} ${s.birim||''}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${renk}"></div></div></div>`;}).join('')}</div>`}
       </div>
-    </div>`;
+    </div>
+    <div class="card mt-16">${scheduleHTML(true)}</div>`;
 }
 
 // ── STOK ──
@@ -743,27 +767,7 @@ function takvim(){
 function gRenk(kat){const m={'Analiz':'#4f9cf9','Ekstraksiyon/Proses':'#9b59b6','Ekipman Bakımı':'#f5a623','Kalibrasyon':'#1abc9c','Temizlik':'#3ecf8e','Numune Hazırlama':'#4f9cf9','Raporlama':'#8892aa','Tedarik/Satın Alma':'#8892aa','Ar-Ge':'#9b59b6','Toplantı':'#1abc9c','Diğer':'#8892aa'};return m[kat]||'#8892aa';}
 function renderCal(){if(calView==='schedule')renderSchedule();else if(calView==='monthly')renderMonthly();else renderWeekly();}
 function renderSchedule(){
-  const total=Object.values(GOREV_CIZELGE.tasks).reduce((n,arr)=>n+arr.length,0);
-  document.getElementById('content').innerHTML=`
-    <div class="schedule-meta">
-      <div><div class="schedule-title">${GOREV_CIZELGE.title}</div><div class="schedule-sub">${GOREV_CIZELGE.subtitle} · ${total} görev</div></div>
-      <div class="schedule-legend">
-        <div class="schedule-leg"><span class="schedule-dot red"></span>Kritik</div>
-        <div class="schedule-leg"><span class="schedule-dot amber"></span>Yüksek</div>
-        <div class="schedule-leg"><span class="schedule-dot teal"></span>Devam ediyor</div>
-        <div class="schedule-leg"><span class="schedule-dot blue"></span>Planlı</div>
-      </div>
-    </div>
-    <div class="table-wrap"><table class="schedule-table">
-      <thead><tr><th style="width:130px">Ekip</th>${GOREV_CIZELGE.days.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
-      <tbody>${GOREV_CIZELGE.persons.map(p=>`<tr>
-        <td class="schedule-person"><strong>${p.name}</strong><span>${p.role}</span></td>
-        ${GOREV_CIZELGE.days.map((_,idx)=>{
-          const tasks=GOREV_CIZELGE.tasks[`${p.name}-${idx}`]||[];
-          return`<td>${tasks.length?tasks.map(t=>`<div class="schedule-task"><i class="schedule-priority ${t.p}"></i><span>${t.t}</span></div>`).join(''):'<span class="text-muted text-sm">—</span>'}</td>`;
-        }).join('')}
-      </tr>`).join('')}</tbody>
-    </table></div>`;
+  document.getElementById('content').innerHTML=scheduleHTML();
 }
 function renderMonthly(){
   const yr=calDate.getFullYear(),mo=calDate.getMonth();
