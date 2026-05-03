@@ -100,12 +100,19 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .tab:hover{color:var(--text);}.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
 .schedule-meta{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap;}
 .schedule-title{font-size:18px;font-weight:600;}.schedule-sub{font-size:12px;color:var(--text3);margin-top:4px;}
+.schedule-title[contenteditable],.schedule-sub[contenteditable]{outline:none;border-bottom:1px dashed transparent;}.schedule-title[contenteditable]:focus,.schedule-sub[contenteditable]:focus{border-bottom-color:var(--accent);}
 .schedule-legend{display:flex;gap:10px;flex-wrap:wrap;}.schedule-leg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-family:var(--mono);}
 .schedule-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}.schedule-dot.red{background:var(--red);}.schedule-dot.amber{background:var(--amber);}.schedule-dot.teal{background:var(--green);}.schedule-dot.blue{background:var(--accent);}
+.schedule-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .schedule-table{min-width:920px;}.schedule-person{background:rgba(255,255,255,0.025);min-width:130px;}.schedule-person strong{display:block;color:var(--text);font-size:13px;}.schedule-person span{display:block;color:var(--text3);font-size:11px;margin-top:3px;}
+.schedule-person-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.schedule-mini{font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;}.schedule-mini:hover{border-color:var(--accent);color:var(--accent);}.schedule-mini.danger:hover{border-color:var(--red);color:var(--red);}
 .schedule-task{display:flex;align-items:flex-start;gap:7px;margin-bottom:7px;line-height:1.45;}.schedule-task:last-child{margin-bottom:0;}.schedule-task span{font-size:12px;color:var(--text2);}
+.schedule-task.done span{text-decoration:line-through;color:var(--text3);}
 .schedule-priority{width:8px;height:8px;border-radius:50%;flex:0 0 8px;margin-top:5px;box-shadow:0 0 0 3px rgba(255,255,255,0.03);}
 .schedule-priority.red{background:var(--red);}.schedule-priority.amber{background:var(--amber);}.schedule-priority.teal{background:var(--green);}.schedule-priority.blue{background:var(--accent);}
+.schedule-remove{margin-left:auto;border:0;background:transparent;color:var(--text3);cursor:pointer;font-size:12px;}.schedule-remove:hover{color:var(--red);}
+.schedule-select{accent-color:var(--accent);margin-top:2px;}.schedule-add{display:inline-block;margin-top:4px;border:1px dashed var(--border2);border-radius:4px;padding:3px 8px;font-size:11px;color:var(--text3);cursor:pointer;}.schedule-add:hover{color:var(--accent);border-color:var(--accent);}
 .group-header{background:var(--bg3);padding:8px 14px;font-size:11px;font-family:var(--mono);color:var(--text3);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);}
 .stok-info{display:inline-block;font-size:11px;color:var(--green);font-family:var(--mono);margin-left:8px;}
 .stock-group{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;background:var(--bg2);}
@@ -251,6 +258,11 @@ const GOREV_CIZELGE={
     'Soner-4':[{t:'Sistem durum raporu',p:'blue'}]
   }
 };
+let scheduleSelectMode=false,scheduleSelected=new Set();
+const S_META='__CIZELGE_META__',S_PERSON='__CIZELGE_PERSON__',S_TASK='__CIZELGE_TASK__';
+const S_DATES=['2026-05-04','2026-05-05','2026-05-06','2026-05-07','2026-05-08','2026-05-09','2026-05-10'];
+const S_PRIO_TO_ON={red:'Kritik',amber:'Yüksek',teal:'Normal',blue:'Düşük'};
+const S_ON_TO_PRIO={Kritik:'red',Yüksek:'amber',Normal:'teal',Düşük:'blue'};
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function hash(s){let h=0;for(let i=0;i<s.length;i++)h=Math.imul(31,h)+s.charCodeAt(i)|0;return Math.abs(h).toString(36);}
@@ -286,7 +298,7 @@ function runGS(q){
   C.Stok.forEach(r=>{if((r.ad||'').toLowerCase().includes(ql))res.push({mod:'Stok',name:r.ad,page:'stok'});});
   C.Analiz.forEach(r=>{if((r.numune||'').toLowerCase().includes(ql))res.push({mod:'Analiz',name:r.numune,page:'analiz'});});
   C.Ekipman.forEach(r=>{if((r.ad||'').toLowerCase().includes(ql))res.push({mod:'Ekipman',name:r.ad,page:'ekipman'});});
-  C.Gorevler.forEach(r=>{if((r.baslik||'').toLowerCase().includes(ql))res.push({mod:'Görev',name:r.baslik,page:'takvim'});});
+  C.Gorevler.forEach(r=>{if(!scheduleIsRow(r)&&(r.baslik||'').toLowerCase().includes(ql))res.push({mod:'Görev',name:r.baslik,page:'takvim'});});
   C.GunlukLog.forEach(r=>{if((r.icerik||'').toLowerCase().includes(ql)||(r.baslik||'').toLowerCase().includes(ql))res.push({mod:'Log',name:r.baslik||r.kullaniciAd||'',page:'gunluk'});});
   if(!res.length){box.innerHTML='<div class="gsr-item"><span style="color:var(--text3)">Sonuç bulunamadı</span></div>';box.style.display='block';return;}
   box.innerHTML=res.slice(0,8).map(r=>`<div class="gsr-item" onclick="goResult('${r.page}')"><div class="gsr-mod">${r.mod}</div><div class="gsr-name">${r.name}</div></div>`).join('');
@@ -335,6 +347,7 @@ async function doLogin(){
     document.getElementById('sidebar-username').textContent=user.ad||user.username;
     document.getElementById('sidebar-role').textContent=user.role==='admin'?'Admin':'Kullanıcı';
     if(user.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
+    await ensureScheduleOnline();
     syncTimer=setInterval(()=>syncAll().then(()=>{if(currentPage)showPage(currentPage,true);}),60000);
     showPage('dashboard');
   }catch(e){loading(false);toast('Giriş hatası: '+e.message,'err');}
@@ -361,11 +374,75 @@ function updateBadges(){
   const n=C.Ekipman.filter(e=>e.kalibrasyonTarihi&&(new Date(e.kalibrasyonTarihi)-bugun)/86400000<=30).length;
   const eb=document.getElementById('ekip-badge');if(n>0){eb.textContent=n;eb.style.display='';}else eb.style.display='none';
 }
+function scheduleClone(v){return JSON.parse(JSON.stringify(v));}
+function scheduleJSON(v,fallback={}){try{return JSON.parse(v||'')||fallback;}catch{return fallback;}}
+function scheduleIsMeta(r){return r.baslik===S_META;}
+function scheduleIsPerson(r){return r.baslik===S_PERSON;}
+function scheduleTaskMeta(r){const m=scheduleJSON(r.aciklama,null);return m&&m.type===S_TASK?m:null;}
+function scheduleIsTask(r){return !!scheduleTaskMeta(r);}
+function scheduleIsRow(r){return scheduleIsMeta(r)||scheduleIsPerson(r)||scheduleIsTask(r);}
+function scheduleCellKey(pName,dIdx){return pName+'-'+dIdx;}
+function scheduleBaseRow(extra){
+  const u=currentUser?.username||'system',now=today();
+  return {id:uid(),baslik:'',kategori:'Diğer',atanan:'',atayan:u,tarih:now,basTarih:now,bitisTarih:'',oncelik:'Normal',durum:'Bekliyor',aciklama:'',kullanici:u,...extra};
+}
+function scheduleDefaultRows(){
+  const rows=[scheduleBaseRow({baslik:S_META,durum:'Aktif',aciklama:JSON.stringify({title:GOREV_CIZELGE.title,subtitle:GOREV_CIZELGE.subtitle,days:GOREV_CIZELGE.days})})];
+  GOREV_CIZELGE.persons.forEach(p=>rows.push(scheduleBaseRow({baslik:S_PERSON,atanan:p.name,durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:p.role||''})})));
+  Object.entries(GOREV_CIZELGE.tasks).forEach(([cell,tasks])=>{
+    const cut=cell.lastIndexOf('-'),atanan=cell.slice(0,cut),dayIndex=parseInt(cell.slice(cut+1),10);
+    tasks.forEach(task=>rows.push(scheduleBaseRow({baslik:task.t,atanan,tarih:S_DATES[dayIndex]||'',basTarih:S_DATES[dayIndex]||'',oncelik:S_PRIO_TO_ON[task.p]||'Normal',aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:task.p||'teal'})})));
+  });
+  return rows;
+}
+async function ensureScheduleOnline(){
+  if(C.Gorevler.some(scheduleIsRow))return;
+  C.Gorevler.push(...scheduleDefaultRows());
+  await save('Gorevler');
+}
+function scheduleMetaRow(){
+  let r=C.Gorevler.find(scheduleIsMeta);
+  if(!r){r=scheduleDefaultRows()[0];C.Gorevler.push(r);}
+  return r;
+}
+function scheduleMeta(){
+  const m=scheduleJSON(scheduleMetaRow().aciklama,{});
+  return {title:m.title||GOREV_CIZELGE.title,subtitle:m.subtitle||GOREV_CIZELGE.subtitle,days:Array.isArray(m.days)&&m.days.length?m.days:GOREV_CIZELGE.days};
+}
+function scheduleData(){
+  const meta=scheduleMeta(),persons=[],seen=new Set(),tasks={},done={};
+  C.Gorevler.filter(scheduleIsPerson).forEach(r=>{
+    const name=(r.atanan||'').trim();if(!name||seen.has(name))return;
+    seen.add(name);persons.push({name,role:scheduleJSON(r.aciklama,{}).role||''});
+  });
+  C.Gorevler.forEach(r=>{
+    const m=scheduleTaskMeta(r);if(!m)return;
+    const name=(r.atanan||'').trim()||'Genel';
+    if(!seen.has(name)){seen.add(name);persons.push({name,role:m.role||''});}
+    const idx=Math.max(0,parseInt(m.dayIndex,10)||0),ck=scheduleCellKey(name,idx);
+    if(!tasks[ck])tasks[ck]=[];
+    const priority=m.priority||S_ON_TO_PRIO[r.oncelik]||'teal';
+    const item={id:r.id,t:r.baslik||'Görev',p:['red','amber','teal','blue'].includes(priority)?priority:'teal',done:r.durum==='Tamamlandı'};
+    tasks[ck].push(item);if(item.done)done[item.id]=true;
+  });
+  if(!persons.length)GOREV_CIZELGE.persons.forEach(p=>persons.push({...p}));
+  return {...meta,persons,tasks,done};
+}
+async function scheduleSaveAndRefresh(message='Çizelge güncellendi ✓'){
+  loading(true,'Çizelge güncelleniyor...');
+  try{
+    await save('Gorevler');scheduleSelected=new Set([...scheduleSelected].filter(id=>C.Gorevler.some(r=>r.id===id)));
+    loading(false);if(message)toast(message);if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();
+  }catch(e){loading(false);toast('Çizelge kaydedilemedi: '+e.message,'err');}
+}
+function scheduleRefresh(){if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();}
 function scheduleHTML(compact=false){
-  const total=Object.values(GOREV_CIZELGE.tasks).reduce((n,arr)=>n+arr.length,0);
+  const D=scheduleData();
+  const total=Object.values(D.tasks).reduce((n,arr)=>n+arr.length,0);
+  const done=Object.values(D.tasks).flat().filter(t=>t.done).length;
   return`
     <div class="schedule-meta">
-      <div><div class="schedule-title">${GOREV_CIZELGE.title}</div><div class="schedule-sub">${GOREV_CIZELGE.subtitle} · ${total} görev</div></div>
+      <div><div class="schedule-title" contenteditable="true" onblur="scheduleEditMeta('title',this.textContent)">${esc(D.title)}</div><div><span class="schedule-sub" contenteditable="true" onblur="scheduleEditMeta('subtitle',this.textContent)">${esc(D.subtitle)}</span><span class="schedule-sub"> · ${done}/${total} tamamlandı</span></div></div>
       <div class="schedule-legend">
         <div class="schedule-leg"><span class="schedule-dot red"></span>Kritik</div>
         <div class="schedule-leg"><span class="schedule-dot amber"></span>Yüksek</div>
@@ -373,17 +450,70 @@ function scheduleHTML(compact=false){
         <div class="schedule-leg"><span class="schedule-dot blue"></span>Planlı</div>
       </div>
     </div>
+    <div class="schedule-tools">
+      <button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button>
+      <button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>
+      <button class="btn btn-ghost btn-sm" onclick="scheduleSelectMode=!scheduleSelectMode;scheduleRefresh()">${scheduleSelectMode?'Seçimi Kapat':'Toplu Seç'}</button>
+      ${scheduleSelectMode?`<button class="btn btn-danger btn-sm" onclick="scheduleDeleteSelected()">Seçilenleri Sil (${scheduleSelected.size})</button>`:''}
+      <button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button>
+      <button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button>
+      <button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">Haftayı Sıfırla</button>
+    </div>
     <div class="table-wrap"><table class="schedule-table">
-      <thead><tr><th style="width:130px">Ekip</th>${GOREV_CIZELGE.days.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
-      <tbody>${GOREV_CIZELGE.persons.map(p=>`<tr>
-        <td class="schedule-person"><strong>${p.name}</strong><span>${p.role}</span></td>
-        ${GOREV_CIZELGE.days.map((_,idx)=>{
-          const tasks=GOREV_CIZELGE.tasks[`${p.name}-${idx}`]||[];
-          return`<td>${tasks.length?tasks.map(t=>`<div class="schedule-task"><i class="schedule-priority ${t.p}"></i><span>${t.t}</span></div>`).join(''):'<span class="text-muted text-sm">—</span>'}</td>`;
+      <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} <button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button></th>`).join('')}</tr></thead>
+      <tbody>${D.persons.map((p,pIdx)=>`<tr>
+        <td class="schedule-person"><strong>${esc(p.name)}</strong><span>${esc(p.role||'')}</span><div class="schedule-person-actions"><button class="schedule-mini" onclick="scheduleEditPerson(${pIdx})">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemovePerson(${pIdx})">Sil</button></div></td>
+        ${D.days.map((_,idx)=>{
+          const ck=scheduleCellKey(p.name,idx);
+          const tasks=D.tasks[ck]||[];
+          return`<td>${tasks.length?tasks.map(t=>`<div class="schedule-task ${t.done?'done':''}">${scheduleSelectMode?`<input class="schedule-select" type="checkbox" ${scheduleSelected.has(t.id)?'checked':''} onchange="scheduleToggleSelect('${t.id}')">`:''}<i class="schedule-priority ${t.p}" onclick="scheduleCyclePriority('${t.id}')"></i><span onclick="scheduleToggleDone('${t.id}')">${esc(t.t)}</span><button class="schedule-remove" onclick="scheduleRemoveTask('${t.id}')">×</button></div>`).join(''):'<span class="text-muted text-sm">—</span>'}<span class="schedule-add" onclick="scheduleAddTask(${pIdx},${idx})">+ görev</span></td>`;
         }).join('')}
       </tr>`).join('')}</tbody>
     </table></div>`;
 }
+async function scheduleEditMeta(field,value){const r=scheduleMetaRow(),m=scheduleMeta();m[field]=value.trim()||GOREV_CIZELGE[field];r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Başlık güncellendi ✓');}
+async function scheduleAddTask(personIdx,dayIndex){
+  const D=scheduleData(),pObj=D.persons[personIdx];if(!pObj)return;
+  const t=prompt('Görev açıklaması');if(!t)return;
+  const p=prompt('Öncelik: red, amber, teal, blue','teal')||'teal';
+  const priority=['red','amber','teal','blue'].includes(p)?p:'teal',date=S_DATES[dayIndex]||'';
+  C.Gorevler.push(scheduleBaseRow({baslik:t.trim(),atanan:pObj.name,tarih:date,basTarih:date,oncelik:S_PRIO_TO_ON[priority]||'Normal',aciklama:JSON.stringify({type:S_TASK,dayIndex,priority,role:pObj.role||''})}));
+  await scheduleSaveAndRefresh();
+}
+async function scheduleRemoveTask(id){if(!confirm('Bu görev silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>r.id!==id);scheduleSelected.delete(id);await scheduleSaveAndRefresh('Görev silindi.');}
+async function scheduleToggleDone(id){const r=C.Gorevler.find(x=>x.id===id);if(!r)return;r.durum=r.durum==='Tamamlandı'?'Bekliyor':'Tamamlandı';await scheduleSaveAndRefresh('');}
+async function scheduleCyclePriority(id){const r=C.Gorevler.find(x=>x.id===id);if(!r)return;const m=scheduleTaskMeta(r)||{},order=['red','amber','teal','blue'];m.priority=order[(order.indexOf(m.priority||S_ON_TO_PRIO[r.oncelik]||'teal')+1)%order.length];r.oncelik=S_PRIO_TO_ON[m.priority]||'Normal';r.aciklama=JSON.stringify({...m,type:S_TASK});await scheduleSaveAndRefresh('');}
+async function scheduleAddPerson(){const name=prompt('Kişi adı');if(!name)return;const role=prompt('Rol','')||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
+async function scheduleEditPerson(idx){
+  const D=scheduleData(),old=D.persons[idx];if(!old)return;
+  const name=prompt('Kişi adı',old.name);if(!name)return;const role=prompt('Rol',old.role||'')||'',n=name.trim();
+  C.Gorevler.forEach(r=>{
+    if(r.atanan===old.name){
+      r.atanan=n;
+      const m=scheduleJSON(r.aciklama,{});
+      if(scheduleIsPerson(r)||m.type===S_TASK)r.aciklama=JSON.stringify({...m,role:role.trim()});
+    }
+  });
+  await scheduleSaveAndRefresh('Kişi güncellendi ✓');
+}
+async function scheduleRemovePerson(idx){const D=scheduleData(),p=D.persons[idx];if(!p||!confirm('Bu kişi ve görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
+async function scheduleAddDay(){const day=prompt('Gün adı');if(!day)return;const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
+async function scheduleRemoveDay(idx){
+  if(!confirm('Bu gün ve içindeki görevler silinsin mi?'))return;
+  const r=scheduleMetaRow(),m=scheduleMeta();m.days.splice(idx,1);r.aciklama=JSON.stringify(m);
+  C.Gorevler=C.Gorevler.filter(row=>{
+    const tm=scheduleTaskMeta(row);if(!tm)return true;
+    const di=parseInt(tm.dayIndex,10)||0;if(di===idx)return false;
+    if(di>idx){tm.dayIndex=di-1;row.aciklama=JSON.stringify(tm);}
+    return true;
+  });
+  await scheduleSaveAndRefresh('Gün silindi.');
+}
+function scheduleToggleSelect(id){scheduleSelected.has(id)?scheduleSelected.delete(id):scheduleSelected.add(id);scheduleRefresh();}
+async function scheduleDeleteSelected(){if(scheduleSelected.size===0)return;if(!confirm(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
+async function scheduleClearTasks(){if(!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
+async function scheduleClearPeopleAndTasks(){if(!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
+async function scheduleResetWeek(){if(!confirm('Çizelge varsayılan haftalık içerikle sıfırlansın mı?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('Haftalık çizelge sıfırlandı ✓');}
 
 // ── DASHBOARD ──
 function dashboard(){
@@ -761,7 +891,7 @@ function takvim(){
     <button class="btn btn-ghost btn-sm" onclick="calView='schedule';renderCal()">Çizelge</button>
     <button class="btn btn-ghost btn-sm" onclick="calView='monthly';renderCal()">Aylık</button>
     <button class="btn btn-ghost btn-sm" onclick="calView='weekly';renderCal()">Haftalık</button>
-    <button class="btn btn-primary btn-sm" onclick="gorevYeni(null)">+ Yeni Görev</button>`;
+    <button class="btn btn-primary btn-sm" onclick="gorevYeni(null)">+ Takvim Görevi</button>`;
   renderCal();
 }
 function gRenk(kat){const m={'Analiz':'#4f9cf9','Ekstraksiyon/Proses':'#9b59b6','Ekipman Bakımı':'#f5a623','Kalibrasyon':'#1abc9c','Temizlik':'#3ecf8e','Numune Hazırlama':'#4f9cf9','Raporlama':'#8892aa','Tedarik/Satın Alma':'#8892aa','Ar-Ge':'#9b59b6','Toplantı':'#1abc9c','Diğer':'#8892aa'};return m[kat]||'#8892aa';}
@@ -789,7 +919,7 @@ function renderMonthly(){
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">
       ${cells.map(({date,cur})=>{
         const ds=date.toISOString().slice(0,10);
-        const tasks=C.Gorevler.filter(g=>g.tarih===ds||g.basTarih===ds);
+        const tasks=C.Gorevler.filter(g=>!scheduleIsRow(g)&&(g.tarih===ds||g.basTarih===ds));
         return`<div style="min-height:80px;background:var(--bg2);border:1px solid ${ds===td?'var(--accent)':'var(--border)'};border-radius:4px;padding:6px;cursor:pointer;opacity:${cur?1:0.35}" onclick="gorevYeni('${ds}')">
           <div style="font-size:11px;font-family:var(--mono);color:${ds===td?'var(--accent)':'var(--text3)'};font-weight:${ds===td?600:400};margin-bottom:3px">${date.getDate()}</div>
           ${tasks.slice(0,3).map(g=>`<div onclick="event.stopPropagation();gorevDetay('${g.id}')" style="font-size:10px;padding:2px 4px;border-radius:3px;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:${gRenk(g.kategori)}22;color:${gRenk(g.kategori)};border-left:2px solid ${gRenk(g.kategori)}">${g.baslik}</div>`).join('')}
@@ -799,7 +929,7 @@ function renderMonthly(){
     </div>
     <div style="margin-top:20px">
       <div class="table-wrap"><table><thead><tr><th>Başlık</th><th>Kategori</th><th>Atanan</th><th>Tarih</th><th>Öncelik</th><th>Durum</th><th>İşlem</th></tr></thead>
-      <tbody>${C.Gorevler.sort((a,b)=>new Date(b.tarih||0)-new Date(a.tarih||0)).slice(0,10).map(g=>`<tr>
+      <tbody>${C.Gorevler.filter(g=>!scheduleIsRow(g)).sort((a,b)=>new Date(b.tarih||0)-new Date(a.tarih||0)).slice(0,10).map(g=>`<tr>
         <td class="td-main">${g.baslik}</td>
         <td><span class="badge ${KBADGE[g.kategori]||'badge-gray'}">${g.kategori||'—'}</span></td>
         <td>${g.atanan||'—'}</td>
@@ -823,7 +953,7 @@ function renderWeekly(){
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
       ${weekDays.map(wd=>{
         const ds=wd.toISOString().slice(0,10);
-        const tasks=C.Gorevler.filter(g=>g.tarih===ds||g.basTarih===ds);
+        const tasks=C.Gorevler.filter(g=>!scheduleIsRow(g)&&(g.tarih===ds||g.basTarih===ds));
         return`<div>
           <div style="text-align:center;padding:8px;background:var(--bg3);border-radius:4px 4px 0 0;border:1px solid ${ds===td?'var(--accent)':'var(--border)'};color:${ds===td?'var(--accent)':'var(--text3)'};font-size:11px;font-family:var(--mono)">${TR_GUN[wd.getDay()===0?6:wd.getDay()-1]}<br><strong style="font-size:14px">${wd.getDate()}</strong></div>
           <div style="min-height:120px;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;padding:4px;cursor:pointer" onclick="gorevYeni('${ds}')">
