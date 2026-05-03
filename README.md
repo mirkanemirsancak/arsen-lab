@@ -15,9 +15,11 @@ Guncelleme oncesi ana dosyalar bu lokal calisma alaninda `backups/` klasorune ko
 - Her kategori altinda dolap ve raf kirilimi gosteriliyor.
 - Stok formuna `Dolap` alani eklendi.
 - Stok ve cikti arama alanlari yazdikca filtreleyecek sekilde duzeltildi.
-- Girdi kaydi stok tarafina aktarilirken not/aciklama bilgisi de stok notuna tasiniyor.
 - `Lab-2` yerine `Ek Lab` eklendi.
+- Girdi kayitlari Stok'a aktarildi ve Girdi sekmesi arayuzden kaldirildi.
 
 ## Not
 
 Stok sheet semasina `dolap` kolonu eklendi. Uygulama ilk stok kaydinda/yaziminda Google Sheets tarafindaki Stok basligini yeni sirayla yazacaktir.
+
+Girdi -> Stok aktarimi oncesi canli verinin yedegi lokal olarak `backups/girdi-stok-backup-2026-05-03T21-34-16-085Z.json` dosyasina alindi.
