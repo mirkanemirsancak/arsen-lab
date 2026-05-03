@@ -436,13 +436,19 @@ async function scheduleSaveAndRefresh(message='Çizelge güncellendi ✓'){
   }catch(e){loading(false);toast('Çizelge kaydedilemedi: '+e.message,'err');}
 }
 function scheduleRefresh(){if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();}
+function scheduleCanEdit(){return canDelete();}
+function scheduleGuard(){if(scheduleCanEdit())return true;toast('Çizelgeyi yalnızca admin düzenleyebilir.','err');return false;}
 function scheduleHTML(compact=false){
   const D=scheduleData();
   const total=Object.values(D.tasks).reduce((n,arr)=>n+arr.length,0);
   const done=Object.values(D.tasks).flat().filter(t=>t.done).length;
+  const editable=scheduleCanEdit();
+  const titleEdit=editable?`contenteditable="true" onblur="scheduleEditMeta('title',this.textContent)"`:'';
+  const subEdit=editable?`contenteditable="true" onblur="scheduleEditMeta('subtitle',this.textContent)"`:'';
+  if(!editable&&scheduleSelectMode){scheduleSelectMode=false;scheduleSelected.clear();}
   return`
     <div class="schedule-meta">
-      <div><div class="schedule-title" contenteditable="true" onblur="scheduleEditMeta('title',this.textContent)">${esc(D.title)}</div><div><span class="schedule-sub" contenteditable="true" onblur="scheduleEditMeta('subtitle',this.textContent)">${esc(D.subtitle)}</span><span class="schedule-sub"> · ${done}/${total} tamamlandı</span></div></div>
+      <div><div class="schedule-title" ${titleEdit}>${esc(D.title)}</div><div><span class="schedule-sub" ${subEdit}>${esc(D.subtitle)}</span><span class="schedule-sub"> · ${done}/${total} tamamlandı</span></div></div>
       <div class="schedule-legend">
         <div class="schedule-leg"><span class="schedule-dot red"></span>Kritik</div>
         <div class="schedule-leg"><span class="schedule-dot amber"></span>Yüksek</div>
@@ -450,7 +456,7 @@ function scheduleHTML(compact=false){
         <div class="schedule-leg"><span class="schedule-dot blue"></span>Planlı</div>
       </div>
     </div>
-    <div class="schedule-tools">
+    ${editable?`<div class="schedule-tools">
       <button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button>
       <button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>
       <button class="btn btn-ghost btn-sm" onclick="scheduleSelectMode=!scheduleSelectMode;scheduleRefresh()">${scheduleSelectMode?'Seçimi Kapat':'Toplu Seç'}</button>
@@ -458,21 +464,22 @@ function scheduleHTML(compact=false){
       <button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button>
       <button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button>
       <button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">Haftayı Sıfırla</button>
-    </div>
+    </div>`:''}
     <div class="table-wrap"><table class="schedule-table">
-      <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} <button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button></th>`).join('')}</tr></thead>
+      <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} ${editable?`<button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button>`:''}</th>`).join('')}</tr></thead>
       <tbody>${D.persons.map((p,pIdx)=>`<tr>
-        <td class="schedule-person"><strong>${esc(p.name)}</strong><span>${esc(p.role||'')}</span><div class="schedule-person-actions"><button class="schedule-mini" onclick="scheduleEditPerson(${pIdx})">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemovePerson(${pIdx})">Sil</button></div></td>
+        <td class="schedule-person"><strong>${esc(p.name)}</strong><span>${esc(p.role||'')}</span>${editable?`<div class="schedule-person-actions"><button class="schedule-mini" onclick="scheduleEditPerson(${pIdx})">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemovePerson(${pIdx})">Sil</button></div>`:''}</td>
         ${D.days.map((_,idx)=>{
           const ck=scheduleCellKey(p.name,idx);
           const tasks=D.tasks[ck]||[];
-          return`<td>${tasks.length?tasks.map(t=>`<div class="schedule-task ${t.done?'done':''}">${scheduleSelectMode?`<input class="schedule-select" type="checkbox" ${scheduleSelected.has(t.id)?'checked':''} onchange="scheduleToggleSelect('${t.id}')">`:''}<i class="schedule-priority ${t.p}" onclick="scheduleCyclePriority('${t.id}')"></i><span onclick="scheduleToggleDone('${t.id}')">${esc(t.t)}</span><button class="schedule-remove" onclick="scheduleRemoveTask('${t.id}')">×</button></div>`).join(''):'<span class="text-muted text-sm">—</span>'}<span class="schedule-add" onclick="scheduleAddTask(${pIdx},${idx})">+ görev</span></td>`;
+          return`<td>${tasks.length?tasks.map(t=>`<div class="schedule-task ${t.done?'done':''}">${editable&&scheduleSelectMode?`<input class="schedule-select" type="checkbox" ${scheduleSelected.has(t.id)?'checked':''} onchange="scheduleToggleSelect('${t.id}')">`:''}<i class="schedule-priority ${t.p}" ${editable?`onclick="scheduleCyclePriority('${t.id}')"`:''}></i><span ${editable?`onclick="scheduleToggleDone('${t.id}')"`:''}>${esc(t.t)}</span>${editable?`<button class="schedule-remove" onclick="scheduleRemoveTask('${t.id}')">×</button>`:''}</div>`).join(''):'<span class="text-muted text-sm">—</span>'}${editable?`<span class="schedule-add" onclick="scheduleAddTask(${pIdx},${idx})">+ görev</span>`:''}</td>`;
         }).join('')}
       </tr>`).join('')}</tbody>
     </table></div>`;
 }
-async function scheduleEditMeta(field,value){const r=scheduleMetaRow(),m=scheduleMeta();m[field]=value.trim()||GOREV_CIZELGE[field];r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Başlık güncellendi ✓');}
+async function scheduleEditMeta(field,value){if(!scheduleGuard())return;const r=scheduleMetaRow(),m=scheduleMeta();m[field]=value.trim()||GOREV_CIZELGE[field];r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Başlık güncellendi ✓');}
 async function scheduleAddTask(personIdx,dayIndex){
+  if(!scheduleGuard())return;
   const D=scheduleData(),pObj=D.persons[personIdx];if(!pObj)return;
   const t=prompt('Görev açıklaması');if(!t)return;
   const p=prompt('Öncelik: red, amber, teal, blue','teal')||'teal';
@@ -480,11 +487,12 @@ async function scheduleAddTask(personIdx,dayIndex){
   C.Gorevler.push(scheduleBaseRow({baslik:t.trim(),atanan:pObj.name,tarih:date,basTarih:date,oncelik:S_PRIO_TO_ON[priority]||'Normal',aciklama:JSON.stringify({type:S_TASK,dayIndex,priority,role:pObj.role||''})}));
   await scheduleSaveAndRefresh();
 }
-async function scheduleRemoveTask(id){if(!confirm('Bu görev silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>r.id!==id);scheduleSelected.delete(id);await scheduleSaveAndRefresh('Görev silindi.');}
-async function scheduleToggleDone(id){const r=C.Gorevler.find(x=>x.id===id);if(!r)return;r.durum=r.durum==='Tamamlandı'?'Bekliyor':'Tamamlandı';await scheduleSaveAndRefresh('');}
-async function scheduleCyclePriority(id){const r=C.Gorevler.find(x=>x.id===id);if(!r)return;const m=scheduleTaskMeta(r)||{},order=['red','amber','teal','blue'];m.priority=order[(order.indexOf(m.priority||S_ON_TO_PRIO[r.oncelik]||'teal')+1)%order.length];r.oncelik=S_PRIO_TO_ON[m.priority]||'Normal';r.aciklama=JSON.stringify({...m,type:S_TASK});await scheduleSaveAndRefresh('');}
-async function scheduleAddPerson(){const name=prompt('Kişi adı');if(!name)return;const role=prompt('Rol','')||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
+async function scheduleRemoveTask(id){if(!scheduleGuard()||!confirm('Bu görev silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>r.id!==id);scheduleSelected.delete(id);await scheduleSaveAndRefresh('Görev silindi.');}
+async function scheduleToggleDone(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;r.durum=r.durum==='Tamamlandı'?'Bekliyor':'Tamamlandı';await scheduleSaveAndRefresh('');}
+async function scheduleCyclePriority(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;const m=scheduleTaskMeta(r)||{},order=['red','amber','teal','blue'];m.priority=order[(order.indexOf(m.priority||S_ON_TO_PRIO[r.oncelik]||'teal')+1)%order.length];r.oncelik=S_PRIO_TO_ON[m.priority]||'Normal';r.aciklama=JSON.stringify({...m,type:S_TASK});await scheduleSaveAndRefresh('');}
+async function scheduleAddPerson(){if(!scheduleGuard())return;const name=prompt('Kişi adı');if(!name)return;const role=prompt('Rol','')||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
 async function scheduleEditPerson(idx){
+  if(!scheduleGuard())return;
   const D=scheduleData(),old=D.persons[idx];if(!old)return;
   const name=prompt('Kişi adı',old.name);if(!name)return;const role=prompt('Rol',old.role||'')||'',n=name.trim();
   C.Gorevler.forEach(r=>{
@@ -496,9 +504,10 @@ async function scheduleEditPerson(idx){
   });
   await scheduleSaveAndRefresh('Kişi güncellendi ✓');
 }
-async function scheduleRemovePerson(idx){const D=scheduleData(),p=D.persons[idx];if(!p||!confirm('Bu kişi ve görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
-async function scheduleAddDay(){const day=prompt('Gün adı');if(!day)return;const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
+async function scheduleRemovePerson(idx){if(!scheduleGuard())return;const D=scheduleData(),p=D.persons[idx];if(!p||!confirm('Bu kişi ve görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
+async function scheduleAddDay(){if(!scheduleGuard())return;const day=prompt('Gün adı');if(!day)return;const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
 async function scheduleRemoveDay(idx){
+  if(!scheduleGuard())return;
   if(!confirm('Bu gün ve içindeki görevler silinsin mi?'))return;
   const r=scheduleMetaRow(),m=scheduleMeta();m.days.splice(idx,1);r.aciklama=JSON.stringify(m);
   C.Gorevler=C.Gorevler.filter(row=>{
@@ -509,11 +518,11 @@ async function scheduleRemoveDay(idx){
   });
   await scheduleSaveAndRefresh('Gün silindi.');
 }
-function scheduleToggleSelect(id){scheduleSelected.has(id)?scheduleSelected.delete(id):scheduleSelected.add(id);scheduleRefresh();}
-async function scheduleDeleteSelected(){if(scheduleSelected.size===0)return;if(!confirm(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
-async function scheduleClearTasks(){if(!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
-async function scheduleClearPeopleAndTasks(){if(!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
-async function scheduleResetWeek(){if(!confirm('Çizelge varsayılan haftalık içerikle sıfırlansın mı?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('Haftalık çizelge sıfırlandı ✓');}
+function scheduleToggleSelect(id){if(!scheduleGuard())return;scheduleSelected.has(id)?scheduleSelected.delete(id):scheduleSelected.add(id);scheduleRefresh();}
+async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.size===0)return;if(!confirm(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
+async function scheduleClearTasks(){if(!scheduleGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
+async function scheduleClearPeopleAndTasks(){if(!scheduleGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
+async function scheduleResetWeek(){if(!scheduleGuard()||!confirm('Çizelge varsayılan haftalık içerikle sıfırlansın mı?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('Haftalık çizelge sıfırlandı ✓');}
 
 // ── DASHBOARD ──
 function dashboard(){
