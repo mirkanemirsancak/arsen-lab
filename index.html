@@ -14,7 +14,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);position:relative;overflow:hidden;}
 #login-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 40%,rgba(79,156,249,0.06) 0%,transparent 60%),radial-gradient(ellipse at 70% 70%,rgba(62,207,142,0.04) 0%,transparent 50%);}
 .login-box{width:380px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:40px;position:relative;z-index:1;}
-.login-logo{margin-bottom:32px;text-align:center;}.login-logo img{width:210px;height:auto;display:block;margin:0 auto 16px;object-fit:contain;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
+.login-logo{margin-bottom:32px;text-align:center;}.login-logo img{width:230px;height:auto;display:block;margin:0 auto;object-fit:contain;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
 .login-logo h1{font-size:22px;font-weight:600;}.login-logo span{color:var(--accent);}.login-subtitle{font-size:12px;color:var(--text3);margin-top:2px;}
 .login-err{color:var(--red);font-size:12px;margin-top:10px;display:none;}
 label{display:block;font-size:11px;font-weight:500;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;margin-top:16px;}
@@ -31,8 +31,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);}textarea{res
 @keyframes spin{to{transform:rotate(360deg);}}.loading-text{font-size:13px;color:var(--text2);font-family:var(--mono);}
 #app{display:none;height:100vh;overflow:hidden;}#app.visible{display:flex;}
 .sidebar{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;}
-.sidebar-header{padding:16px;border-bottom:1px solid var(--border);text-align:center;}
-.sidebar-logo{width:150px;height:auto;display:block;margin:0 auto 10px;object-fit:contain;}
+.sidebar-header{padding:18px 16px;border-bottom:1px solid var(--border);text-align:center;}
+.sidebar-logo{width:170px;height:auto;display:block;margin:0 auto;object-fit:contain;}
 .sidebar-brand{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:2px;margin-bottom:2px;}
 .sidebar-title{font-size:15px;font-weight:600;}.sidebar-title span{color:var(--accent);}
 .sidebar-user{padding:12px 16px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);}
@@ -115,9 +115,6 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   <div class="login-box">
     <div class="login-logo">
       <img src="assets/arsen-process-logo.svg" alt="Arşen Process">
-      <div class="brand">Arşen Proses</div>
-      <h1>Lab <span>Takip</span></h1>
-      <div class="login-subtitle">Laboratuvar Yönetim Sistemi</div>
     </div>
     <div class="form-group"><label>Kullanıcı Adı</label><input type="text" id="login-user" placeholder="kullanici_adi" autocomplete="username"></div>
     <div class="form-group"><label>Şifre</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
@@ -130,7 +127,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 
 <div id="app">
   <div class="sidebar">
-    <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-logo.svg" alt="Arşen Process"><div class="sidebar-brand">Arşen Proses</div><div class="sidebar-title">Lab <span>Takip</span></div></div>
+    <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-logo.svg" alt="Arşen Process"></div>
     <div class="sidebar-user"><span>Oturum</span><strong id="sidebar-username">—</strong><span id="sidebar-role" class="badge badge-blue" style="margin-top:4px;font-size:10px;"></span></div>
     <div class="sync-status" id="sync-status"><span class="sync-ok">● Bağlı</span></div>
     <nav>

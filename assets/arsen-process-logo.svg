@@ -1,12 +1,11 @@
-<svg width="260" height="132" viewBox="0 0 260 132" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="180" height="98" viewBox="0 0 180 98" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">Arsen Process</title>
   <desc id="desc">Arsen Process laboratory tracking logo.</desc>
-  <rect width="260" height="132" fill="transparent"/>
-  <g transform="translate(52 8)">
+  <rect width="180" height="98" fill="transparent"/>
+  <g transform="translate(12 0)">
     <path d="M36 10h28v78H36V58H12v30H0V10h12v35h24V10Z" fill="#20B7CF"/>
     <path d="M68 10h48c24 0 40 15 40 36s-16 36-40 36H92v6H68V10Zm24 18v36h22c11 0 18-7 18-18s-7-18-18-18H92Z" fill="#20B7CF"/>
     <path d="M36 10h28v78H36V58H12v30H0V10h12v35h24V10Z" stroke="#F5F8FA" stroke-opacity=".85" stroke-width="2"/>
     <path d="M68 10h48c24 0 40 15 40 36s-16 36-40 36H92v6H68V10Zm24 18v36h22c11 0 18-7 18-18s-7-18-18-18H92Z" stroke="#F5F8FA" stroke-opacity=".85" stroke-width="2"/>
   </g>
-  <text x="130" y="115" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#3B3B3B">Arşen Process</text>
 </svg>
