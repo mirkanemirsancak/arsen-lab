@@ -98,6 +98,14 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;}
 .tab{padding:8px 16px;font-size:13px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s;}
 .tab:hover{color:var(--text);}.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.schedule-meta{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap;}
+.schedule-title{font-size:18px;font-weight:600;}.schedule-sub{font-size:12px;color:var(--text3);margin-top:4px;}
+.schedule-legend{display:flex;gap:10px;flex-wrap:wrap;}.schedule-leg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-family:var(--mono);}
+.schedule-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}.schedule-dot.red{background:var(--red);}.schedule-dot.amber{background:var(--amber);}.schedule-dot.teal{background:var(--green);}.schedule-dot.blue{background:var(--accent);}
+.schedule-table{min-width:920px;}.schedule-person{background:rgba(255,255,255,0.025);min-width:130px;}.schedule-person strong{display:block;color:var(--text);font-size:13px;}.schedule-person span{display:block;color:var(--text3);font-size:11px;margin-top:3px;}
+.schedule-task{display:flex;align-items:flex-start;gap:7px;margin-bottom:7px;line-height:1.45;}.schedule-task:last-child{margin-bottom:0;}.schedule-task span{font-size:12px;color:var(--text2);}
+.schedule-priority{width:8px;height:8px;border-radius:50%;flex:0 0 8px;margin-top:5px;box-shadow:0 0 0 3px rgba(255,255,255,0.03);}
+.schedule-priority.red{background:var(--red);}.schedule-priority.amber{background:var(--amber);}.schedule-priority.teal{background:var(--green);}.schedule-priority.blue{background:var(--accent);}
 .group-header{background:var(--bg3);padding:8px 14px;font-size:11px;font-family:var(--mono);color:var(--text3);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);}
 .stok-info{display:inline-block;font-size:11px;color:var(--green);font-family:var(--mono);margin-left:8px;}
 .stock-group{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;background:var(--bg2);}
@@ -198,6 +206,51 @@ const C={Users:[],Stok:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik
 let currentUser=null,currentPage=null,syncTimer=null;
 const LABS=['Lab-1','Ek Lab'];
 const FREQLAR=['Aylık','3 Aylık','6 Aylık','Yıllık'];
+const GOREV_CIZELGE={
+  title:'Haftalık Görev Çizelgesi',
+  subtitle:'4 - 9 Mayıs 2026 · Mirkan Emir Sancak, Genel Koordinatör',
+  persons:[
+    {name:'Mirkan',role:'Koordinatör'},
+    {name:'Fatma',role:'Laborant'},
+    {name:'Ozan',role:'Proje Koor.'},
+    {name:'Çağatay',role:'Operatör'},
+    {name:'Yiğit',role:'Satın Alma'},
+    {name:'Soner',role:'Elektrik/El.'}
+  ],
+  days:['Pazartesi','Salı','Çarşamba','Perşembe','Cuma'],
+  tasks:{
+    'Mirkan-0':[{t:'Yiğit Bey - kimyasal tedarik deadline',p:'red'},{t:'Selami toplantısı gündem taslağı',p:'red'},{t:'TÜBİTAK imza takvimi - Selçuk Bey',p:'amber'}],
+    'Mirkan-1':[{t:'Neha pozisyon tanımı taslağı',p:'amber'},{t:'Gaziantep teknik yanıt + doküman',p:'teal'},{t:'Selami Bey toplantısı (14:00)',p:'blue'}],
+    'Mirkan-2':[{t:'Adil Kama teklifi takibi',p:'amber'},{t:'Ferhat Bey - imar durumu',p:'amber'},{t:'BPR montajı durumu - Soner',p:'teal'}],
+    'Mirkan-3':[{t:'Aşağı lab analiz güncelleme takibi',p:'teal'},{t:'Standart sipariş listesi derle',p:'blue'},{t:'Selami çıktılarını kaydet',p:'teal'}],
+    'Mirkan-4':[{t:'Neha - Selçuk Bey geri bildirimi',p:'amber'},{t:'TÜBİTAK kargo takip kodu',p:'teal'},{t:'Haftalık ekip değerlendirmesi (16:00)',p:'blue'}],
+    'Fatma-0':[{t:'Wet analiz & kalibrasyon günü (FFA)',p:'teal'},{t:'Aşağı lab kayıtlarını sisteme gir',p:'teal'}],
+    'Fatma-1':[{t:'Kabak çekirdeği yağı şişeleme',p:'blue'}],
+    'Fatma-2':[{t:'HPLC kalibrasyonu (tam gün)',p:'red'},{t:'Fenolik profil analizi - kalibrasyon sonrası başla',p:'amber'}],
+    'Fatma-3':[{t:'Analiz kayıtları güncelleme devam',p:'teal'}],
+    'Fatma-4':[{t:'GC kalibrasyon hazırlığı',p:'blue'}],
+    'Ozan-0':[{t:'Selçuk Bey - TÜBİTAK imza randevusu al',p:'red'}],
+    'Ozan-1':[{t:'Gaziantep teknik doküman hazırlık',p:'amber'}],
+    'Ozan-2':[{t:'Standart sipariş listesi taslağı',p:'amber'}],
+    'Ozan-3':[{t:'TÜBİTAK evrakı kargoya ver',p:'teal'}],
+    'Ozan-4':[{t:'Haftalık rapor girdisi hazırla',p:'blue'}],
+    'Çağatay-0':[{t:'Döhler - pompa takibi & devam',p:'red'},{t:'Eski kabak stoğunu sisteme yükle',p:'amber'}],
+    'Çağatay-1':[{t:'Döhler süreci takip',p:'teal'}],
+    'Çağatay-2':[{t:'Döhler süreci takip',p:'teal'},{t:'Fatma’ya thinfilm destek',p:'blue'}],
+    'Çağatay-3':[{t:'Döhler süreci takip',p:'teal'}],
+    'Çağatay-4':[{t:'Haftalık operasyon raporu',p:'blue'}],
+    'Yiğit-0':[{t:'Etanol/MeOH/gliserin - net teslim tarihi al',p:'red'}],
+    'Yiğit-1':[{t:'Teslim tarihi yoksa alternatif tedarikçi',p:'red'},{t:'Eksik lab malzemeleri listesi tamamla',p:'amber'}],
+    'Yiğit-2':[{t:'BPR montajı teyit - Soner ile koordine',p:'amber'}],
+    'Yiğit-3':[{t:'Siparişleri takip et',p:'teal'}],
+    'Yiğit-4':[{t:'Adil Kama teklifi - Metin Turan’a ilet',p:'blue'}],
+    'Soner-0':[{t:'MVR tam otomasyon - feedback entegrasyon',p:'amber'}],
+    'Soner-1':[{t:'Alt sistem BPR tamiri',p:'amber'}],
+    'Soner-2':[{t:'MVR sistem temizliği',p:'teal'}],
+    'Soner-3':[{t:'Otomasyon test & doğrulama',p:'blue'}],
+    'Soner-4':[{t:'Sistem durum raporu',p:'blue'}]
+  }
+};
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function hash(s){let h=0;for(let i=0;i<s.length;i++)h=Math.imul(31,h)+s.charCodeAt(i)|0;return Math.abs(h).toString(36);}
@@ -678,16 +731,40 @@ async function temizlikSil(id){if(!confirm('Emin misiniz?'))return;C.Temizlik=C.
 
 // ── RAPORLAMA ──
 // ── GÖREV TAKVİMİ ──
-let calView='monthly',calDate=new Date();
+let calView='schedule',calDate=new Date();
 function takvim(){
   document.getElementById('topbar-actions').innerHTML=`
+    <button class="btn btn-ghost btn-sm" onclick="calView='schedule';renderCal()">Çizelge</button>
     <button class="btn btn-ghost btn-sm" onclick="calView='monthly';renderCal()">Aylık</button>
     <button class="btn btn-ghost btn-sm" onclick="calView='weekly';renderCal()">Haftalık</button>
     <button class="btn btn-primary btn-sm" onclick="gorevYeni(null)">+ Yeni Görev</button>`;
   renderCal();
 }
 function gRenk(kat){const m={'Analiz':'#4f9cf9','Ekstraksiyon/Proses':'#9b59b6','Ekipman Bakımı':'#f5a623','Kalibrasyon':'#1abc9c','Temizlik':'#3ecf8e','Numune Hazırlama':'#4f9cf9','Raporlama':'#8892aa','Tedarik/Satın Alma':'#8892aa','Ar-Ge':'#9b59b6','Toplantı':'#1abc9c','Diğer':'#8892aa'};return m[kat]||'#8892aa';}
-function renderCal(){if(calView==='monthly')renderMonthly();else renderWeekly();}
+function renderCal(){if(calView==='schedule')renderSchedule();else if(calView==='monthly')renderMonthly();else renderWeekly();}
+function renderSchedule(){
+  const total=Object.values(GOREV_CIZELGE.tasks).reduce((n,arr)=>n+arr.length,0);
+  document.getElementById('content').innerHTML=`
+    <div class="schedule-meta">
+      <div><div class="schedule-title">${GOREV_CIZELGE.title}</div><div class="schedule-sub">${GOREV_CIZELGE.subtitle} · ${total} görev</div></div>
+      <div class="schedule-legend">
+        <div class="schedule-leg"><span class="schedule-dot red"></span>Kritik</div>
+        <div class="schedule-leg"><span class="schedule-dot amber"></span>Yüksek</div>
+        <div class="schedule-leg"><span class="schedule-dot teal"></span>Devam ediyor</div>
+        <div class="schedule-leg"><span class="schedule-dot blue"></span>Planlı</div>
+      </div>
+    </div>
+    <div class="table-wrap"><table class="schedule-table">
+      <thead><tr><th style="width:130px">Ekip</th>${GOREV_CIZELGE.days.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
+      <tbody>${GOREV_CIZELGE.persons.map(p=>`<tr>
+        <td class="schedule-person"><strong>${p.name}</strong><span>${p.role}</span></td>
+        ${GOREV_CIZELGE.days.map((_,idx)=>{
+          const tasks=GOREV_CIZELGE.tasks[`${p.name}-${idx}`]||[];
+          return`<td>${tasks.length?tasks.map(t=>`<div class="schedule-task"><i class="schedule-priority ${t.p}"></i><span>${t.t}</span></div>`).join(''):'<span class="text-muted text-sm">—</span>'}</td>`;
+        }).join('')}
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
 function renderMonthly(){
   const yr=calDate.getFullYear(),mo=calDate.getMonth();
   const firstDay=new Date(yr,mo,1);const lastDay=new Date(yr,mo+1,0);
