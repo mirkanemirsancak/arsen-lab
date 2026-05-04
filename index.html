@@ -209,7 +209,7 @@ const KBADGE={'Analiz':'badge-blue','Ekstraksiyon/Proses':'badge-purple','Ekipma
 const TR_AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const TR_GUN=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
 const COLS={
-  Users:['id','username','passwordHash','role','ad','active','olusturma'],
+  Users:['id','username','passwordHash','role','ad','email','active','olusturma'],
   Stok:['id','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
   Cikti:['id','batchId','ad','hammadde','hammaddeMiktar','hammaddeBirim','ciktiMiktar','ciktiBirim','tarih','operator','kosullar','not','kullanici'],
   Analiz:['id','numuneId','numune','tur','yontem','sonuc','birim','tarih','analist','batchId','not','kullanici'],
@@ -278,6 +278,8 @@ const S_ON_TO_PRIO={Kritik:'red',Yüksek:'amber',Normal:'teal',Düşük:'blue'};
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function hash(s){let h=0;for(let i=0;i<s.length;i++)h=Math.imul(31,h)+s.charCodeAt(i)|0;return Math.abs(h).toString(36);}
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function normEmail(v){return String(v||'').trim().toLowerCase();}
+function validEmail(v){return !v||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}
 function fmt(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('tr-TR');}catch{return d;}}
 function fmtDt(d){if(!d)return'—';try{return new Date(d).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch{return d;}}
 function today(){return new Date().toISOString().slice(0,10);}
@@ -348,7 +350,7 @@ async function doLogin(){
   loading(true,'Bağlanıyor...');
   try{
     const ok=await syncAll();if(!ok){loading(false);return;}
-    if(C.Users.length===0){C.Users=[{id:uid(),username:'admin',passwordHash:hash('admin123'),role:'admin',ad:'Admin',active:'true',olusturma:new Date().toISOString()}];await save('Users');}
+    if(C.Users.length===0){C.Users=[{id:uid(),username:'admin',passwordHash:hash('admin123'),role:'admin',ad:'Admin',email:'',active:'true',olusturma:new Date().toISOString()}];await save('Users');}
     const user=C.Users.find(x=>x.username===u&&x.passwordHash===hash(p)&&(x.active==='true'||x.active===true));
     if(!user){loading(false);document.getElementById('login-err').style.display='block';return;}
     currentUser=user;loading(false);
@@ -1281,8 +1283,10 @@ function admin(){
   document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="kullaniciYeni()">+ Yeni Kullanıcı</button>`;renderAdmin();
 }
 function renderAdmin(){
-  document.getElementById('content').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Rol</th><th>Durum</th><th>Oluşturma</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
+  const missingEmails=C.Users.filter(u=>!normEmail(u.email)).length;
+  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Durum</th><th>Oluşturma</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
     <td class="td-main">${u.ad||'—'}</td><td class="text-mono">${u.username}</td>
+    <td>${u.email?`<span class="text-mono" style="font-size:11px">${esc(u.email)}</span>`:`<span class="badge badge-amber">Eksik</span>`}</td>
     <td><span class="badge ${u.role==='admin'?'badge-blue':'badge-gray'}">${u.role==='admin'?'Admin':'Kullanıcı'}</span></td>
     <td><span class="badge ${u.active===true||u.active==='true'?'badge-green':'badge-red'}">${u.active===true||u.active==='true'?'Aktif':'Pasif'}</span></td>
     <td class="text-mono" style="font-size:11px">${fmt(u.olusturma)}</td>
@@ -1291,12 +1295,14 @@ function renderAdmin(){
 function uForm(u={}){return`
   <div class="form-row"><div class="form-group"><label>Ad Soyad *</label><input type="text" id="u-ad" value="${u.ad||''}"></div>
   <div class="form-group"><label>Kullanıcı Adı *</label><input type="text" id="u-un" value="${u.username||''}" ${u.id?'readonly':''}></div></div>
+  <div class="form-group"><label>Google E-posta</label><input type="text" id="u-email" value="${u.email||''}" placeholder="ad.soyad@gmail.com"></div>
   <div class="form-row"><div class="form-group"><label>${u.id?'Yeni Şifre (boş=değişmez)':'Şifre *'}</label><input type="password" id="u-pass" placeholder="••••••••"></div>
-  <div class="form-group"><label>Rol</label><select id="u-rol"><option value="user" ${u.role==='user'?'selected':''}>Kullanıcı</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></div></div>`;}
+  <div class="form-group"><label>Rol</label><select id="u-rol"><option value="user" ${u.role==='user'?'selected':''}>Kullanıcı</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></div></div>
+  <div class="text-sm text-muted">Bu alan, Google Sheets ve Drive yetkilerini eşleştirmek için kullanılacak. E-posta boşsa kullanıcı sisteme giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
 function kullaniciYeni(){showModal('Yeni Kullanıcı',uForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciKaydet()">Kaydet</button>`);}
-async function kullaniciKaydet(){const ad=document.getElementById('u-ad').value.trim();const un=document.getElementById('u-un').value.trim();const p=document.getElementById('u-pass').value;if(!ad||!un||!p){toast('Tüm alanlar zorunlu.','err');return;}if(C.Users.find(u=>u.username===un)){toast('Bu kullanıcı adı zaten var.','err');return;}C.Users.push({id:uid(),ad,username:un,passwordHash:hash(p),role:document.getElementById('u-rol').value,active:'true',olusturma:new Date().toISOString()});closeModalDirect();loading(true,'Kaydediliyor...');try{await save('Users');loading(false);toast('Kullanıcı eklendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
+async function kullaniciKaydet(){const ad=document.getElementById('u-ad').value.trim();const un=document.getElementById('u-un').value.trim();const email=normEmail(document.getElementById('u-email').value);const p=document.getElementById('u-pass').value;if(!ad||!un||!p){toast('Tüm alanlar zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(C.Users.find(u=>u.username===un)){toast('Bu kullanıcı adı zaten var.','err');return;}if(email&&C.Users.find(u=>normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}C.Users.push({id:uid(),ad,username:un,passwordHash:hash(p),role:document.getElementById('u-rol').value,email,active:'true',olusturma:new Date().toISOString()});closeModalDirect();loading(true,'Kaydediliyor...');try{await save('Users');loading(false);toast('Kullanıcı eklendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
 function kullaniciDuzenle(id){const u=C.Users.find(x=>x.id===id);if(!u)return;showModal('Kullanıcı Düzenle',uForm(u),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciGuncelle('${id}')">Güncelle</button>`);}
-async function kullaniciGuncelle(id){const ad=document.getElementById('u-ad').value.trim();if(!ad){toast('Ad zorunlu.','err');return;}const idx=C.Users.findIndex(x=>x.id===id);const p=document.getElementById('u-pass').value;C.Users[idx]={...C.Users[idx],ad,role:document.getElementById('u-rol').value};if(p)C.Users[idx].passwordHash=hash(p);closeModalDirect();loading(true,'Güncelleniyor...');try{await save('Users');loading(false);toast('Güncellendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
+async function kullaniciGuncelle(id){const ad=document.getElementById('u-ad').value.trim();const email=normEmail(document.getElementById('u-email').value);if(!ad){toast('Ad zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(email&&C.Users.find(u=>u.id!==id&&normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}const idx=C.Users.findIndex(x=>x.id===id);const p=document.getElementById('u-pass').value;C.Users[idx]={...C.Users[idx],ad,email,role:document.getElementById('u-rol').value};if(p)C.Users[idx].passwordHash=hash(p);closeModalDirect();loading(true,'Güncelleniyor...');try{await save('Users');loading(false);toast('Güncellendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
 async function kullaniciToggle(id){const idx=C.Users.findIndex(x=>x.id===id);C.Users[idx].active=C.Users[idx].active==='true'||C.Users[idx].active===true?'false':'true';loading(true);try{await save('Users');loading(false);toast('Güncellendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
 </script>
 </body>
