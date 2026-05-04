@@ -113,6 +113,12 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .schedule-priority.red{background:var(--red);}.schedule-priority.amber{background:var(--amber);}.schedule-priority.teal{background:var(--green);}.schedule-priority.blue{background:var(--accent);}
 .schedule-remove{margin-left:auto;border:0;background:transparent;color:var(--text3);cursor:pointer;font-size:12px;}.schedule-remove:hover{color:var(--red);}
 .schedule-select{accent-color:var(--accent);margin-top:2px;}.schedule-add{display:inline-block;margin-top:4px;border:1px dashed var(--border2);border-radius:4px;padding:3px 8px;font-size:11px;color:var(--text3);cursor:pointer;}.schedule-add:hover{color:var(--accent);border-color:var(--accent);}
+.file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
+.file-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px;min-height:156px;}
+.file-card:hover{border-color:var(--border2);background:#191d28;}.file-icon{width:36px;height:36px;border-radius:6px;background:rgba(79,156,249,0.12);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.file-name{font-weight:600;color:var(--text);word-break:break-word;line-height:1.35;}.file-meta{font-size:11px;color:var(--text3);font-family:var(--mono);line-height:1.55;}
+.file-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;}.file-drop{border:1px dashed var(--border2);border-radius:var(--radius);padding:18px;background:rgba(255,255,255,0.02);color:var(--text2);}
+.file-drop input[type=file]{margin-top:10px;color:var(--text2);font-family:var(--sans);font-size:13px;}
 .group-header{background:var(--bg3);padding:8px 14px;font-size:11px;font-family:var(--mono);color:var(--text3);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);}
 .stok-info{display:inline-block;font-size:11px;color:var(--green);font-family:var(--mono);margin-left:8px;}
 .stock-group{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;background:var(--bg2);}
@@ -156,6 +162,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('temizlik')"><span class="nav-icon">✦</span> Temizlik Planı</div>
       <div class="nav-section">Ekip</div>
       <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> Görev Takvimi</div>
+      <div class="nav-item" onclick="showPage('dosyalar')"><span class="nav-icon">▣</span> Dosya Depolama</div>
       <div class="nav-item" onclick="showPage('gunluk')"><span class="nav-icon">✎</span> Günlük Log</div>
       <div class="nav-item" onclick="showPage('rapor')"><span class="nav-icon">▤</span> Raporlama</div>
       <div class="nav-section" id="admin-nav-section">Yönetim</div>
@@ -359,13 +366,13 @@ function doLogout(){currentUser=null;clearInterval(syncTimer);document.getElemen
 function showPage(page,silent=false){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','stok','cikti','analiz','ekipman','temizlik','takvim','gunluk','rapor','admin'];
+  const map=['dashboard','stok','cikti','analiz','ekipman','temizlik','takvim','dosyalar','gunluk','rapor','admin'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
-  const titles={dashboard:'Dashboard',stok:'Stok Takibi',cikti:'Çıktı Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',takvim:'Görev Takvimi',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
+  const titles={dashboard:'Dashboard',stok:'Stok Takibi',cikti:'Çıktı Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',takvim:'Görev Takvimi',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
-  ({dashboard,stok,cikti,analiz,ekipman,temizlik,takvim,gunluk,rapor,admin})[page]?.();
+  ({dashboard,stok,cikti,analiz,ekipman,temizlik,takvim,dosyalar,gunluk,rapor,admin})[page]?.();
 }
 function updateBadges(){
   const k=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0)).length;
@@ -1011,6 +1018,76 @@ async function gorevGuncelle(id){
   logDuz('Gorev',id,on,C.Gorevler[idx]);closeModalDirect();loading(true,'Güncelleniyor...');try{await save('Gorevler');loading(false);toast('Güncellendi ✓');renderCal();}catch(e){loading(false);toast('Hata: '+e.message,'err');}
 }
 async function gorevSil(id){if(!confirm('Emin misiniz?'))return;C.Gorevler=C.Gorevler.filter(x=>x.id!==id);closeModalDirect();loading(true);try{await save('Gorevler');loading(false);toast('Silindi.','err');renderCal();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
+
+// ── DOSYA DEPOLAMA ──
+let fileCache=[],fileSearch='',fileFolder='';
+async function driveApi(action,payload={}){
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,...payload})});
+  const data=await res.json();if(data.error)throw new Error(data.error);return data;
+}
+function fileSize(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB';}
+function fileIcon(mime,name){const n=(name||'').toLowerCase();if((mime||'').includes('image'))return'▧';if(n.endsWith('.pdf'))return'▣';if(n.match(/\.(xlsx|xls|csv)$/))return'▦';if(n.match(/\.(docx|doc)$/))return'▤';return'◇';}
+function fileToBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=reject;r.readAsDataURL(file);});}
+async function dosyalar(){
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="dosyaModal()">+ Dosya Yükle</button>`;
+  await renderDosyalar();
+}
+async function renderDosyalar(q=fileSearch,folder=fileFolder){
+  fileSearch=q;fileFolder=folder;
+  document.getElementById('content').innerHTML=`<div class="empty-state"><div class="spinner" style="margin:0 auto 12px"></div><div>Drive dosyaları yükleniyor...</div></div>`;
+  try{
+    const data=await driveApi('listFiles');fileCache=data.files||[];
+    const folders=[...new Set(fileCache.map(f=>f.folder||'Genel'))].sort((a,b)=>a.localeCompare(b,'tr'));
+    let rows=[...fileCache];
+    if(folder)rows=rows.filter(f=>(f.folder||'Genel')===folder);
+    if(q){const s=q.toLowerCase();rows=rows.filter(f=>(f.name||'').toLowerCase().includes(s)||(f.description||'').toLowerCase().includes(s)||(f.folder||'').toLowerCase().includes(s));}
+    rows.sort((a,b)=>new Date(b.created||0)-new Date(a.created||0));
+    document.getElementById('content').innerHTML=`
+      <div class="filter-bar">
+        <div class="search-bar" style="min-width:260px;flex:1"><span class="search-icon">⌕</span><input type="text" placeholder="Dosya ara..." value="${esc(q)}" oninput="renderDosyalar(this.value,fileFolder)"></div>
+        <button class="filter-btn ${folder===''?'active':''}" onclick="renderDosyalar(fileSearch,'')">Tümü (${fileCache.length})</button>
+        ${folders.map(f=>`<button class="filter-btn ${folder===f?'active':''}" onclick="renderDosyalar(fileSearch,${JSON.stringify(f).replace(/"/g,'&quot;')})">${esc(f)}</button>`).join('')}
+      </div>
+      ${rows.length?`<div class="file-grid">${rows.map(f=>`
+        <div class="file-card">
+          <div class="flex gap-12"><div class="file-icon">${fileIcon(f.mimeType,f.name)}</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${esc(f.folder||'Genel')} · ${fileSize(f.size)}</div></div></div>
+          ${f.description?`<div class="text-sm text-muted">${esc(f.description)}</div>`:''}
+          <div class="file-meta">Yükleyen: ${esc(f.uploadedBy||'—')}<br>${fmtDt(f.created)}</div>
+          <div class="file-actions"><a class="btn btn-ghost btn-sm" href="${esc(f.url)}" target="_blank">Aç ↗</a><a class="btn btn-ghost btn-sm" href="${esc(f.downloadUrl||f.url)}" target="_blank">İndir</a>${canDelete()?`<button class="btn btn-danger btn-sm" onclick="dosyaSil('${f.id}')">Sil</button>`:''}</div>
+        </div>`).join('')}</div>`:`<div class="empty-state"><div class="empty-icon">▣</div><div>Dosya bulunamadı.</div></div>`}`;
+  }catch(e){
+    document.getElementById('content').innerHTML=`<div class="alert alert-amber">Drive bağlantısı henüz aktif değil. Apps Script dosya depolama kodunu ekleyip deployment güncellendiğinde bu sayfa çalışacak.<br><br><strong>Hata:</strong> ${esc(e.message)}</div>`;
+  }
+}
+function dosyaModal(){
+  showModal('Drive Dosya Yükle',`
+    <div class="file-drop">
+      <div class="td-main">Dosya seç</div>
+      <div class="text-sm text-muted mt-8">Dosyalar Google Drive'daki Arsen Lab klasörüne yüklenir. Büyük dosyalarda 20 MB altı önerilir.</div>
+      <input type="file" id="file-input">
+    </div>
+    <div class="form-row mt-16"><div class="form-group"><label>Klasör / Kategori</label><input type="text" id="file-folder" value="${esc(fileFolder||'Genel')}" placeholder="Genel, Analiz, Satın Alma..."></div>
+    <div class="form-group"><label>Görünecek Ad (opsiyonel)</label><input type="text" id="file-name" placeholder="Boşsa dosya adı kullanılır"></div></div>
+    <div class="form-group"><label>Açıklama</label><textarea id="file-desc" placeholder="Kısa not, proje veya içerik bilgisi"></textarea></div>`,
+    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="dosyaYukle()">Yükle</button>`);
+}
+async function dosyaYukle(){
+  const input=document.getElementById('file-input'),file=input.files&&input.files[0];if(!file){toast('Dosya seçmelisiniz.','err');return;}
+  if(file.size>20*1024*1024&&!confirm('Dosya 20 MB üzerinde. Apps Script sınırına takılabilir, yine de denensin mi?'))return;
+  loading(true,'Dosya Drive’a yükleniyor...');
+  try{
+    const base64=await fileToBase64(file);
+    await driveApi('uploadFile',{name:document.getElementById('file-name').value.trim()||file.name,mimeType:file.type||'application/octet-stream',base64,folder:document.getElementById('file-folder').value.trim()||'Genel',description:document.getElementById('file-desc').value,uploadedBy:currentUser.ad||currentUser.username});
+    closeModalDirect();loading(false);toast('Dosya yüklendi ✓');await renderDosyalar(fileSearch,fileFolder);
+  }catch(e){loading(false);toast('Yükleme hatası: '+e.message,'err');}
+}
+async function dosyaSil(id){
+  if(!canDelete()){toast('Dosyayı yalnızca admin silebilir.','err');return;}
+  if(!confirm('Bu dosya Drive’dan silinsin mi?'))return;
+  loading(true,'Dosya siliniyor...');
+  try{await driveApi('deleteFile',{id});loading(false);toast('Dosya silindi.','err');await renderDosyalar(fileSearch,fileFolder);}
+  catch(e){loading(false);toast('Silme hatası: '+e.message,'err');}
+}
 
 // ── GÜNLÜK LOG ──
 let lKul='',lKat='';
