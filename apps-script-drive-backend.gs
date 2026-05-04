@@ -1,10 +1,6 @@
 var SPREADSHEET_ID = '1Mx5zKqbVz3P8nqZhVc6vtpQ_Hb594k42NMoF9ascawI';
 var DRIVE_ROOT_FOLDER_NAME = 'Arsen Lab Dosyalar';
 
-function out(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-
 function sheetByName(name) {
   var sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
   if (!sh) throw new Error('Sheet bulunamadi: ' + name);
@@ -96,24 +92,28 @@ function deleteFile(data) {
 }
 
 function doGet(e) {
+  var result;
   try {
-    if (e.parameter.action === 'read') return out(readSheet(e.parameter.sheet));
-    if (e.parameter.action === 'listFiles') return out(listFiles());
-    return out({ error: 'Bilinmeyen istek.' });
+    if (e.parameter.action === 'read') result = readSheet(e.parameter.sheet);
+    else if (e.parameter.action === 'listFiles') result = listFiles();
+    else result = { error: 'Bilinmeyen istek.' };
   } catch (err) {
-    return out({ error: err.message });
+    result = { error: err.message };
   }
+  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
+  var result;
   try {
     var data = JSON.parse(e.postData.contents || '{}');
-    if (data.action === 'write') return out(writeSheet(data.sheet, data.values));
-    if (data.action === 'listFiles') return out(listFiles());
-    if (data.action === 'uploadFile') return out(uploadFile(data));
-    if (data.action === 'deleteFile') return out(deleteFile(data));
-    return out({ error: 'Bilinmeyen istek.' });
+    if (data.action === 'write') result = writeSheet(data.sheet, data.values);
+    else if (data.action === 'listFiles') result = listFiles();
+    else if (data.action === 'uploadFile') result = uploadFile(data);
+    else if (data.action === 'deleteFile') result = deleteFile(data);
+    else result = { error: 'Bilinmeyen istek.' };
   } catch (err) {
-    return out({ error: err.message });
+    result = { error: err.message };
   }
+  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }
