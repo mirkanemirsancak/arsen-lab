@@ -1,5 +1,5 @@
-const SPREADSHEET_ID = '1Mx5zKqbVz3P8nqZhVc6vtpQ_Hb594k42NMoF9ascawI';
-const DRIVE_ROOT_FOLDER_NAME = 'Arsen Lab Dosyalar';
+var SPREADSHEET_ID = '1Mx5zKqbVz3P8nqZhVc6vtpQ_Hb594k42NMoF9ascawI';
+var DRIVE_ROOT_FOLDER_NAME = 'Arsen Lab Dosyalar';
 
 function json_(obj) {
   return ContentService
@@ -12,24 +12,30 @@ function ss_() {
 }
 
 function rootFolder_() {
-  const folders = DriveApp.getFoldersByName(DRIVE_ROOT_FOLDER_NAME);
+  var folders = DriveApp.getFoldersByName(DRIVE_ROOT_FOLDER_NAME);
   if (folders.hasNext()) return folders.next();
-  const folder = DriveApp.createFolder(DRIVE_ROOT_FOLDER_NAME);
+  var folder = DriveApp.createFolder(DRIVE_ROOT_FOLDER_NAME);
   folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return folder;
 }
 
 function childFolder_(name) {
-  const root = rootFolder_();
-  const clean = String(name || 'Genel').trim() || 'Genel';
-  const folders = root.getFoldersByName(clean);
+  var root = rootFolder_();
+  var clean = String(name || 'Genel').trim() || 'Genel';
+  var folders = root.getFoldersByName(clean);
   if (folders.hasNext()) return folders.next();
-  const folder = root.createFolder(clean);
+  var folder = root.createFolder(clean);
   folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return folder;
 }
 
+function uploadedBy_(description) {
+  var match = String(description || '').match(/Yukleyen: ([^\n]+)/);
+  return match ? match[1] : '';
+}
+
 function fileInfo_(file, folderName) {
+  var description = file.getDescription() || '';
   return {
     id: file.getId(),
     name: file.getName(),
@@ -40,41 +46,48 @@ function fileInfo_(file, folderName) {
     downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId(),
     created: file.getDateCreated(),
     updated: file.getLastUpdated(),
-    description: file.getDescription() || '',
-    uploadedBy: (file.getDescription().match(/Yukleyen: ([^\n]+)/) || [])[1] || ''
+    description: description.replace(/Yukleyen: [^\n]+\n?/g, '').replace(/YuklemeTarihi: [^\n]+\n?/g, '').trim(),
+    uploadedBy: uploadedBy_(description)
   };
 }
 
 function listFiles_() {
-  const root = rootFolder_();
-  const files = [];
+  var root = rootFolder_();
+  var files = [];
+  var rootFiles = root.getFiles();
 
-  const rootFiles = root.getFiles();
-  while (rootFiles.hasNext()) files.push(fileInfo_(rootFiles.next(), 'Genel'));
-
-  const folders = root.getFolders();
-  while (folders.hasNext()) {
-    const folder = folders.next();
-    const folderFiles = folder.getFiles();
-    while (folderFiles.hasNext()) files.push(fileInfo_(folderFiles.next(), folder.getName()));
+  while (rootFiles.hasNext()) {
+    files.push(fileInfo_(rootFiles.next(), 'Genel'));
   }
 
-  files.sort((a, b) => new Date(b.created) - new Date(a.created));
-  return { ok: true, files };
+  var folders = root.getFolders();
+  while (folders.hasNext()) {
+    var folder = folders.next();
+    var folderFiles = folder.getFiles();
+    while (folderFiles.hasNext()) {
+      files.push(fileInfo_(folderFiles.next(), folder.getName()));
+    }
+  }
+
+  files.sort(function(a, b) {
+    return new Date(b.created).getTime() - new Date(a.created).getTime();
+  });
+  return { ok: true, files: files };
 }
 
 function uploadFile_(data) {
   if (!data.base64 || !data.name) throw new Error('Dosya bilgisi eksik.');
-  const folder = childFolder_(data.folder || 'Genel');
-  const bytes = Utilities.base64Decode(data.base64);
-  const blob = Utilities.newBlob(bytes, data.mimeType || 'application/octet-stream', data.name);
-  const file = folder.createFile(blob);
-  const description = [
-    data.description || '',
-    'Yukleyen: ' + (data.uploadedBy || 'Bilinmiyor'),
-    'YuklemeTarihi: ' + new Date().toISOString()
-  ].filter(Boolean).join('\n');
-  file.setDescription(description);
+  var folder = childFolder_(data.folder || 'Genel');
+  var bytes = Utilities.base64Decode(data.base64);
+  var blob = Utilities.newBlob(bytes, data.mimeType || 'application/octet-stream', data.name);
+  var file = folder.createFile(blob);
+  var descriptionParts = [];
+
+  if (data.description) descriptionParts.push(data.description);
+  descriptionParts.push('Yukleyen: ' + (data.uploadedBy || 'Bilinmiyor'));
+  descriptionParts.push('YuklemeTarihi: ' + new Date().toISOString());
+
+  file.setDescription(descriptionParts.join('\n'));
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return { ok: true, file: fileInfo_(file, folder.getName()) };
 }
@@ -86,14 +99,14 @@ function deleteFile_(data) {
 }
 
 function readSheet_(sheetName) {
-  const sheet = ss_().getSheetByName(sheetName);
-  if (!sheet) throw new Error('Sheet bulunamadı: ' + sheetName);
+  var sheet = ss_().getSheetByName(sheetName);
+  if (!sheet) throw new Error('Sheet bulunamadi: ' + sheetName);
   return { values: sheet.getDataRange().getValues() };
 }
 
 function writeSheet_(sheetName, values) {
-  const sheet = ss_().getSheetByName(sheetName);
-  if (!sheet) throw new Error('Sheet bulunamadı: ' + sheetName);
+  var sheet = ss_().getSheetByName(sheetName);
+  if (!sheet) throw new Error('Sheet bulunamadi: ' + sheetName);
   sheet.clearContents();
   if (values && values.length) {
     sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
@@ -103,7 +116,7 @@ function writeSheet_(sheetName, values) {
 
 function doGet(e) {
   try {
-    const action = e.parameter.action;
+    var action = e.parameter.action;
     if (action === 'read') return json_(readSheet_(e.parameter.sheet));
     if (action === 'listFiles') return json_(listFiles_());
     return json_({ error: 'Bilinmeyen istek.' });
@@ -114,7 +127,7 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents || '{}');
+    var data = JSON.parse(e.postData.contents || '{}');
     if (data.action === 'write') return json_(writeSheet_(data.sheet, data.values));
     if (data.action === 'listFiles') return json_(listFiles_());
     if (data.action === 'uploadFile') return json_(uploadFile_(data));
