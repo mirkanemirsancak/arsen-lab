@@ -119,6 +119,9 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .file-name{font-weight:600;color:var(--text);word-break:break-word;line-height:1.35;}.file-meta{font-size:11px;color:var(--text3);font-family:var(--mono);line-height:1.55;}
 .file-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;}.file-drop{border:1px dashed var(--border2);border-radius:var(--radius);padding:18px;background:rgba(255,255,255,0.02);color:var(--text2);}
 .file-drop input[type=file]{margin-top:10px;color:var(--text2);font-family:var(--sans);font-size:13px;}
+.mesai-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+.mesai-note{max-width:320px;white-space:normal;line-height:1.45;}
+.mesai-status{white-space:nowrap;}
 .group-header{background:var(--bg3);padding:8px 14px;font-size:11px;font-family:var(--mono);color:var(--text3);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);}
 .stok-info{display:inline-block;font-size:11px;color:var(--green);font-family:var(--mono);margin-left:8px;}
 .stock-group{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;background:var(--bg2);}
@@ -162,6 +165,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('temizlik')"><span class="nav-icon">✦</span> Temizlik Planı</div>
       <div class="nav-section">Ekip</div>
       <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> Görev Takvimi</div>
+      <div class="nav-item" onclick="showPage('mesai')"><span class="nav-icon">◷</span> Ekstra Mesai <span class="nav-badge" id="mesai-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('dosyalar')"><span class="nav-icon">▣</span> Dosya Depolama</div>
       <div class="nav-item" onclick="showPage('gunluk')"><span class="nav-icon">✎</span> Günlük Log</div>
       <div class="nav-item" onclick="showPage('rapor')"><span class="nav-icon">▤</span> Raporlama</div>
@@ -355,6 +359,7 @@ async function doLogin(){
     document.getElementById('sidebar-role').textContent=user.role==='admin'?'Admin':'Kullanıcı';
     if(user.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
     await ensureScheduleOnline();
+    await refreshMesaiBadge();
     syncTimer=setInterval(()=>syncAll().then(()=>{if(currentPage)showPage(currentPage,true);}),60000);
     showPage('dashboard');
   }catch(e){loading(false);toast('Giriş hatası: '+e.message,'err');}
@@ -366,13 +371,13 @@ function doLogout(){currentUser=null;clearInterval(syncTimer);document.getElemen
 function showPage(page,silent=false){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','stok','cikti','analiz','ekipman','temizlik','takvim','dosyalar','gunluk','rapor','admin'];
+  const map=['dashboard','stok','cikti','analiz','ekipman','temizlik','takvim','mesai','dosyalar','gunluk','rapor','admin'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
-  const titles={dashboard:'Dashboard',stok:'Stok Takibi',cikti:'Çıktı Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',takvim:'Görev Takvimi',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
+  const titles={dashboard:'Dashboard',stok:'Stok Takibi',cikti:'Çıktı Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
-  ({dashboard,stok,cikti,analiz,ekipman,temizlik,takvim,dosyalar,gunluk,rapor,admin})[page]?.();
+  ({dashboard,stok,cikti,analiz,ekipman,temizlik,takvim,mesai,dosyalar,gunluk,rapor,admin})[page]?.();
 }
 function updateBadges(){
   const k=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0)).length;
@@ -380,6 +385,7 @@ function updateBadges(){
   const bugun=new Date();
   const n=C.Ekipman.filter(e=>e.kalibrasyonTarihi&&(new Date(e.kalibrasyonTarihi)-bugun)/86400000<=30).length;
   const eb=document.getElementById('ekip-badge');if(n>0){eb.textContent=n;eb.style.display='';}else eb.style.display='none';
+  if(currentUser)refreshMesaiBadge().catch(()=>{});
 }
 function scheduleClone(v){return JSON.parse(JSON.stringify(v));}
 function scheduleJSON(v,fallback={}){try{return JSON.parse(v||'')||fallback;}catch{return fallback;}}
@@ -550,6 +556,7 @@ function dashboard(){
     ${gecmis.length>0?`<div class="alert alert-red mb-16">⚠ Süresi geçmiş kalibrasyon: <strong>${gecmis.map(e=>e.ad).join(', ')}</strong></div>`:''}
     ${yaklasan.length>0?`<div class="alert alert-amber mb-16">⚡ Kalibrasyon yaklaşıyor: <strong>${yaklasan.map(e=>e.ad).join(', ')}</strong></div>`:''}
     ${temizlikGecmis.length>0?`<div class="alert alert-amber mb-16">🧹 Temizlik zamanı geçmiş: <strong>${temizlikGecmis.map(t=>t.gorev).join(', ')}</strong></div>`:''}
+    ${canDelete()&&mesaiPendingCount>0?`<div class="alert alert-amber mb-16">◷ Onay bekleyen ekstra mesai kaydı: <strong>${mesaiPendingCount}</strong> <button class="btn btn-amber btn-sm" style="margin-left:10px" onclick="showPage('mesai')">İncele</button></div>`:''}
     <div class="grid-2 gap-16">
       <div class="card"><div class="card-header"><span class="card-title">Son Aktiviteler</span></div>
         ${son.length===0?`<div class="empty-state"><div class="empty-icon">◈</div><div>Henüz kayıt yok</div></div>`:
@@ -1087,6 +1094,93 @@ async function dosyaSil(id){
   loading(true,'Dosya siliniyor...');
   try{await driveApi('deleteFile',{id});loading(false);toast('Dosya silindi.','err');await renderDosyalar(fileSearch,fileFolder);}
   catch(e){loading(false);toast('Silme hatası: '+e.message,'err');}
+}
+
+// ── EKSTRA MESAİ ──
+let mesaiRows=[],mesaiFilter='all',mesaiPendingCount=0;
+async function refreshMesaiBadge(){
+  const b=document.getElementById('mesai-badge');if(!b)return;
+  if(!canDelete()){b.style.display='none';return;}
+  try{
+    const data=await driveApi('listOvertime');mesaiPendingCount=(data.records||[]).filter(r=>r.durum==='Bekliyor').length;
+    if(mesaiPendingCount>0){b.textContent=mesaiPendingCount;b.style.display='';}else b.style.display='none';
+  }catch(e){b.style.display='none';}
+}
+function mesaiStatusBadge(s){
+  const map={'Bekliyor':'badge-amber','Onaylandı':'badge-green','Reddedildi':'badge-red'};
+  return `<span class="badge ${map[s]||'badge-gray'} mesai-status">${s||'Bekliyor'}</span>`;
+}
+function mesaiSaat(r){return `${r.baslangic||'--:--'} - ${r.bitis||'--:--'}`;}
+function mesaiToplam(rows,status){return rows.filter(r=>!status||r.durum===status).reduce((n,r)=>n+(parseFloat(r.toplamSaat)||0),0);}
+async function mesai(){
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="mesaiYeni()">+ Mesai Kaydı</button>`;
+  await renderMesai();
+}
+async function renderMesai(filter=mesaiFilter){
+  mesaiFilter=filter;
+  document.getElementById('content').innerHTML=`<div class="empty-state"><div class="spinner" style="margin:0 auto 12px"></div><div>Mesai kayıtları yükleniyor...</div></div>`;
+  try{
+    const data=await driveApi('listOvertime');mesaiRows=data.records||[];
+    let rows=canDelete()?[...mesaiRows]:mesaiRows.filter(r=>r.kullanici===currentUser.username);
+    if(filter!=='all')rows=rows.filter(r=>r.durum===filter);
+    rows.sort((a,b)=>new Date(b.olusturma||b.tarih||0)-new Date(a.olusturma||a.tarih||0));
+    const scope=canDelete()?mesaiRows:mesaiRows.filter(r=>r.kullanici===currentUser.username);
+    document.getElementById('content').innerHTML=`
+      <div class="mesai-summary">
+        <div class="stat-card"><div class="stat-label">Bekleyen</div><div class="stat-value stat-amber">${scope.filter(r=>r.durum==='Bekliyor').length}</div><div class="stat-sub">${mesaiToplam(scope,'Bekliyor').toFixed(1)} saat</div></div>
+        <div class="stat-card"><div class="stat-label">Onaylı</div><div class="stat-value stat-green">${scope.filter(r=>r.durum==='Onaylandı').length}</div><div class="stat-sub">${mesaiToplam(scope,'Onaylandı').toFixed(1)} saat</div></div>
+        <div class="stat-card"><div class="stat-label">Reddedilen</div><div class="stat-value stat-red">${scope.filter(r=>r.durum==='Reddedildi').length}</div><div class="stat-sub">${mesaiToplam(scope,'Reddedildi').toFixed(1)} saat</div></div>
+        <div class="stat-card"><div class="stat-label">${canDelete()?'Tüm Kayıt':'Kayıtlarım'}</div><div class="stat-value stat-blue">${scope.length}</div><div class="stat-sub">${mesaiToplam(scope).toFixed(1)} toplam saat</div></div>
+      </div>
+      <div class="filter-bar">
+        ${['all','Bekliyor','Onaylandı','Reddedildi'].map(f=>`<button class="filter-btn ${filter===f?'active':''}" onclick="renderMesai('${f}')">${f==='all'?'Tümü':f}</button>`).join('')}
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Kişi</th><th>Tarih</th><th>Saat Aralığı</th><th>Toplam</th><th>Durum</th><th>Açıklama</th><th>Onay</th></tr></thead><tbody>
+        ${rows.length?rows.map(r=>`<tr>
+          <td class="td-main">${esc(r.kullaniciAd||r.kullanici||'—')}</td>
+          <td class="text-mono" style="font-size:11px">${fmt(r.tarih)}</td>
+          <td class="text-mono">${esc(mesaiSaat(r))}</td>
+          <td><strong style="color:var(--text)">${(parseFloat(r.toplamSaat)||0).toFixed(1)}</strong> saat</td>
+          <td>${mesaiStatusBadge(r.durum)}</td>
+          <td class="mesai-note">${esc(r.aciklama||'—')}${r.adminNot?`<div class="text-sm text-muted mt-8">Admin notu: ${esc(r.adminNot)}</div>`:''}</td>
+          <td>${canDelete()&&r.durum==='Bekliyor'?`<button class="btn btn-success btn-sm" onclick="mesaiOnay('${r.id}','Onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="mesaiOnay('${r.id}','Reddedildi')">Reddet</button>`:`<span class="text-muted text-sm">${r.onaylayan?`Onaylayan: ${esc(r.onaylayan)}`:'—'}</span>`}</td>
+        </tr>`).join(''):`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">◷</div><div>Mesai kaydı yok.</div></div></td></tr>`}
+      </tbody></table></div>`;
+  }catch(e){
+    document.getElementById('content').innerHTML=`<div class="alert alert-amber">Ekstra mesai backend'i henüz aktif değil. Apps Script kodunu güncelleyip yeni deployment aldığında panel çalışacak.<br><br><strong>Hata:</strong> ${esc(e.message)}</div>`;
+  }
+}
+function mesaiYeni(){
+  showModal('Ekstra Mesai Kaydı',`
+    <div class="form-row"><div class="form-group"><label>Tarih *</label><input type="date" id="m-tarih" value="${today()}"></div>
+    <div class="form-group"><label>Mola (dk)</label><input type="number" id="m-mola" value="0" min="0"></div></div>
+    <div class="form-row"><div class="form-group"><label>Başlangıç *</label><input type="time" id="m-bas"></div>
+    <div class="form-group"><label>Bitiş *</label><input type="time" id="m-bit"></div></div>
+    <div class="form-group"><label>Açıklama / Yapılan İş</label><textarea id="m-aciklama" placeholder="Kısa açıklama yazın"></textarea></div>`,
+    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="mesaiKaydet()">Onaya Gönder</button>`);
+}
+function mesaiHesapla(bas,bit,mola){
+  if(!bas||!bit)return 0;
+  const [bh,bm]=bas.split(':').map(Number),[eh,em]=bit.split(':').map(Number);
+  let start=bh*60+bm,end=eh*60+em;if(end<start)end+=1440;
+  return Math.max(0,(end-start-(parseFloat(mola)||0))/60);
+}
+async function mesaiKaydet(){
+  const tarih=document.getElementById('m-tarih').value,bas=document.getElementById('m-bas').value,bit=document.getElementById('m-bit').value,mola=document.getElementById('m-mola').value||'0';
+  if(!tarih||!bas||!bit){toast('Tarih ve saat aralığı zorunlu.','err');return;}
+  const toplam=mesaiHesapla(bas,bit,mola);if(toplam<=0){toast('Geçerli bir saat aralığı girin.','err');return;}
+  loading(true,'Mesai kaydı onaya gönderiliyor...');
+  try{
+    await driveApi('createOvertime',{kullanici:currentUser.username,kullaniciAd:currentUser.ad||currentUser.username,tarih,baslangic:bas,bitis:bit,molaDakika:mola,toplamSaat:toplam.toFixed(2),aciklama:document.getElementById('m-aciklama').value});
+    closeModalDirect();loading(false);toast('Mesai kaydı onaya gönderildi ✓');await renderMesai();
+  }catch(e){loading(false);toast('Mesai kaydedilemedi: '+e.message,'err');}
+}
+async function mesaiOnay(id,durum){
+  if(!canDelete()){toast('Onay yetkisi sadece admin kullanıcıda.','err');return;}
+  const note=prompt(durum==='Onaylandı'?'Onay notu (opsiyonel)':'Red nedeni / not','')||'';
+  loading(true,'Mesai durumu güncelleniyor...');
+  try{await driveApi('updateOvertimeStatus',{id,durum,adminNot:note,onaylayan:currentUser.ad||currentUser.username});loading(false);toast('Mesai durumu güncellendi ✓');await refreshMesaiBadge();await renderMesai();}
+  catch(e){loading(false);toast('Onay hatası: '+e.message,'err');}
 }
 
 // ── GÜNLÜK LOG ──
