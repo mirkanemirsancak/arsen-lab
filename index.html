@@ -221,7 +221,7 @@ const COLS={
   DuzenlemeLoglari:['id','modul','kayitId','kullanici','tarih','onceki','sonraki']
 };
 const C={Users:[],Stok:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],DuzenlemeLoglari:[]};
-let currentUser=null,currentPage=null,syncTimer=null;
+let currentUser=null,currentPage=null,syncTimer=null,authToken=null;
 const LABS=['Lab-1','Ek Lab'];
 const FREQLAR=['Aylık','3 Aylık','6 Aylık','Yıllık'];
 const GOREV_CIZELGE={
@@ -321,7 +321,7 @@ function goResult(page){document.getElementById('gsr').style.display='none';docu
 
 // ── API ──
 async function apiRead(sheet){
-  const r=await fetch(`${SCRIPT_URL}?action=read&sheet=${encodeURIComponent(sheet)}`);
+  const r=await fetch(`${SCRIPT_URL}?action=read&sheet=${encodeURIComponent(sheet)}&token=${encodeURIComponent(authToken||'')}`);
   const d=await r.json();if(d.error)throw new Error(d.error);
   const rows=d.values||[];if(rows.length<2)return[];
   const h=rows[0];return rows.slice(1).map(row=>{const o={};h.forEach((k,i)=>o[k]=row[i]!==undefined?String(row[i]):'');return o;});
@@ -329,7 +329,7 @@ async function apiRead(sheet){
 async function apiWrite(sheet,records){
   const cols=COLS[sheet];const values=[cols];
   records.forEach(r=>values.push(cols.map(c=>r[c]!==undefined&&r[c]!==null?String(r[c]):'')));
-  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({sheet,action:'write',values})});
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({sheet,action:'write',values,token:authToken})});
   const d=await res.json();if(d.error)throw new Error(d.error);
 }
 function parseRow(k,r){
@@ -349,25 +349,26 @@ async function doLogin(){
   const u=document.getElementById('login-user').value.trim();const p=document.getElementById('login-pass').value;if(!u||!p)return;
   loading(true,'Bağlanıyor...');
   try{
+    const login=await driveApi('login',{username:u,passwordHash:hash(p)});
+    authToken=login.token;currentUser=login.user;
     const ok=await syncAll();if(!ok){loading(false);return;}
-    if(C.Users.length===0){C.Users=[{id:uid(),username:'admin',passwordHash:hash('admin123'),role:'admin',ad:'Admin',email:'',active:'true',olusturma:new Date().toISOString()}];await save('Users');}
-    const user=C.Users.find(x=>x.username===u&&x.passwordHash===hash(p)&&(x.active==='true'||x.active===true));
-    if(!user){loading(false);document.getElementById('login-err').style.display='block';return;}
-    currentUser=user;loading(false);
+    loading(false);
     document.getElementById('login-err').style.display='none';
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').classList.add('visible');
-    document.getElementById('sidebar-username').textContent=user.ad||user.username;
-    document.getElementById('sidebar-role').textContent=user.role==='admin'?'Admin':'Kullanıcı';
-    if(user.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
+    document.getElementById('sidebar-username').textContent=currentUser.ad||currentUser.username;
+    document.getElementById('sidebar-role').textContent=currentUser.role==='admin'?'Admin':'Kullanıcı';
+    document.getElementById('admin-nav-section').style.display='';
+    document.getElementById('admin-nav-item').style.display='';
+    if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
     await ensureScheduleOnline();
     await refreshMesaiBadge();
     syncTimer=setInterval(()=>syncAll().then(()=>{if(currentPage)showPage(currentPage,true);}),60000);
     showPage('dashboard');
-  }catch(e){loading(false);toast('Giriş hatası: '+e.message,'err');}
+  }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-pass')===document.activeElement)doLogin();});
-function doLogout(){currentUser=null;clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
+function doLogout(){currentUser=null;authToken=null;clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
 
 // ── NAV ──
 function showPage(page,silent=false){
@@ -1031,7 +1032,7 @@ async function gorevSil(id){if(!confirm('Emin misiniz?'))return;C.Gorevler=C.Gor
 // ── DOSYA DEPOLAMA ──
 let fileCache=[],fileSearch='',fileFolder='';
 async function driveApi(action,payload={}){
-  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,...payload})});
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,token:authToken,...payload})});
   const data=await res.json();if(data.error)throw new Error(data.error);return data;
 }
 function fileSize(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB';}

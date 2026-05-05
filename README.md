@@ -38,3 +38,12 @@ Restricted modele gecmek icin yarin izlenecek kisa siralama:
 5. Apps Script deployment erisim ayarlarini gozden gecir.
 
 Not: Bu degisiklik kullanici-mail eslesmesini hazirlar; tek basina tam erisim kontrolu saglamaz. Google tarafindaki paylasim ve deployment ayarlari birlikte uygulanmalidir.
+
+## E-posta zorunlu oturum modeli
+
+Apps Script backend'i `login` disindaki tum okuma/yazma/Drive/Mesai islemleri icin oturum token'i ister. Token yalnizca aktif ve `email` alani dolu kullanicilara verilir.
+
+- E-postasi bos kullanici sisteme giris yapamaz.
+- Drive dosyalari `Anyone with link` yerine aktif kullanici e-postalarina viewer olarak paylasilacak sekilde ayarlanir.
+- `Users` sheet yazimi yalnizca admin token'i ile yapilabilir.
+- Apps Script kodu guncellendikten sonra mutlaka yeni deployment versiyonu alinmalidir.
