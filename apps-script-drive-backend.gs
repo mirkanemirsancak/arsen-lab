@@ -3,6 +3,10 @@ var DRIVE_ROOT_FOLDER_NAME = 'Arsen Lab Dosyalar';
 var OVERTIME_SHEET_NAME = 'Mesai';
 var OVERTIME_HEADERS = ['id','kullanici','kullaniciAd','tarih','baslangic','bitis','molaDakika','toplamSaat','aciklama','durum','olusturma','onaylayan','onayTarihi','adminNot'];
 var TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+var DEFAULT_SHEET_HEADERS = {
+  StokHareketleri: ['id','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
+  Metodlar: ['id','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici']
+};
 
 function json(result) {
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -13,8 +17,18 @@ function normEmail(v) {
 }
 
 function sheetByName(name) {
-  var sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(name);
+  var headers = DEFAULT_SHEET_HEADERS[name];
+  if (!sh && headers) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return sh;
+  }
   if (!sh) throw new Error('Sheet bulunamadi: ' + name);
+  if (headers && (sh.getLastRow() === 0 || !sh.getRange(1, 1).getValue())) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
   return sh;
 }
 

@@ -18,6 +18,9 @@ Guncelleme oncesi ana dosyalar bu lokal calisma alaninda `backups/` klasorune ko
 - `Lab-2` yerine `Ek Lab` eklendi.
 - Girdi kayitlari Stok'a aktarildi ve Girdi sekmesi arayuzden kaldirildi.
 - Kullanici yonetimine `Google E-posta` alani eklendi. Bu alan, Google Sheets ve Drive izinleriyle ekip hesabi eslestirmek icin kullanilacak.
+- `Cikti Takibi` sekmesi arayuzden kaldirildi; stok girdi/cikti islemleri artik dogrudan `Stok Takibi` icindeki Girdi ve Cikti butonlariyla yapilir.
+- `StokHareketleri` sayfasi eklendi. Her stok girdi/cikti islemi onceki miktar, sonraki miktar, tarih, aciklama ve kullanici bilgisiyle kaydedilir.
+- `Metodlar` sayfasi eklendi. `Metodlar ve Izlekler` sekmesinde izlekler, hammadde surecleri ve standart bilimsel metodlar filtrelenebilir ve duzenlenebilir.
 
 ## Not
 
@@ -47,3 +50,7 @@ Apps Script backend'i `login` disindaki tum okuma/yazma/Drive/Mesai islemleri ic
 - Drive dosyalari `Anyone with link` yerine aktif kullanici e-postalarina viewer olarak paylasilacak sekilde ayarlanir.
 - `Users` sheet yazimi yalnizca admin token'i ile yapilabilir.
 - Apps Script kodu guncellendikten sonra mutlaka yeni deployment versiyonu alinmalidir.
+
+## Apps Script sayfa basliklari
+
+`apps-script-drive-backend.gs`, `StokHareketleri` ve `Metodlar` sheet'leri yoksa ilk okumada otomatik olusturur ve baslik satirlarini yazar. Bu nedenle bu guncellemeden sonra Apps Script kodu tekrar yapistirilip yeni deployment alinmalidir.
