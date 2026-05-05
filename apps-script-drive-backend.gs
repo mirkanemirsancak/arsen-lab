@@ -178,7 +178,6 @@ function shareWithActiveUsers(item) {
 function rootFolder() {
   var it = DriveApp.getFoldersByName(DRIVE_ROOT_FOLDER_NAME);
   var folder = it.hasNext() ? it.next() : DriveApp.createFolder(DRIVE_ROOT_FOLDER_NAME);
-  shareWithActiveUsers(folder);
   return folder;
 }
 
@@ -187,7 +186,6 @@ function subFolder(name) {
   var folderName = String(name || 'Genel').trim() || 'Genel';
   var it = parent.getFoldersByName(folderName);
   var folder = it.hasNext() ? it.next() : parent.createFolder(folderName);
-  shareWithActiveUsers(folder);
   return folder;
 }
 
@@ -218,16 +216,13 @@ function listFiles() {
   var files = [], root = rootFolder(), rootFiles = root.getFiles();
   while (rootFiles.hasNext()) {
     var rootFile = rootFiles.next();
-    shareWithActiveUsers(rootFile);
     files.push(info(rootFile, 'Genel'));
   }
   var folders = root.getFolders();
   while (folders.hasNext()) {
     var folder = folders.next(), folderFiles = folder.getFiles();
-    shareWithActiveUsers(folder);
     while (folderFiles.hasNext()) {
       var file = folderFiles.next();
-      shareWithActiveUsers(file);
       files.push(info(file, folder.getName()));
     }
   }
@@ -242,7 +237,6 @@ function uploadFile(data, user) {
   var file = folder.createFile(blob);
   var desc = (data.description || '') + '\nYukleyen: ' + (user.ad || user.username || 'Bilinmiyor') + '\nYuklemeTarihi: ' + new Date().toISOString();
   file.setDescription(desc);
-  shareWithActiveUsers(file);
   return { ok: true, file: info(file, folder.getName()) };
 }
 

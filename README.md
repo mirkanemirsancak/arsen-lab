@@ -50,6 +50,7 @@ Apps Script backend'i `login` disindaki tum okuma/yazma/Drive/Mesai islemleri ic
 - Drive dosyalari `Anyone with link` yerine aktif kullanici e-postalarina viewer olarak paylasilacak sekilde ayarlanir.
 - `Users` sheet yazimi yalnizca admin token'i ile yapilabilir.
 - Apps Script kodu guncellendikten sonra mutlaka yeni deployment versiyonu alinmalidir.
+- Dosya listesi okunurken veya dosya yuklenirken Apps Script artik dosya/klasor bazli tekrar tekrar viewer eklemez. Drive erisimi, ana `Arsen Lab Dosyalar` klasorunun Google Drive paylasimindan yonetilir; boylece ekibe surekli erisim bildirimi gitmez.
 
 ## Apps Script sayfa basliklari
 
