@@ -6,7 +6,8 @@ var TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 var DEFAULT_SHEET_HEADERS = {
   StokHareketleri: ['id','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
   Metodlar: ['id','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
-  IletisimKisileri: ['id','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme']
+  IletisimKisileri: ['id','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
+  Bildirimler: ['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi']
 };
 
 function json(result) {
@@ -147,8 +148,22 @@ function valuesForUsers(user) {
   return { values: values };
 }
 
+function valuesForNotifications(user) {
+  var data = rowsFromSheet('Bildirimler');
+  var headers = data.headers.length ? data.headers : DEFAULT_SHEET_HEADERS.Bildirimler;
+  var values = [headers];
+  for (var i = 0; i < data.rows.length; i++) {
+    if (data.rows[i].kime !== user.username) continue;
+    var row = [];
+    for (var j = 0; j < headers.length; j++) row.push(data.rows[i][headers[j]] || '');
+    values.push(row);
+  }
+  return { values: values };
+}
+
 function readSheet(name, user) {
   if (name === 'Users') return valuesForUsers(user);
+  if (name === 'Bildirimler') return valuesForNotifications(user);
   return { values: sheetByName(name).getDataRange().getValues() };
 }
 
@@ -163,10 +178,91 @@ function readSheets(names, user) {
 
 function writeSheet(name, values, user) {
   if (name === 'Users' && user.role !== 'admin') throw new Error('Kullanici yonetimi icin admin yetkisi gerekli.');
+  if (name === 'Bildirimler') throw new Error('Bildirimler icin bildirim aksiyonlarini kullanin.');
   var sh = sheetByName(name);
   sh.clearContents();
   if (values && values.length) sh.getRange(1, 1, values.length, values[0].length).setValues(values);
   return { ok: true };
+}
+
+function markNotificationsRead(data, user) {
+  var sheetData = rowsFromSheet('Bildirimler');
+  var headers = sheetData.headers.length ? sheetData.headers : DEFAULT_SHEET_HEADERS.Bildirimler;
+  var ids = data.ids || [];
+  var markAll = data.all === true || data.all === 'true';
+  for (var i = 0; i < sheetData.rows.length; i++) {
+    var row = sheetData.rows[i];
+    if (row.kime !== user.username) continue;
+    if (markAll || ids.indexOf(row.id) >= 0) row.okundu = 'true';
+  }
+  var values = [headers];
+  for (var r = 0; r < sheetData.rows.length; r++) {
+    var out = [];
+    for (var c = 0; c < headers.length; c++) out.push(sheetData.rows[r][headers[c]] || '');
+    values.push(out);
+  }
+  var sh = sheetByName('Bildirimler');
+  sh.clearContents();
+  if (values.length) sh.getRange(1, 1, values.length, headers.length).setValues(values);
+  return { ok: true };
+}
+
+function activeUsers() {
+  return usersData().filter(function(u) { return (u.active === true || u.active === 'true') && normEmail(u.email); });
+}
+
+function findUser(username) {
+  var users = usersData();
+  for (var i = 0; i < users.length; i++) if (users[i].username === username) return users[i];
+  return null;
+}
+
+function appendNotification(target, data, user) {
+  var headers = DEFAULT_SHEET_HEADERS.Bildirimler;
+  var emailSent = 'false';
+  if (data.sendEmail && normEmail(target.email)) {
+    try {
+      MailApp.sendEmail({
+        to: normEmail(target.email),
+        subject: '[Arsen Lab] ' + (data.baslik || 'Bildirim'),
+        body: (data.mesaj || '') + '\n\nGönderen: ' + (user.ad || user.username || 'Sistem') + '\nArsen Lab Takip Sistemi'
+      });
+      emailSent = 'true';
+    } catch (ignored) {}
+  }
+  var row = {
+    id: Utilities.getUuid().replace(/-/g, '').substring(0, 14),
+    kime: target.username,
+    baslik: data.baslik || 'Bildirim',
+    mesaj: data.mesaj || '',
+    tur: data.tur || 'Sistem',
+    okundu: 'false',
+    tarih: new Date().toISOString(),
+    olusturan: user.ad || user.username || 'Sistem',
+    sayfa: data.sayfa || '',
+    kayitId: data.kayitId || '',
+    emailGonderildi: emailSent
+  };
+  sheetByName('Bildirimler').appendRow(headers.map(function(h) { return row[h] || ''; }));
+  return row;
+}
+
+function createNotification(data, user) {
+  if (user.role !== 'admin') throw new Error('Bildirim gondermek icin admin yetkisi gerekli.');
+  if (!data.baslik || !data.mesaj) throw new Error('Bildirim basligi ve mesaji gerekli.');
+  var recipients = data.recipients || [];
+  var targets = [];
+  if (recipients.indexOf('all') >= 0) targets = activeUsers();
+  else {
+    for (var i = 0; i < recipients.length; i++) {
+      var target = findUser(recipients[i]);
+      if (target && (target.active === true || target.active === 'true')) targets.push(target);
+    }
+  }
+  if (!targets.length) throw new Error('Gecerli alici bulunamadi.');
+  var created = [];
+  for (var j = 0; j < targets.length; j++) created.push(appendNotification(targets[j], data, user));
+  return { ok: true, created: created.length };
 }
 
 function restrictItem(item) {
@@ -326,9 +422,10 @@ function createOvertime(data, user) {
 function updateOvertimeStatus(data, user) {
   if (user.role !== 'admin') throw new Error('Mesai onayi icin admin yetkisi gerekli.');
   if (!data.id || !data.durum) throw new Error('Onay bilgisi eksik.');
-  var rows = overtimeRows(), found = false;
+  var rows = overtimeRows(), found = false, targetUsername = '';
   for (var i = 0; i < rows.length; i++) {
     if (rows[i].id === data.id) {
+      targetUsername = rows[i].kullanici;
       rows[i].durum = data.durum;
       rows[i].onaylayan = user.ad || user.username;
       rows[i].onayTarihi = new Date().toISOString();
@@ -339,6 +436,15 @@ function updateOvertimeStatus(data, user) {
   }
   if (!found) throw new Error('Mesai kaydi bulunamadi.');
   writeOvertimeRows(rows);
+  var target = findUser(targetUsername);
+  if (target) appendNotification(target, {
+    baslik: 'Ekstra mesai ' + data.durum,
+    mesaj: 'Ekstra mesai kaydınız ' + data.durum + '.\n' + (data.adminNot ? 'Admin notu: ' + data.adminNot : ''),
+    tur: 'Mesai',
+    sayfa: 'mesai',
+    kayitId: data.id,
+    sendEmail: true
+  }, user);
   return { ok: true };
 }
 
@@ -366,6 +472,8 @@ function doPost(e) {
       var user = requireAuth(data.token);
       if (data.action === 'write') result = writeSheet(data.sheet, data.values, user);
       else if (data.action === 'batchRead') result = readSheets(data.sheets || [], user);
+      else if (data.action === 'createNotification') result = createNotification(data, user);
+      else if (data.action === 'markNotificationsRead') result = markNotificationsRead(data, user);
       else if (data.action === 'listFiles') result = listFiles(user);
       else if (data.action === 'uploadFile') result = uploadFile(data, user);
       else if (data.action === 'deleteFile') result = deleteFile(data, user);

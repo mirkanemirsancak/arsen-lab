@@ -95,6 +95,8 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .empty-state{text-align:center;padding:48px 24px;color:var(--text3);}.empty-icon{font-size:40px;margin-bottom:12px;}
 #toast{position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:12px 18px;font-size:13px;color:var(--text);transform:translateY(100px);opacity:0;transition:all 0.3s;max-width:320px;}
 #toast.show{transform:translateY(0);opacity:1;}#toast.toast-ok{border-color:var(--green);color:var(--green);}#toast.toast-err{border-color:var(--red);color:var(--red);}
+.notif-btn{position:relative;border:1px solid var(--border);background:var(--bg3);color:var(--text2);border-radius:var(--radius);padding:8px 11px;cursor:pointer;}.notif-btn:hover{border-color:var(--accent);color:var(--accent);}
+.notif-count{position:absolute;top:-7px;right:-7px;background:var(--red);color:white;border-radius:999px;min-width:18px;height:18px;font-size:10px;display:none;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;}
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;}
 .tab{padding:8px 16px;font-size:13px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s;}
 .tab:hover{color:var(--text);}.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
@@ -168,6 +170,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('temizlik')"><span class="nav-icon">✦</span> Temizlik Planı</div>
       <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> Metodlar ve İzlekler</div>
       <div class="nav-section">Ekip</div>
+      <div class="nav-item" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> Görev Takvimi</div>
       <div class="nav-item" onclick="showPage('mesai')"><span class="nav-icon">◷</span> Ekstra Mesai <span class="nav-badge" id="mesai-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('iletisim')"><span class="nav-icon">☏</span> İletişimde Olunan Kişiler</div>
@@ -190,7 +193,8 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
         <input type="text" placeholder="Tüm modüllerde ara..." id="gsi" autocomplete="off">
         <div id="gsr"></div>
       </div>
-      <div style="display:flex;gap:8px;margin-left:auto;" id="topbar-actions"></div>
+      <button class="notif-btn" onclick="showPage('bildirim')" title="Bildirimler">◔ <span class="notif-count" id="notif-count">0</span></button>
+      <div style="display:flex;gap:8px;" id="topbar-actions"></div>
     </div>
     <div class="content" id="content"></div>
   </div>
@@ -204,7 +208,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 
 <script>
 const SCRIPT_URL='https://script.google.com/macros/s/AKfycbywgaqp0vIXqPj44IJV2kuomL1jTk_ZnPLiGRTCtrE_hXFBo4rgPmtYT-p3Ne3cbagj/exec';
-const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','DuzenlemeLoglari'];
+const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari'];
 const GOREV_KAT=['Analiz','Ekstraksiyon/Proses','Ekipman Bakımı','Kalibrasyon','Temizlik','Numune Hazırlama','Raporlama','Tedarik/Satın Alma','Ar-Ge','Toplantı','Diğer'];
 const LOG_KAT=['Analiz','Ekstraksiyon/Proses','Ekipman','Raporlama','Ar-Ge','Toplantı','Tedarik','Genel','Diğer'];
 const ONCELIKLER=['Düşük','Normal','Yüksek','Kritik'];
@@ -226,10 +230,11 @@ const COLS={
   Gorevler:['id','baslik','kategori','atanan','atayan','tarih','basTarih','bitisTarih','oncelik','durum','aciklama','kullanici'],
   GunlukLog:['id','kullanici','kullaniciAd','tarih','kategori','baslik','icerik','duzenlendi','duzenlemeTarihi'],
   IletisimKisileri:['id','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
+  Bildirimler:['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi'],
   DuzenlemeLoglari:['id','modul','kayitId','kullanici','tarih','onceki','sonraki']
 };
-const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],DuzenlemeLoglari:[]};
-let currentUser=null,currentPage=null,syncTimer=null,authToken=null;
+const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[]};
+let currentUser=null,currentPage=null,syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set();
 const LABS=['Lab-1','Ek Lab'];
 const FREQLAR=['Aylık','3 Aylık','6 Aylık','Yıllık'];
 const GOREV_CIZELGE={
@@ -371,7 +376,7 @@ async function syncAll(){
       data=Object.fromEntries(reads);
     }
     SHEETS.forEach(s=>{C[s]=(data[s]||[]).map(r=>parseRow(s,r));});
-    setSS('ok');updateBadges();return true;
+    setSS('ok');updateBadges();handleNewNotifications();return true;
   }
   catch(e){setSS('err');toast('Bağlantı hatası: '+e.message,'err');return false;}
 }
@@ -394,6 +399,7 @@ async function doLogin(){
     document.getElementById('admin-nav-section').style.display='';
     document.getElementById('admin-nav-item').style.display='';
     if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
+    initNotifications();
     showPage('dashboard');
     ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});
     refreshMesaiBadge().catch(()=>{});
@@ -401,19 +407,19 @@ async function doLogin(){
   }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-pass')===document.activeElement)doLogin();});
-function doLogout(){currentUser=null;authToken=null;clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
+function doLogout(){currentUser=null;authToken=null;notifReady=false;knownNotifIds.clear();clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
 
 // ── NAV ──
 function showPage(page,silent=false){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','stok','analiz','ekipman','temizlik','metod','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
+  const map=['dashboard','stok','analiz','ekipman','temizlik','metod','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
-  const titles={dashboard:'Dashboard',stok:'Stok Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',metod:'Metodlar ve İzlekler',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
+  const titles={dashboard:'Dashboard',stok:'Stok Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',metod:'Metodlar ve İzlekler',bildirim:'Bildirimler',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
-  ({dashboard,stok,analiz,ekipman,temizlik,metod,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin})[page]?.();
+  ({dashboard,stok,analiz,ekipman,temizlik,metod,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin})[page]?.();
 }
 function updateBadges(){
   const k=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0)).length;
@@ -421,7 +427,36 @@ function updateBadges(){
   const bugun=new Date();
   const n=C.Ekipman.filter(e=>e.kalibrasyonTarihi&&(new Date(e.kalibrasyonTarihi)-bugun)/86400000<=30).length;
   const eb=document.getElementById('ekip-badge');if(n>0){eb.textContent=n;eb.style.display='';}else eb.style.display='none';
-  if(currentUser)refreshMesaiBadge().catch(()=>{});
+  updateNotificationBadge();
+}
+function myNotifications(){
+  if(!currentUser)return[];
+  return C.Bildirimler.filter(n=>n.kime===currentUser.username).sort((a,b)=>new Date(b.tarih||0)-new Date(a.tarih||0));
+}
+function unreadNotifications(){return myNotifications().filter(n=>n.okundu!=='true'&&n.okundu!==true);}
+function updateNotificationBadge(){
+  const n=unreadNotifications().length;
+  ['notif-count','bildirim-badge'].forEach(id=>{const el=document.getElementById(id);if(!el)return;if(n>0){el.textContent=n;el.style.display=id==='notif-count'?'flex':'';}else el.style.display='none';});
+}
+function initNotifications(){knownNotifIds=new Set(myNotifications().map(n=>n.id));notifReady=true;updateNotificationBadge();}
+function handleNewNotifications(){
+  if(!notifReady||!currentUser)return;
+  const fresh=unreadNotifications().filter(n=>!knownNotifIds.has(n.id));
+  myNotifications().forEach(n=>knownNotifIds.add(n.id));
+  if(fresh.length){const n=fresh[0];toast(`${n.baslik}: ${n.mesaj}`);}
+  if(currentPage==='bildirim')renderBildirim();
+}
+async function notifyApi(payload){
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'createNotification',token:authToken,...payload})});
+  const d=await res.json();if(d.error)throw new Error(d.error);return d;
+}
+async function markNotificationsRead(payload){
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'markNotificationsRead',token:authToken,...payload})});
+  const d=await res.json();if(d.error)throw new Error(d.error);return d;
+}
+function userForSchedulePerson(name){
+  const q=String(name||'').trim().toLowerCase();
+  return C.Users.find(u=>String(u.username||'').toLowerCase()===q||String(u.ad||'').toLowerCase()===q||String(u.ad||'').toLowerCase().startsWith(q+' '));
 }
 function scheduleClone(v){return JSON.parse(JSON.stringify(v));}
 function scheduleJSON(v,fallback={}){try{return JSON.parse(v||'')||fallback;}catch{return fallback;}}
@@ -552,7 +587,8 @@ function scheduleTaskForm(task={},personIdx=0,dayIndex=0){
     <div class="form-group"><label>Durum</label><select id="sch-status"><option ${task.durum!=='Tamamlandı'?'selected':''}>Bekliyor</option><option ${task.durum==='Tamamlandı'?'selected':''}>Tamamlandı</option></select></div></div>
     <div class="form-group"><label>Renk</label><div class="color-choice">
       ${[['red','Kritik'],['amber','Yüksek'],['teal','Devam'],['blue','Planlı']].map(([v,l])=>`<label><input type="radio" name="sch-priority" value="${v}" ${pr===v?'checked':''}><span class="schedule-dot ${v}"></span>${l}</label>`).join('')}
-    </div></div>`;
+    </div></div>
+    ${task.id?'':`<label style="display:flex;gap:8px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" id="sch-mail" checked style="width:auto"> Atanan kişiye popup ve e-posta bildirimi gönder</label>`}`;
 }
 function scheduleReadTask(){
   const title=document.getElementById('sch-title').value.trim();if(!title){toast('Görev zorunlu.','err');return null;}
@@ -568,8 +604,13 @@ async function scheduleSaveNewTask(){
   const v=scheduleReadTask();if(!v)return;
   const D=scheduleData(),pObj=D.persons[parseInt(document.getElementById('sch-person-idx').value,10)||0];if(!pObj)return;
   const dayIndex=parseInt(document.getElementById('sch-day-idx').value,10)||0,date=S_DATES[dayIndex]||today();
-  C.Gorevler.push(scheduleBaseRow({baslik:v.title,atanan:pObj.name,tarih:date,basTarih:date,oncelik:S_PRIO_TO_ON[v.priority]||'Normal',durum:v.durum,aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:v.priority,goalId:v.goalId,role:pObj.role||''})}));
+  const row=scheduleBaseRow({baslik:v.title,atanan:pObj.name,tarih:date,basTarih:date,oncelik:S_PRIO_TO_ON[v.priority]||'Normal',durum:v.durum,aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:v.priority,goalId:v.goalId,role:pObj.role||''})});
+  C.Gorevler.push(row);
+  const sendMail=document.getElementById('sch-mail')?.checked;
   closeModalDirect();await scheduleSaveAndRefresh();
+  const u=userForSchedulePerson(pObj.name);
+  if(u){notifyApi({recipients:[u.username],baslik:'Yeni görev atandı',mesaj:`${v.title}\n\nGün: ${D.days[dayIndex]||''}${v.goalId?`\nAna hedef: ${scheduleGoalName(v.goalId)}`:''}`,tur:'Görev',sayfa:'takvim',kayitId:row.id,sendEmail:sendMail}).then(()=>syncAll()).catch(e=>toast('Bildirim gönderilemedi: '+e.message,'err'));}
+  else toast('Görev kaydedildi; kişi kullanıcıyla eşleşmediği için bildirim gönderilmedi.','err');
 }
 function scheduleEditTask(id){
   if(!scheduleGuard())return;
@@ -653,6 +694,45 @@ async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.si
 async function scheduleClearTasks(){if(!scheduleGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
 async function scheduleClearPeopleAndTasks(){if(!scheduleGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
 async function scheduleResetWeek(){if(!scheduleGuard()||!confirm('Çizelge varsayılan haftalık içerikle sıfırlansın mı?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('Haftalık çizelge sıfırlandı ✓');}
+
+// ── BİLDİRİMLER ──
+function bildirim(){
+  document.getElementById('topbar-actions').innerHTML=`${canDelete()?'<button class="btn btn-primary btn-sm" onclick="bildirimYeni()">+ Bildirim Gönder</button>':''}<button class="btn btn-ghost btn-sm" onclick="bildirimHepsiniOku()">Tümünü Okundu Yap</button>`;
+  renderBildirim();
+}
+function renderBildirim(){
+  const rows=myNotifications();
+  document.getElementById('content').innerHTML=rows.length?`
+    <div style="display:flex;flex-direction:column;gap:10px">${rows.map(n=>`
+      <div class="card" style="border-left:3px solid ${n.okundu==='true'?'var(--border2)':'var(--accent)'}">
+        <div class="card-header"><span class="card-title">${esc(n.baslik)}</span><span class="badge ${n.okundu==='true'?'badge-gray':'badge-blue'}">${n.okundu==='true'?'Okundu':'Yeni'}</span></div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap">${esc(n.mesaj)}</div>
+        <div class="text-sm text-muted mt-8">${esc(n.tur||'Bildirim')} · ${fmtDt(n.tarih)} · ${esc(n.olusturan||'Sistem')} ${n.emailGonderildi==='true'?'· e-posta gönderildi':''}</div>
+        <div class="mt-12" style="display:flex;gap:8px;flex-wrap:wrap">
+          ${n.sayfa?`<button class="btn btn-ghost btn-sm" onclick="bildirimAc('${n.id}','${n.sayfa}')">Aç</button>`:''}
+          ${n.okundu!=='true'?`<button class="btn btn-primary btn-sm" onclick="bildirimOku('${n.id}')">Okundu</button>`:''}
+        </div>
+      </div>`).join('')}</div>`:`<div class="empty-state"><div class="empty-icon">◔</div><div>Bildirim yok</div></div>`;
+}
+async function bildirimOku(id){const n=C.Bildirimler.find(x=>x.id===id);if(!n)return;n.okundu='true';try{await markNotificationsRead({ids:[id]});updateNotificationBadge();renderBildirim();}catch(e){toast('Hata: '+e.message,'err');}}
+async function bildirimHepsiniOku(){myNotifications().forEach(n=>n.okundu='true');try{await markNotificationsRead({all:true});updateNotificationBadge();renderBildirim();}catch(e){toast('Hata: '+e.message,'err');}}
+async function bildirimAc(id,page){await bildirimOku(id);showPage(page);}
+function bildirimYeni(){
+  const opts=`<option value="all">Tüm ekip</option>${C.Users.filter(u=>u.active===true||u.active==='true').map(u=>`<option value="${u.username}">${esc(u.ad||u.username)}</option>`).join('')}`;
+  showModal('Bildirim Gönder',`
+    <div class="form-row"><div class="form-group"><label>Alıcı</label><select id="bn-kime">${opts}</select></div>
+    <div class="form-group"><label>Tür</label><select id="bn-tur"><option>Duyuru</option><option>Görev</option><option>Mesai</option><option>Sistem</option></select></div></div>
+    <div class="form-group"><label>Başlık *</label><input type="text" id="bn-baslik"></div>
+    <div class="form-group"><label>Mesaj *</label><textarea id="bn-mesaj" style="min-height:120px"></textarea></div>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" id="bn-mail" checked style="width:auto"> Kurumsal e-postaya da gönder</label>`,
+    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="bildirimGonder()">Gönder</button>`);
+}
+async function bildirimGonder(){
+  if(!canDelete())return;const baslik=document.getElementById('bn-baslik').value.trim(),mesaj=document.getElementById('bn-mesaj').value.trim();if(!baslik||!mesaj){toast('Başlık ve mesaj zorunlu.','err');return;}
+  const kime=document.getElementById('bn-kime').value,recipients=kime==='all'?['all']:[kime];
+  closeModalDirect();loading(true,'Bildirim gönderiliyor...');
+  try{await notifyApi({recipients,baslik,mesaj,tur:document.getElementById('bn-tur').value,sayfa:'bildirim',sendEmail:document.getElementById('bn-mail').checked});await syncAll();loading(false);toast('Bildirim gönderildi ✓');showPage('bildirim',true);}catch(e){loading(false);toast('Hata: '+e.message,'err');}
+}
 
 // ── DASHBOARD ──
 function dashboard(){

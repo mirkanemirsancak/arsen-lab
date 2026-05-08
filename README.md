@@ -27,6 +27,10 @@ Guncelleme oncesi ana dosyalar bu lokal calisma alaninda `backups/` klasorune ko
 - Tarih alanlari yerel saatle hesaplanacak sekilde duzeltildi; gunluk loglarda UTC kaynakli yanlis gun sorunu giderildi.
 - Ilk baglanti ve periyodik senkronizasyon hizlandirildi. Uygulama artik sheet'leri tek tek ardarda okumak yerine token kontrollu `batchRead` ile tek istekte toplu okur.
 - Mesai rozeti gibi ikincil bilgiler giris ekranini bekletmeden arka planda yuklenir; otomatik senkronizasyon acik modal varken ekrani yeniden cizmez.
+- `Bildirimler` sayfasi eklendi. Kullanici bazli uygulama ici popup/rozet bildirimleri tutulur.
+- Admin panelden ekibe veya kisiye bildirim gonderebilir; istege bagli olarak kullanicinin kurumsal e-posta adresine Apps Script uzerinden mail gider.
+- Cizelgeye yeni gorev eklenirken atanan kisiye popup ve opsiyonel e-posta bildirimi gonderilir. Ekstra mesai onay/red islemlerinde de kullanici bilgilendirilir.
+- Bildirimler backend tarafinda kullaniciya gore filtrelenir; kullanici yalnizca kendi bildirimlerini okundu yapabilir.
 
 ## Not
 
@@ -60,4 +64,4 @@ Apps Script backend'i `login` disindaki tum okuma/yazma/Drive/Mesai islemleri ic
 
 ## Apps Script sayfa basliklari
 
-`apps-script-drive-backend.gs`, `StokHareketleri`, `Metodlar` ve `IletisimKisileri` sheet'leri yoksa ilk okumada otomatik olusturur ve baslik satirlarini yazar. Backend ayrica guvenli toplu okuma icin `batchRead` destekler. Bu nedenle bu guncellemeden sonra Apps Script kodu tekrar yapistirilip yeni deployment alinmalidir.
+`apps-script-drive-backend.gs`, `StokHareketleri`, `Metodlar`, `IletisimKisileri` ve `Bildirimler` sheet'leri yoksa ilk okumada otomatik olusturur ve baslik satirlarini yazar. Backend ayrica guvenli toplu okuma icin `batchRead`, bildirim/e-posta icin `createNotification`, okundu islemi icin `markNotificationsRead` destekler. Bu nedenle bu guncellemeden sonra Apps Script kodu tekrar yapistirilip yeni deployment alinmalidir.
