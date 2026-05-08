@@ -338,6 +338,16 @@ async function apiRead(sheet){
   const rows=d.values||[];if(rows.length<2)return[];
   const h=rows[0];return rows.slice(1).map(row=>{const o={};h.forEach((k,i)=>o[k]=row[i]!==undefined?String(row[i]):'');return o;});
 }
+function rowsToObjects(rows){
+  rows=rows||[];if(rows.length<2)return[];
+  const h=rows[0];return rows.slice(1).map(row=>{const o={};h.forEach((k,i)=>o[k]=row[i]!==undefined?String(row[i]):'');return o;});
+}
+async function apiBatchRead(sheets=SHEETS){
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'batchRead',sheets,token:authToken})});
+  const d=await res.json();if(d.error)throw new Error(d.error);
+  const out={};Object.entries(d.valuesBySheet||{}).forEach(([sheet,rows])=>out[sheet]=rowsToObjects(rows));
+  return out;
+}
 async function apiWrite(sheet,records){
   const cols=COLS[sheet];const values=[cols];
   records.forEach(r=>values.push(cols.map(c=>r[c]!==undefined&&r[c]!==null?String(r[c]):'')));
@@ -351,7 +361,18 @@ function parseRow(k,r){
 }
 async function syncAll(){
   setSS('loading');
-  try{for(const s of SHEETS){C[s]=(await apiRead(s)).map(r=>parseRow(s,r));}setSS('ok');updateBadges();return true;}
+  try{
+    let data;
+    try{data=await apiBatchRead(SHEETS);}
+    catch(batchErr){
+      const oldBackend=/Bilinmeyen istek/i.test(batchErr.message||'');
+      if(!oldBackend)throw batchErr;
+      const reads=await Promise.all(SHEETS.map(async s=>[s,await apiRead(s)]));
+      data=Object.fromEntries(reads);
+    }
+    SHEETS.forEach(s=>{C[s]=(data[s]||[]).map(r=>parseRow(s,r));});
+    setSS('ok');updateBadges();return true;
+  }
   catch(e){setSS('err');toast('Bağlantı hatası: '+e.message,'err');return false;}
 }
 async function save(sheet){await apiWrite(sheet,C[sheet]);}
@@ -373,10 +394,10 @@ async function doLogin(){
     document.getElementById('admin-nav-section').style.display='';
     document.getElementById('admin-nav-item').style.display='';
     if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
-    await ensureScheduleOnline();
-    await refreshMesaiBadge();
-    syncTimer=setInterval(()=>syncAll().then(()=>{if(currentPage)showPage(currentPage,true);}),60000);
     showPage('dashboard');
+    ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});
+    refreshMesaiBadge().catch(()=>{});
+    syncTimer=setInterval(()=>syncAll().then(ok=>{if(ok&&currentPage&&!document.getElementById('modal-overlay').classList.contains('open'))showPage(currentPage,true);}),90000);
   }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-pass')===document.activeElement)doLogin();});

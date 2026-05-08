@@ -152,6 +152,15 @@ function readSheet(name, user) {
   return { values: sheetByName(name).getDataRange().getValues() };
 }
 
+function readSheets(names, user) {
+  var result = {};
+  for (var i = 0; i < names.length; i++) {
+    var name = String(names[i] || '');
+    if (name) result[name] = readSheet(name, user).values;
+  }
+  return { valuesBySheet: result };
+}
+
 function writeSheet(name, values, user) {
   if (name === 'Users' && user.role !== 'admin') throw new Error('Kullanici yonetimi icin admin yetkisi gerekli.');
   var sh = sheetByName(name);
@@ -338,6 +347,7 @@ function doGet(e) {
   try {
     var user = requireAuth(e.parameter.token);
     if (e.parameter.action === 'read') result = readSheet(e.parameter.sheet, user);
+    else if (e.parameter.action === 'batchRead') result = readSheets(String(e.parameter.sheets || '').split(','), user);
     else if (e.parameter.action === 'listFiles') result = listFiles(user);
     else if (e.parameter.action === 'listOvertime') result = listOvertime(user);
     else result = { error: 'Bilinmeyen istek.' };
@@ -355,6 +365,7 @@ function doPost(e) {
     else {
       var user = requireAuth(data.token);
       if (data.action === 'write') result = writeSheet(data.sheet, data.values, user);
+      else if (data.action === 'batchRead') result = readSheets(data.sheets || [], user);
       else if (data.action === 'listFiles') result = listFiles(user);
       else if (data.action === 'uploadFile') result = uploadFile(data, user);
       else if (data.action === 'deleteFile') result = deleteFile(data, user);

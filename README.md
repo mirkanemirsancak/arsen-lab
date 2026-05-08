@@ -25,6 +25,8 @@ Guncelleme oncesi ana dosyalar bu lokal calisma alaninda `backups/` klasorune ko
 - Haftalik cizelgeye admin tarafindan girilen ana hedefler, secilebilir renkler ve surukle-birak gorev tasima eklendi.
 - `IletisimKisileri` sayfasi eklendi. Rehber kayitlarini herkes ekleyip duzenleyebilir, silme yetkisi yalnizca admindedir.
 - Tarih alanlari yerel saatle hesaplanacak sekilde duzeltildi; gunluk loglarda UTC kaynakli yanlis gun sorunu giderildi.
+- Ilk baglanti ve periyodik senkronizasyon hizlandirildi. Uygulama artik sheet'leri tek tek ardarda okumak yerine token kontrollu `batchRead` ile tek istekte toplu okur.
+- Mesai rozeti gibi ikincil bilgiler giris ekranini bekletmeden arka planda yuklenir; otomatik senkronizasyon acik modal varken ekrani yeniden cizmez.
 
 ## Not
 
@@ -58,4 +60,4 @@ Apps Script backend'i `login` disindaki tum okuma/yazma/Drive/Mesai islemleri ic
 
 ## Apps Script sayfa basliklari
 
-`apps-script-drive-backend.gs`, `StokHareketleri`, `Metodlar` ve `IletisimKisileri` sheet'leri yoksa ilk okumada otomatik olusturur ve baslik satirlarini yazar. Bu nedenle bu guncellemeden sonra Apps Script kodu tekrar yapistirilip yeni deployment alinmalidir.
+`apps-script-drive-backend.gs`, `StokHareketleri`, `Metodlar` ve `IletisimKisileri` sheet'leri yoksa ilk okumada otomatik olusturur ve baslik satirlarini yazar. Backend ayrica guvenli toplu okuma icin `batchRead` destekler. Bu nedenle bu guncellemeden sonra Apps Script kodu tekrar yapistirilip yeni deployment alinmalidir.
