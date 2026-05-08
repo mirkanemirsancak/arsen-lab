@@ -5,7 +5,8 @@ var OVERTIME_HEADERS = ['id','kullanici','kullaniciAd','tarih','baslangic','biti
 var TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 var DEFAULT_SHEET_HEADERS = {
   StokHareketleri: ['id','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
-  Metodlar: ['id','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici']
+  Metodlar: ['id','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
+  IletisimKisileri: ['id','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme']
 };
 
 function json(result) {

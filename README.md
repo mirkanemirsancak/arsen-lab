@@ -21,6 +21,10 @@ Guncelleme oncesi ana dosyalar bu lokal calisma alaninda `backups/` klasorune ko
 - `Cikti Takibi` sekmesi arayuzden kaldirildi; stok girdi/cikti islemleri artik dogrudan `Stok Takibi` icindeki Girdi ve Cikti butonlariyla yapilir.
 - `StokHareketleri` sayfasi eklendi. Her stok girdi/cikti islemi onceki miktar, sonraki miktar, tarih, aciklama ve kullanici bilgisiyle kaydedilir.
 - `Metodlar` sayfasi eklendi. `Metodlar ve Izlekler` sekmesinde izlekler, hammadde surecleri ve standart bilimsel metodlar filtrelenebilir ve duzenlenebilir.
+- Gorev takviminde aylik/haftalik takvim gorunumleri kaldirildi; yalnizca haftalik cizelge kaldi.
+- Haftalik cizelgeye admin tarafindan girilen ana hedefler, secilebilir renkler ve surukle-birak gorev tasima eklendi.
+- `IletisimKisileri` sayfasi eklendi. Rehber kayitlarini herkes ekleyip duzenleyebilir, silme yetkisi yalnizca admindedir.
+- Tarih alanlari yerel saatle hesaplanacak sekilde duzeltildi; gunluk loglarda UTC kaynakli yanlis gun sorunu giderildi.
 
 ## Not
 
@@ -54,4 +58,4 @@ Apps Script backend'i `login` disindaki tum okuma/yazma/Drive/Mesai islemleri ic
 
 ## Apps Script sayfa basliklari
 
-`apps-script-drive-backend.gs`, `StokHareketleri` ve `Metodlar` sheet'leri yoksa ilk okumada otomatik olusturur ve baslik satirlarini yazar. Bu nedenle bu guncellemeden sonra Apps Script kodu tekrar yapistirilip yeni deployment alinmalidir.
+`apps-script-drive-backend.gs`, `StokHareketleri`, `Metodlar` ve `IletisimKisileri` sheet'leri yoksa ilk okumada otomatik olusturur ve baslik satirlarini yazar. Bu nedenle bu guncellemeden sonra Apps Script kodu tekrar yapistirilip yeni deployment alinmalidir.
