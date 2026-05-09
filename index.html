@@ -390,7 +390,7 @@ async function save(sheet){
   dirtySheets.add(sheet);
   const p=(saveQueues[sheet]||Promise.resolve()).then(()=>apiWrite(sheet,snapshot)).catch(e=>toast(`${sheet} kaydedilemedi: ${e.message}`,'err')).finally(()=>{if(saveQueues[sheet]===p){delete saveQueues[sheet];dirtySheets.delete(sheet);}});
   saveQueues[sheet]=p;
-  return Promise.resolve();
+  return p;
 }
 
 // ── AUTH ──
@@ -473,7 +473,18 @@ function scheduleClone(v){return JSON.parse(JSON.stringify(v));}
 function scheduleJSON(v,fallback={}){try{return JSON.parse(v||'')||fallback;}catch{return fallback;}}
 function scheduleIsMeta(r){return r.baslik===S_META;}
 function scheduleIsPerson(r){return r.baslik===S_PERSON;}
-function scheduleTaskMeta(r){const m=scheduleJSON(r.aciklama,null);return m&&m.type===S_TASK?m:null;}
+function scheduleTaskMeta(r){
+  const m=scheduleJSON(r.aciklama,null);
+  if(m&&m.type===S_TASK)return m;
+  if(!r||scheduleIsMeta(r)||scheduleIsPerson(r)||!r.baslik)return null;
+  const meta=scheduleMeta(),date=String(r.tarih||r.basTarih||'').slice(0,10);
+  const dayIndex=(meta.dates||[]).indexOf(date);
+  if(dayIndex<0)return null;
+  const names=C.Gorevler.filter(scheduleIsPerson).map(x=>String(x.atanan||'').trim()).filter(Boolean);
+  if(!names.length)GOREV_CIZELGE.persons.forEach(p=>names.push(p.name));
+  if(!names.includes(String(r.atanan||'').trim()))return null;
+  return {type:S_TASK,dayIndex,priority:S_ON_TO_PRIO[r.oncelik]||'teal',goalId:'',role:''};
+}
 function scheduleIsTask(r){return !!scheduleTaskMeta(r);}
 function scheduleIsRow(r){return scheduleIsMeta(r)||scheduleIsPerson(r)||scheduleIsTask(r);}
 function scheduleCellKey(pName,dIdx){return pName+'-'+dIdx;}
@@ -706,7 +717,7 @@ function scheduleToggleSelect(id){if(!scheduleGuard())return;scheduleSelected.ha
 async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.size===0)return;if(!confirm(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
 async function scheduleClearTasks(){if(!scheduleAdminGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
 async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
-async function scheduleResetWeek(){if(!scheduleAdminGuard()||!confirm('Mevcut çizelge silinip Excelden aktarılan 11-15 Mayıs 2026 planı yüklensin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('11-15 Mayıs planı yüklendi ✓');}
+async function scheduleResetWeek(){if(!scheduleAdminGuard()||!confirm('Mevcut çizelge silinip Excelden aktarılan 11-15 Mayıs 2026 planı yüklensin mi?'))return;loading(true,'11-15 Mayıs planı yükleniyor...');try{C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('11-15 Mayıs planı yüklendi ✓');}finally{loading(false);}}
 
 // ── BİLDİRİMLER ──
 function bildirim(){
