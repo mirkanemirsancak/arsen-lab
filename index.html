@@ -924,7 +924,7 @@ function sfe(){
         <div class="form-group"><label>Beklenen Verim (%)</label><input type="number" id="sfe-yield" value="8" step="any" oninput="sfeCalc()"></div></div>
         <div class="form-row"><div class="form-group"><label>Co-solvent (%)</label><input type="number" id="sfe-cos" value="0" step="any" oninput="sfeCalc()"></div>
         <div class="form-group"><label>CO₂ Geri Kazanım (%)</label><input type="number" id="sfe-rec" value="85" step="any" oninput="sfeCalc()"></div></div>
-        <div class="form-row"><div class="form-group"><label>CO₂ Yoğunluğu (g/mL)</label><input type="number" id="sfe-rho" value="0.8" step="any" oninput="sfeCalc()"></div>
+        <div class="form-row"><div class="form-group"><label>CO₂ Yoğunluğu Override (g/mL)</label><input type="number" id="sfe-rho" placeholder="Boşsa PR-EOS hesaplar" step="any" oninput="sfeCalc()"></div>
         <div class="form-group"><label>Ekstraktör Hacmi (L)</label><input type="number" id="sfe-vol" value="2" step="any" oninput="sfeCalc()"></div></div>
         <div class="form-row"><div class="form-group"><label>Yatak Porozitesi</label><input type="number" id="sfe-eps" value="0.4" step="any" oninput="sfeCalc()"></div></div>
       </div>
@@ -934,14 +934,30 @@ function sfe(){
     </div>
     <div class="card mt-16"><div class="card-header"><span class="card-title">Model Notu</span></div>
       <div style="font-size:13px;color:var(--text2);line-height:1.6">
-        Bu hesaplayıcı proses planlama içindir. CO₂ kritik noktası 31.1 °C ve yaklaşık 73.8 bar kabul edilir. Yoğunluk gerçek gaz davranışına bağlıdır; hassas çalışma için NIST/WebBook veya paylaşacağın referans sitedeki yoğunluk değeri girilmelidir.
+        Bu hesaplayıcı proses planlama içindir. CO₂ kritik noktası 30.98 °C ve 73.77 bar, kritik yoğunluk 467.6 kg/m³ kabul edilir. Yoğunluk tahmini Peng-Robinson EOS ile yapılır; hassas validasyon için Peace Software/NIST gibi termodinamik hesaplayıcılardaki değerlerle karşılaştırılmalıdır.
       </div>
     </div>`;
   sfeCalc();
 }
 function sfeNum(id){return parseFloat(document.getElementById(id).value)||0;}
+function sfeDensityPR(pBar,tC){
+  const R=8.314462618,T=tC+273.15,P=pBar*100000,Tc=304.13,Pc=73.77*100000,w=0.22394,M=0.0440095;
+  if(P<=0||T<=0)return{rho:0,z:0};
+  const k=0.37464+1.54226*w-0.26992*w*w,alpha=Math.pow(1+k*(1-Math.sqrt(T/Tc)),2);
+  const a=0.45724*R*R*Tc*Tc/Pc*alpha,b=0.07780*R*Tc/Pc,A=a*P/(R*R*T*T),B=b*P/(R*T);
+  const roots=cubicRealRoots([1, -(1-B), A-3*B*B-2*B, -(A*B-B*B-B*B*B)]).filter(x=>x>B&&x>0).sort((a,b)=>a-b);
+  const z=roots.length?(T>=Tc&&P>=Pc?roots[0]:roots[roots.length-1]):1;
+  return{rho:P*M/(z*R*T),z};
+}
+function cubicRealRoots(c){
+  const [a,b,cc,d]=c,A=b/a,B=cc/a,C=d/a,p=B-A*A/3,q=2*A*A*A/27-A*B/3+C,disc=q*q/4+p*p*p/27,roots=[];
+  if(disc>=0){const s=Math.sqrt(disc),u=Math.cbrt(-q/2+s),v=Math.cbrt(-q/2-s);roots.push(u+v-A/3);}
+  else{const r=2*Math.sqrt(-p/3),phi=Math.acos((3*q/(2*p))*Math.sqrt(-3/p));for(let k=0;k<3;k++)roots.push(r*Math.cos((phi+2*Math.PI*k)/3)-A/3);}
+  return roots;
+}
 function sfeCalc(){
-  const p=sfeNum('sfe-p'),t=sfeNum('sfe-t'),flow=sfeNum('sfe-flow'),time=sfeNum('sfe-time'),feed=sfeNum('sfe-feed'),y=sfeNum('sfe-yield'),cos=sfeNum('sfe-cos'),rec=sfeNum('sfe-rec'),rho=sfeNum('sfe-rho'),vol=sfeNum('sfe-vol'),eps=sfeNum('sfe-eps');
+  const p=sfeNum('sfe-p'),t=sfeNum('sfe-t'),flow=sfeNum('sfe-flow'),time=sfeNum('sfe-time'),feed=sfeNum('sfe-feed'),y=sfeNum('sfe-yield'),cos=sfeNum('sfe-cos'),rec=sfeNum('sfe-rec'),rhoManual=sfeNum('sfe-rho'),vol=sfeNum('sfe-vol'),eps=sfeNum('sfe-eps');
+  const pr=sfeDensityPR(p,t),rho=rhoManual||pr.rho/1000;
   const sc=t>=31.1&&p>=73.8,co2g=flow*time,co2kg=co2g/1000,feedkg=feed/1000,sf=feedkg>0?co2kg/feedkg:0,extract=feed*y/100,fresh=co2kg*(1-rec/100),cosolvent=co2kg*cos/100;
   const qml=rho>0?flow/rho:0,voidMl=vol*1000*eps,res=qml>0?voidMl/qml:0;
   document.getElementById('sfe-result').innerHTML=`
@@ -953,7 +969,9 @@ function sfeCalc(){
         ['Solvent/Hammadde',sf.toFixed(1)+' kg/kg'],
         ['Tahmini ekstrakt',extract.toFixed(1)+' g'],
         ['Co-solvent miktarı',cosolvent.toFixed(2)+' kg'],
-        ['Yaklaşık residence time',res.toFixed(1)+' dk']
+        ['Yaklaşık residence time',res.toFixed(1)+' dk'],
+        ['PR-EOS yoğunluk',(pr.rho/1000).toFixed(3)+' g/mL'],
+        ['Sıkıştırılabilirlik Z',pr.z.toFixed(3)]
       ].map(([l,v])=>`<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value stat-blue" style="font-size:24px">${v}</div></div>`).join('')}
     </div>
     ${!sc?'<div class="alert alert-amber mt-16">CO₂ için kritik sıcaklık ve basınç eşiğinin altında kalıyorsun. Süperkritik ekstraksiyon için iki koşul da sağlanmalı.</div>':''}`;
