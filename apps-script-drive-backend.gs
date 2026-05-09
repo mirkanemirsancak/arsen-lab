@@ -1,12 +1,21 @@
 var SPREADSHEET_ID = '1Mx5zKqbVz3P8nqZhVc6vtpQ_Hb594k42NMoF9ascawI';
 var DRIVE_ROOT_FOLDER_NAME = 'Arsen Lab Dosyalar';
 var OVERTIME_SHEET_NAME = 'Mesai';
-var OVERTIME_HEADERS = ['id','kullanici','kullaniciAd','tarih','baslangic','bitis','molaDakika','toplamSaat','aciklama','durum','olusturma','onaylayan','onayTarihi','adminNot'];
+var OVERTIME_HEADERS = ['id','company','kullanici','kullaniciAd','tarih','baslangic','bitis','molaDakika','toplamSaat','aciklama','durum','olusturma','onaylayan','onayTarihi','adminNot'];
 var TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+var COMPANIES = ['fuwell', 'syntegra'];
 var DEFAULT_SHEET_HEADERS = {
-  StokHareketleri: ['id','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
-  Metodlar: ['id','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
-  IletisimKisileri: ['id','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
+  Users: ['id','username','passwordHash','role','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Stok: ['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
+  StokHareketleri: ['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
+  Metodlar: ['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
+  Analiz: ['id','company','numuneId','numune','tur','yontem','sonuc','birim','tarih','analist','batchId','not','kullanici'],
+  Ekipman: ['id','company','ad','model','seriNo','lab','konum','kalibrasyonTarihi','kalibrasyonFrekans','bakimTarihi','sorumlu','durum','not','kullanici'],
+  KalibTarihce: ['id','company','ekipmanId','ekipmanAd','tarih','yapan','not','kullanici'],
+  Temizlik: ['id','company','gorev','lab','sorumlu','periyot','sonYapilma','sonrakiTarih','durum','not'],
+  Gorevler: ['id','company','baslik','kategori','atanan','atayan','tarih','basTarih','bitisTarih','oncelik','durum','aciklama','kullanici'],
+  GunlukLog: ['id','company','kullanici','kullaniciAd','tarih','kategori','baslik','icerik','duzenlendi','duzenlemeTarihi'],
+  IletisimKisileri: ['id','company','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
   Bildirimler: ['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi']
 };
 
@@ -16,6 +25,45 @@ function json(result) {
 
 function normEmail(v) {
   return String(v || '').trim().toLowerCase();
+}
+
+function normalizeCompany(company) {
+  company = String(company || 'fuwell').trim().toLowerCase();
+  return COMPANIES.indexOf(company) >= 0 ? company : 'fuwell';
+}
+
+function companyAccess(user) {
+  var raw = String(user.companyAccess || '').trim();
+  if (user.role === 'admin' && (!raw || raw === 'all')) return COMPANIES.slice();
+  var parts = raw.split(','), out = [];
+  for (var i = 0; i < parts.length; i++) {
+    var c = normalizeCompany(parts[i]);
+    if (out.indexOf(c) < 0) out.push(c);
+  }
+  return out.length ? out : ['fuwell'];
+}
+
+function requireCompany(user, company) {
+  company = normalizeCompany(company);
+  if (companyAccess(user).indexOf(company) < 0) throw new Error('Bu operasyon alanina erisim yetkiniz yok: ' + company);
+  return company;
+}
+
+function ensureHeaders(sh, headers) {
+  if (!headers || !headers.length) return;
+  if (sh.getLastRow() === 0 || !sh.getRange(1, 1).getValue()) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+  var current = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(function(h) { return String(h || ''); });
+  var changed = false;
+  for (var i = 0; i < headers.length; i++) {
+    if (current.indexOf(headers[i]) < 0) {
+      current.push(headers[i]);
+      changed = true;
+    }
+  }
+  if (changed) sh.getRange(1, 1, 1, current.length).setValues([current]);
 }
 
 function sheetByName(name) {
@@ -28,9 +76,7 @@ function sheetByName(name) {
     return sh;
   }
   if (!sh) throw new Error('Sheet bulunamadi: ' + name);
-  if (headers && (sh.getLastRow() === 0 || !sh.getRange(1, 1).getValue())) {
-    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
-  }
+  ensureHeaders(sh, headers);
   return sh;
 }
 
@@ -60,12 +106,17 @@ function activeEmails() {
 }
 
 function publicUser(user) {
+  var access = String(user.companyAccess || '').trim();
+  if (!access) access = user.role === 'admin' ? 'all' : 'fuwell';
+  var def = normalizeCompany(user.defaultCompany || 'fuwell');
   return {
     id: user.id || '',
     username: user.username || '',
     role: user.role || 'user',
     ad: user.ad || user.username || '',
     email: normEmail(user.email),
+    companyAccess: access,
+    defaultCompany: def,
     active: user.active === true || user.active === 'true' ? 'true' : 'false',
     olusturma: user.olusturma || ''
   };
@@ -161,25 +212,66 @@ function valuesForNotifications(user) {
   return { values: values };
 }
 
-function readSheet(name, user) {
-  if (name === 'Users') return valuesForUsers(user);
-  if (name === 'Bildirimler') return valuesForNotifications(user);
-  return { values: sheetByName(name).getDataRange().getValues() };
+function valuesForCompany(name, user, company) {
+  company = requireCompany(user, company);
+  var sh = sheetByName(name);
+  var values = sh.getDataRange().getValues();
+  if (!values.length) return { values: [] };
+  var headers = values[0].map(function(h) { return String(h || ''); });
+  var cIdx = headers.indexOf('company');
+  if (cIdx < 0) return { values: values };
+  var out = [headers];
+  for (var i = 1; i < values.length; i++) {
+    var rowCompany = normalizeCompany(values[i][cIdx] || 'fuwell');
+    if (rowCompany === company) out.push(values[i]);
+  }
+  return { values: out };
 }
 
-function readSheets(names, user) {
+function readSheet(name, user, company) {
+  if (name === 'Users') return valuesForUsers(user);
+  if (name === 'Bildirimler') return valuesForNotifications(user);
+  return valuesForCompany(name, user, company);
+}
+
+function readSheets(names, user, company) {
   var result = {};
   for (var i = 0; i < names.length; i++) {
     var name = String(names[i] || '');
-    if (name) result[name] = readSheet(name, user).values;
+    if (name) result[name] = readSheet(name, user, company).values;
   }
   return { valuesBySheet: result };
 }
 
-function writeSheet(name, values, user) {
+function writeSheet(name, values, user, company) {
   if (name === 'Users' && user.role !== 'admin') throw new Error('Kullanici yonetimi icin admin yetkisi gerekli.');
   if (name === 'Bildirimler') throw new Error('Bildirimler icin bildirim aksiyonlarini kullanin.');
+  company = requireCompany(user, company);
   var sh = sheetByName(name);
+  var headers = values && values.length ? values[0].map(function(h) { return String(h || ''); }) : [];
+  var cIdx = headers.indexOf('company');
+  if (name !== 'Users' && cIdx >= 0) {
+    for (var v = 1; v < values.length; v++) values[v][cIdx] = company;
+    var existing = sh.getDataRange().getValues();
+    if (existing.length) {
+      var existingHeaders = existing[0].map(function(h) { return String(h || ''); });
+      var existingCompanyIdx = existingHeaders.indexOf('company');
+      var merged = [headers];
+      for (var i = 1; i < existing.length; i++) {
+        var rowCompany = existingCompanyIdx >= 0 ? normalizeCompany(existing[i][existingCompanyIdx] || 'fuwell') : 'fuwell';
+        if (rowCompany !== company) {
+          var mapped = [];
+          for (var j = 0; j < headers.length; j++) {
+            var oldIdx = existingHeaders.indexOf(headers[j]);
+            mapped.push(oldIdx >= 0 ? existing[i][oldIdx] : '');
+          }
+          merged.push(mapped);
+        }
+      }
+      for (var r = 1; r < values.length; r++) merged.push(values[r]);
+      values = merged;
+    }
+  }
   sh.clearContents();
   if (values && values.length) sh.getRange(1, 1, values.length, values[0].length).setValues(values);
   return { ok: true };
@@ -249,10 +341,11 @@ function appendNotification(target, data, user) {
 
 function createNotification(data, user) {
   if (user.role !== 'admin') throw new Error('Bildirim gondermek icin admin yetkisi gerekli.');
+  var company = requireCompany(user, data.company);
   if (!data.baslik || !data.mesaj) throw new Error('Bildirim basligi ve mesaji gerekli.');
   var recipients = data.recipients || [];
   var targets = [];
-  if (recipients.indexOf('all') >= 0) targets = activeUsers();
+  if (recipients.indexOf('all') >= 0) targets = activeUsers().filter(function(u) { return companyAccess(u).indexOf(company) >= 0; });
   else {
     for (var i = 0; i < recipients.length; i++) {
       var target = findUser(recipients[i]);
@@ -318,18 +411,19 @@ function info(file, folderName) {
   };
 }
 
-function listFiles() {
+function listFiles(user, company) {
+  company = requireCompany(user, company);
   var files = [], root = rootFolder(), rootFiles = root.getFiles();
   while (rootFiles.hasNext()) {
     var rootFile = rootFiles.next();
-    files.push(info(rootFile, 'Genel'));
+    if (normalizeCompany(metaValue(rootFile.getDescription() || '', 'Company') || 'fuwell') === company) files.push(info(rootFile, 'Genel'));
   }
   var folders = root.getFolders();
   while (folders.hasNext()) {
     var folder = folders.next(), folderFiles = folder.getFiles();
     while (folderFiles.hasNext()) {
       var file = folderFiles.next();
-      files.push(info(file, folder.getName()));
+      if (normalizeCompany(metaValue(file.getDescription() || '', 'Company') || 'fuwell') === company) files.push(info(file, folder.getName()));
     }
   }
   files.sort(function(a, b) { return new Date(b.created).getTime() - new Date(a.created).getTime(); });
@@ -337,19 +431,23 @@ function listFiles() {
 }
 
 function uploadFile(data, user) {
+  var company = requireCompany(user, data.company);
   if (!data.base64 || !data.name) throw new Error('Dosya bilgisi eksik.');
   var folder = subFolder(data.folder || 'Genel');
   var blob = Utilities.newBlob(Utilities.base64Decode(data.base64), data.mimeType || 'application/octet-stream', data.name);
   var file = folder.createFile(blob);
-  var desc = (data.description || '') + '\nYukleyen: ' + (user.ad || user.username || 'Bilinmiyor') + '\nYuklemeTarihi: ' + new Date().toISOString();
+  var desc = (data.description || '') + '\nCompany: ' + company + '\nYukleyen: ' + (user.ad || user.username || 'Bilinmiyor') + '\nYuklemeTarihi: ' + new Date().toISOString();
   file.setDescription(desc);
   return { ok: true, file: info(file, folder.getName()) };
 }
 
 function deleteFile(data, user) {
   if (user.role !== 'admin') throw new Error('Dosya silmek icin admin yetkisi gerekli.');
+  var company = requireCompany(user, data.company);
   if (!data.id) throw new Error('Dosya id eksik.');
-  DriveApp.getFileById(data.id).setTrashed(true);
+  var file = DriveApp.getFileById(data.id);
+  if (normalizeCompany(metaValue(file.getDescription() || '', 'Company') || 'fuwell') !== company) throw new Error('Bu dosya secili operasyon alanina ait degil.');
+  file.setTrashed(true);
   return { ok: true };
 }
 
@@ -390,17 +488,21 @@ function writeOvertimeRows(rows) {
   sh.getRange(1, 1, values.length, OVERTIME_HEADERS.length).setValues(values);
 }
 
-function listOvertime(user) {
+function listOvertime(user, company) {
+  company = requireCompany(user, company);
   var rows = overtimeRows();
+  rows = rows.filter(function(r) { return normalizeCompany(r.company || 'fuwell') === company; });
   if (user.role !== 'admin') rows = rows.filter(function(r) { return r.kullanici === user.username; });
   return { ok: true, records: rows };
 }
 
 function createOvertime(data, user) {
+  var company = requireCompany(user, data.company);
   if (!data.tarih || !data.baslangic || !data.bitis) throw new Error('Mesai bilgisi eksik.');
   var rows = overtimeRows();
   rows.push({
     id: Utilities.getUuid().replace(/-/g, '').substring(0, 14),
+    company: company,
     kullanici: user.username,
     kullaniciAd: user.ad || user.username,
     tarih: data.tarih,
@@ -421,10 +523,11 @@ function createOvertime(data, user) {
 
 function updateOvertimeStatus(data, user) {
   if (user.role !== 'admin') throw new Error('Mesai onayi icin admin yetkisi gerekli.');
+  var company = requireCompany(user, data.company);
   if (!data.id || !data.durum) throw new Error('Onay bilgisi eksik.');
   var rows = overtimeRows(), found = false, targetUsername = '';
   for (var i = 0; i < rows.length; i++) {
-    if (rows[i].id === data.id) {
+    if (rows[i].id === data.id && normalizeCompany(rows[i].company || 'fuwell') === company) {
       targetUsername = rows[i].kullanici;
       rows[i].durum = data.durum;
       rows[i].onaylayan = user.ad || user.username;
@@ -452,10 +555,10 @@ function doGet(e) {
   var result;
   try {
     var user = requireAuth(e.parameter.token);
-    if (e.parameter.action === 'read') result = readSheet(e.parameter.sheet, user);
-    else if (e.parameter.action === 'batchRead') result = readSheets(String(e.parameter.sheets || '').split(','), user);
-    else if (e.parameter.action === 'listFiles') result = listFiles(user);
-    else if (e.parameter.action === 'listOvertime') result = listOvertime(user);
+    if (e.parameter.action === 'read') result = readSheet(e.parameter.sheet, user, e.parameter.company);
+    else if (e.parameter.action === 'batchRead') result = readSheets(String(e.parameter.sheets || '').split(','), user, e.parameter.company);
+    else if (e.parameter.action === 'listFiles') result = listFiles(user, e.parameter.company);
+    else if (e.parameter.action === 'listOvertime') result = listOvertime(user, e.parameter.company);
     else result = { error: 'Bilinmeyen istek.' };
   } catch (err) {
     result = { error: err.message };
@@ -470,14 +573,14 @@ function doPost(e) {
     if (data.action === 'login') result = login(data);
     else {
       var user = requireAuth(data.token);
-      if (data.action === 'write') result = writeSheet(data.sheet, data.values, user);
-      else if (data.action === 'batchRead') result = readSheets(data.sheets || [], user);
+      if (data.action === 'write') result = writeSheet(data.sheet, data.values, user, data.company);
+      else if (data.action === 'batchRead') result = readSheets(data.sheets || [], user, data.company);
       else if (data.action === 'createNotification') result = createNotification(data, user);
       else if (data.action === 'markNotificationsRead') result = markNotificationsRead(data, user);
-      else if (data.action === 'listFiles') result = listFiles(user);
+      else if (data.action === 'listFiles') result = listFiles(user, data.company);
       else if (data.action === 'uploadFile') result = uploadFile(data, user);
       else if (data.action === 'deleteFile') result = deleteFile(data, user);
-      else if (data.action === 'listOvertime') result = listOvertime(user);
+      else if (data.action === 'listOvertime') result = listOvertime(user, data.company);
       else if (data.action === 'createOvertime') result = createOvertime(data, user);
       else if (data.action === 'updateOvertimeStatus') result = updateOvertimeStatus(data, user);
       else result = { error: 'Bilinmeyen istek.' };

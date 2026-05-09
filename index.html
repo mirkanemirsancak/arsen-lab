@@ -158,24 +158,24 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 <div id="app">
   <div class="sidebar">
     <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-mark.png?v=4" alt="Arşen Process"></div>
-    <div class="sidebar-user"><span>Oturum</span><strong id="sidebar-username">—</strong><span id="sidebar-role" class="badge badge-blue" style="margin-top:4px;font-size:10px;"></span></div>
+    <div class="sidebar-user"><span>Oturum</span><strong id="sidebar-username">—</strong><span id="sidebar-role" class="badge badge-blue" style="margin-top:4px;font-size:10px;"></span><select id="company-select" onchange="switchCompany(this.value)" style="display:none;margin-top:10px;width:100%;height:32px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 8px;font-size:12px"></select></div>
     <div class="sync-status" id="sync-status"><span class="sync-ok">● Bağlı</span></div>
     <nav>
       <div class="nav-section">Genel</div>
       <div class="nav-item active" onclick="showPage('dashboard')"><span class="nav-icon">◈</span> Dashboard</div>
       <div class="nav-section">Modüller</div>
-      <div class="nav-item" onclick="showPage('stok')"><span class="nav-icon">◉</span> Stok Takibi <span class="nav-badge" id="stok-badge" style="display:none">0</span></div>
-      <div class="nav-item" onclick="showPage('analiz')"><span class="nav-icon">⌬</span> Analiz Sonuçları</div>
-      <div class="nav-item" onclick="showPage('ekipman')"><span class="nav-icon">⚙</span> Ekipman Takibi <span class="nav-badge" id="ekip-badge" style="display:none">0</span></div>
-      <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> Metodlar ve İzlekler</div>
+      <div class="nav-item" onclick="showPage('stok')"><span class="nav-icon">◉</span> <span id="nav-stok-label">Stok Takibi</span> <span class="nav-badge" id="stok-badge" style="display:none">0</span></div>
+      <div class="nav-item" onclick="showPage('analiz')"><span class="nav-icon">⌬</span> <span id="nav-analiz-label">Analiz Sonuçları</span></div>
+      <div class="nav-item" onclick="showPage('ekipman')"><span class="nav-icon">⚙</span> <span id="nav-ekipman-label">Ekipman Takibi</span> <span class="nav-badge" id="ekip-badge" style="display:none">0</span></div>
+      <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> <span id="nav-metod-label">Metodlar ve İzlekler</span></div>
       <div class="nav-item" onclick="showPage('sfe')"><span class="nav-icon">◇</span> Süperkritik CO₂</div>
       <div class="nav-section">Ekip</div>
       <div class="nav-item" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
-      <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> Görev Takvimi</div>
+      <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> <span id="nav-takvim-label">Görev Takvimi</span></div>
       <div class="nav-item" onclick="showPage('mesai')"><span class="nav-icon">◷</span> Ekstra Mesai <span class="nav-badge" id="mesai-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('iletisim')"><span class="nav-icon">☏</span> İletişimde Olunan Kişiler</div>
       <div class="nav-item" onclick="showPage('dosyalar')"><span class="nav-icon">▣</span> Dosya Depolama</div>
-      <div class="nav-item" onclick="showPage('gunluk')"><span class="nav-icon">✎</span> Günlük Log</div>
+      <div class="nav-item" onclick="showPage('gunluk')"><span class="nav-icon">✎</span> <span id="nav-gunluk-label">Günlük Log</span></div>
       <div class="nav-item" onclick="showPage('rapor')"><span class="nav-icon">▤</span> Raporlama</div>
       <div class="nav-section" id="admin-nav-section">Yönetim</div>
       <div class="nav-item" id="admin-nav-item" onclick="showPage('admin')"><span class="nav-icon">◎</span> Kullanıcılar</div>
@@ -217,24 +217,28 @@ const KRENK={'Analiz':'#4f9cf9','Ekstraksiyon/Proses':'#9b59b6','Ekipman Bakım�
 const KBADGE={'Analiz':'badge-blue','Ekstraksiyon/Proses':'badge-purple','Ekipman Bakımı':'badge-amber','Kalibrasyon':'badge-teal','Temizlik':'badge-green','Numune Hazırlama':'badge-blue','Raporlama':'badge-gray','Tedarik/Satın Alma':'badge-gray','Ar-Ge':'badge-purple','Toplantı':'badge-teal','Genel':'badge-gray','Diğer':'badge-gray','Tedarik':'badge-gray','Ekipman':'badge-amber'};
 const TR_AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const TR_GUN=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+const COMPANIES={
+  fuwell:{label:'Fuwell · Lab/Ar-Ge',short:'Fuwell',mode:'lab'},
+  syntegra:{label:'Syntegra · İmalat',short:'Syntegra',mode:'manufacturing'}
+};
 const COLS={
-  Users:['id','username','passwordHash','role','ad','email','active','olusturma'],
-  Stok:['id','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
-  StokHareketleri:['id','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
-  Metodlar:['id','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
-  Cikti:['id','batchId','ad','hammadde','hammaddeMiktar','hammaddeBirim','ciktiMiktar','ciktiBirim','tarih','operator','kosullar','not','kullanici'],
-  Analiz:['id','numuneId','numune','tur','yontem','sonuc','birim','tarih','analist','batchId','not','kullanici'],
-  Ekipman:['id','ad','model','seriNo','lab','konum','kalibrasyonTarihi','kalibrasyonFrekans','bakimTarihi','sorumlu','durum','not','kullanici'],
-  KalibTarihce:['id','ekipmanId','ekipmanAd','tarih','yapan','not','kullanici'],
-  Temizlik:['id','gorev','lab','sorumlu','periyot','sonYapilma','sonrakiTarih','durum','not'],
-  Gorevler:['id','baslik','kategori','atanan','atayan','tarih','basTarih','bitisTarih','oncelik','durum','aciklama','kullanici'],
-  GunlukLog:['id','kullanici','kullaniciAd','tarih','kategori','baslik','icerik','duzenlendi','duzenlemeTarihi'],
-  IletisimKisileri:['id','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
+  Users:['id','username','passwordHash','role','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Stok:['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
+  StokHareketleri:['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
+  Metodlar:['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
+  Cikti:['id','company','batchId','ad','hammadde','hammaddeMiktar','hammaddeBirim','ciktiMiktar','ciktiBirim','tarih','operator','kosullar','not','kullanici'],
+  Analiz:['id','company','numuneId','numune','tur','yontem','sonuc','birim','tarih','analist','batchId','not','kullanici'],
+  Ekipman:['id','company','ad','model','seriNo','lab','konum','kalibrasyonTarihi','kalibrasyonFrekans','bakimTarihi','sorumlu','durum','not','kullanici'],
+  KalibTarihce:['id','company','ekipmanId','ekipmanAd','tarih','yapan','not','kullanici'],
+  Temizlik:['id','company','gorev','lab','sorumlu','periyot','sonYapilma','sonrakiTarih','durum','not'],
+  Gorevler:['id','company','baslik','kategori','atanan','atayan','tarih','basTarih','bitisTarih','oncelik','durum','aciklama','kullanici'],
+  GunlukLog:['id','company','kullanici','kullaniciAd','tarih','kategori','baslik','icerik','duzenlendi','duzenlemeTarihi'],
+  IletisimKisileri:['id','company','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
   Bildirimler:['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi'],
-  DuzenlemeLoglari:['id','modul','kayitId','kullanici','tarih','onceki','sonraki']
+  DuzenlemeLoglari:['id','company','modul','kayitId','kullanici','tarih','onceki','sonraki']
 };
 const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[]};
-let currentUser=null,currentPage=null,syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
+let currentUser=null,currentPage=null,currentCompany='fuwell',syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
 const LABS=['Lab-1','Ek Lab'];
 const FREQLAR=['Aylık','3 Aylık','6 Aylık','Yıllık'];
 const GOREV_CIZELGE={
@@ -286,6 +290,24 @@ const GOREV_CIZELGE={
     'Uğur-3':[{t:'Etiket cihazları',p:'teal',goalId:'g-analitik',category:'Analiz & Lab'}]
   }
 };
+const SYNTEGRA_CIZELGE={
+  title:'Syntegra Üretim Planı',
+  subtitle:'İmalat · iş emri, kalite, bakım ve sevkiyat koordinasyonu',
+  persons:[
+    {name:'Üretim',role:'İş Emirleri'},
+    {name:'Kalite',role:'Kontrol'},
+    {name:'Bakım',role:'Makine'},
+    {name:'Satın Alma',role:'Tedarik'}
+  ],
+  days:['Pazartesi','Salı','Çarşamba','Perşembe','Cuma'],
+  dates:['2026-05-11','2026-05-12','2026-05-13','2026-05-14','2026-05-15'],
+  goals:[
+    {id:'s-uretim',title:'Haftalık üretim planını tamamlamak',scope:'Haftalık',color:'#4f9cf9',note:'Açık iş emirleri, kapasite ve terminler netleşsin.'},
+    {id:'s-kalite',title:'Kalite kontrol akışını güvenceye almak',scope:'Haftalık',color:'#1abc9c',note:'Girdi, proses ve final kontroller izlenebilir olsun.'},
+    {id:'s-bakim',title:'Makine duruşlarını ve bakımı azaltmak',scope:'Haftalık',color:'#f5a623',note:'Kritik makine kontrolleri ve planlı bakım takip edilsin.'}
+  ],
+  tasks:{}
+};
 let scheduleSelectMode=false,scheduleSelected=new Set();
 const S_META='__CIZELGE_META__',S_PERSON='__CIZELGE_PERSON__',S_TASK='__CIZELGE_TASK__';
 const S_DATES=GOREV_CIZELGE.dates;
@@ -302,6 +324,16 @@ function fmtDt(d){if(!d)return'—';try{return new Date(d).toLocaleString('tr-TR
 function localISODate(d=new Date()){const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10);}
 function localISODateTime(d=new Date()){const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,16);}
 function today(){return localISODate();}
+function companyAccess(user=currentUser){
+  const raw=String(user?.companyAccess||'').trim();
+  if(user?.role==='admin'&&(!raw||raw==='all'))return Object.keys(COMPANIES);
+  const arr=raw.split(',').map(x=>x.trim()).filter(x=>COMPANIES[x]);
+  return arr.length?arr:['fuwell'];
+}
+function canUseCompany(key){return companyAccess().includes(key);}
+function companyLabel(key=currentCompany){return COMPANIES[key]?.label||key||'Fuwell';}
+function isCompanySheet(sheet){return COLS[sheet]?.includes('company');}
+function withCompanyRecord(sheet,row){return isCompanySheet(sheet)?{company:currentCompany,...row,company:row.company||currentCompany}:row;}
 function toast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='show toast-'+type;clearTimeout(t._t);t._t=setTimeout(()=>t.className='',2800);}
 function loading(show,text='İşleniyor...'){document.getElementById('loading-text').textContent=text;document.getElementById('loading-overlay').classList.toggle('show',show);}
 function setSS(s){const e=document.getElementById('sync-status');e.innerHTML=s==='ok'?'<span class="sync-ok">● Bağlı</span>':s==='loading'?'<span class="sync-loading">↺ Senkronize...</span>':'<span class="sync-err">● Bağlantı hatası</span>';}
@@ -309,7 +341,7 @@ function showModal(t,b,f){document.getElementById('modal-title').textContent=t;d
 function closeModal(e){if(e.target===document.getElementById('modal-overlay'))closeModalDirect();}
 function closeModalDirect(){document.getElementById('modal-overlay').classList.remove('open');}
 function canDelete(){return currentUser&&currentUser.role==='admin';}
-function logDuz(modul,kayitId,onceki,sonraki){C.DuzenlemeLoglari.push({id:uid(),modul,kayitId,kullanici:currentUser.username,tarih:new Date().toISOString(),onceki:JSON.stringify(onceki),sonraki:JSON.stringify(sonraki)});save('DuzenlemeLoglari').catch(()=>{});}
+function logDuz(modul,kayitId,onceki,sonraki){C.DuzenlemeLoglari.push({id:uid(),company:currentCompany,modul,kayitId,kullanici:currentUser.username,tarih:new Date().toISOString(),onceki:JSON.stringify(onceki),sonraki:JSON.stringify(sonraki)});save('DuzenlemeLoglari').catch(()=>{});}
 
 // ── GLOBAL SEARCH (focus korunur) ──
 let gsT=null;
@@ -342,7 +374,7 @@ function goResult(page){document.getElementById('gsr').style.display='none';docu
 
 // ── API ──
 async function apiRead(sheet){
-  const r=await fetch(`${SCRIPT_URL}?action=read&sheet=${encodeURIComponent(sheet)}&token=${encodeURIComponent(authToken||'')}`);
+  const r=await fetch(`${SCRIPT_URL}?action=read&sheet=${encodeURIComponent(sheet)}&company=${encodeURIComponent(currentCompany)}&token=${encodeURIComponent(authToken||'')}`);
   const d=await r.json();if(d.error)throw new Error(d.error);
   const rows=d.values||[];if(rows.length<2)return[];
   const h=rows[0];return rows.slice(1).map(row=>{const o={};h.forEach((k,i)=>o[k]=row[i]!==undefined?String(row[i]):'');return o;});
@@ -352,7 +384,7 @@ function rowsToObjects(rows){
   const h=rows[0];return rows.slice(1).map(row=>{const o={};h.forEach((k,i)=>o[k]=row[i]!==undefined?String(row[i]):'');return o;});
 }
 async function apiBatchRead(sheets=SHEETS){
-  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'batchRead',sheets,token:authToken})});
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'batchRead',sheets,company:currentCompany,token:authToken})});
   const d=await res.json();if(d.error)throw new Error(d.error);
   const out={};Object.entries(d.valuesBySheet||{}).forEach(([sheet,rows])=>out[sheet]=rowsToObjects(rows));
   return out;
@@ -360,11 +392,12 @@ async function apiBatchRead(sheets=SHEETS){
 async function apiWrite(sheet,records){
   const cols=COLS[sheet];const values=[cols];
   records.forEach(r=>values.push(cols.map(c=>r[c]!==undefined&&r[c]!==null?String(r[c]):'')));
-  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({sheet,action:'write',values,token:authToken})});
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({sheet,action:'write',values,company:currentCompany,token:authToken})});
   const d=await res.json();if(d.error)throw new Error(d.error);
 }
 function parseRow(k,r){
   if(k==='Users'){r.active=r.active==='true'||r.active===true;return r;}
+  if(isCompanySheet(k))r.company=r.company||'fuwell';
   ['miktar','hammaddeMiktar','ciktiMiktar','kritikSeviye','maksimum','oncekiMiktar','sonrakiMiktar'].forEach(f=>{if(r[f]!==undefined)r[f]=parseFloat(r[f])||0;});
   return r;
 }
@@ -385,7 +418,7 @@ async function syncAll(){
   catch(e){setSS('err');toast('Bağlantı hatası: '+e.message,'err');return false;}
 }
 async function save(sheet){
-  const snapshot=(C[sheet]||[]).map(r=>({...r}));
+  const snapshot=(C[sheet]||[]).map(r=>withCompanyRecord(sheet,{...r}));
   dirtySheets.add(sheet);
   const p=(saveQueues[sheet]||Promise.resolve()).then(()=>apiWrite(sheet,snapshot)).catch(e=>{toast(`${sheet} kaydedilemedi: ${e.message}`,'err');throw e;}).finally(()=>{if(saveQueues[sheet]===p){delete saveQueues[sheet];dirtySheets.delete(sheet);}});
   saveQueues[sheet]=p;
@@ -399,6 +432,8 @@ async function doLogin(){
   try{
     const login=await driveApi('login',{username:u,passwordHash:hash(p)});
     authToken=login.token;currentUser=login.user;
+    const access=companyAccess(currentUser);
+    currentCompany=access.includes(currentUser.defaultCompany)?currentUser.defaultCompany:access[0];
     const ok=await syncAll();if(!ok){loading(false);return;}
     loading(false);
     document.getElementById('login-err').style.display='none';
@@ -406,6 +441,8 @@ async function doLogin(){
     document.getElementById('app').classList.add('visible');
     document.getElementById('sidebar-username').textContent=currentUser.ad||currentUser.username;
     document.getElementById('sidebar-role').textContent=currentUser.role==='admin'?'Admin':'Kullanıcı';
+    renderCompanySelector();
+    updateCompanyUI();
     document.getElementById('admin-nav-section').style.display='';
     document.getElementById('admin-nav-item').style.display='';
     if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
@@ -417,7 +454,31 @@ async function doLogin(){
   }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-pass')===document.activeElement)doLogin();});
-function doLogout(){currentUser=null;authToken=null;notifReady=false;knownNotifIds.clear();clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
+function doLogout(){currentUser=null;authToken=null;currentCompany='fuwell';notifReady=false;knownNotifIds.clear();clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
+function renderCompanySelector(){
+  const sel=document.getElementById('company-select'),access=companyAccess();
+  sel.innerHTML=access.map(k=>`<option value="${k}" ${currentCompany===k?'selected':''}>${esc(COMPANIES[k].label)}</option>`).join('');
+  sel.style.display=access.length>1?'block':'none';
+}
+function updateCompanyUI(){
+  const syn=currentCompany==='syntegra';
+  const labels={
+    'nav-stok-label':syn?'Üretim Stok':'Stok Takibi',
+    'nav-analiz-label':syn?'Kalite Kontrol':'Analiz Sonuçları',
+    'nav-ekipman-label':syn?'Makine & Bakım':'Ekipman Takibi',
+    'nav-metod-label':syn?'Reçeteler ve SOP':'Metodlar ve İzlekler',
+    'nav-takvim-label':syn?'Üretim Planı':'Görev Takvimi',
+    'nav-gunluk-label':syn?'Üretim Log':'Günlük Log'
+  };
+  Object.entries(labels).forEach(([id,text])=>{const el=document.getElementById(id);if(el)el.textContent=text;});
+}
+async function switchCompany(key){
+  if(!COMPANIES[key]||key===currentCompany)return;
+  if(!canUseCompany(key)){toast('Bu operasyon alanına erişim yetkiniz yok.','err');renderCompanySelector();return;}
+  currentCompany=key;goalScopeFilter='';knownNotifIds.clear();loading(true,companyLabel()+' yükleniyor...');
+  try{await syncAll();loading(false);updateCompanyUI();renderCompanySelector();showPage('dashboard');ensureScheduleOnline().catch(()=>{});toast(companyLabel()+' alanına geçildi ✓');}
+  catch(e){loading(false);toast('Geçiş yapılamadı: '+e.message,'err');}
+}
 
 // ── NAV ──
 function showPage(page,silent=false){
@@ -426,7 +487,8 @@ function showPage(page,silent=false){
   const map=['dashboard','stok','analiz','ekipman','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
-  const titles={dashboard:'Dashboard',stok:'Stok Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',metod:'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
+  const syn=currentCompany==='syntegra';
+  const titles={dashboard:'Dashboard',stok:syn?'Üretim Stok':'Stok Takibi',analiz:syn?'Kalite Kontrol':'Analiz Sonuçları',ekipman:syn?'Makine & Bakım':'Ekipman Takibi',metod:syn?'Reçeteler ve SOP':'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:syn?'Üretim Planı':'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:syn?'Üretim Log':'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
   ({dashboard,stok,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin})[page]?.();
@@ -457,7 +519,7 @@ function handleNewNotifications(){
   if(currentPage==='bildirim')renderBildirim();
 }
 async function notifyApi(payload){
-  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'createNotification',token:authToken,...payload})});
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'createNotification',token:authToken,company:currentCompany,...payload})});
   const d=await res.json();if(d.error)throw new Error(d.error);return d;
 }
 async function markNotificationsRead(payload){
@@ -480,7 +542,7 @@ function scheduleTaskMeta(r){
   const dayIndex=(meta.dates||[]).indexOf(date);
   if(dayIndex<0)return null;
   const names=C.Gorevler.filter(scheduleIsPerson).map(x=>String(x.atanan||'').trim()).filter(Boolean);
-  if(!names.length)GOREV_CIZELGE.persons.forEach(p=>names.push(p.name));
+  if(!names.length)scheduleTemplate().persons.forEach(p=>names.push(p.name));
   if(!names.includes(String(r.atanan||'').trim()))return null;
   return {type:S_TASK,dayIndex,priority:S_ON_TO_PRIO[r.oncelik]||'teal',goalId:'',role:''};
 }
@@ -497,19 +559,21 @@ function scheduleGoalName(id){
 }
 function scheduleBaseRow(extra){
   const u=currentUser?.username||'system',now=today();
-  return {id:uid(),baslik:'',kategori:'Diğer',atanan:'',atayan:u,tarih:now,basTarih:now,bitisTarih:'',oncelik:'Normal',durum:'Bekliyor',aciklama:'',kullanici:u,...extra};
+  return {id:uid(),company:currentCompany,baslik:'',kategori:'Diğer',atanan:'',atayan:u,tarih:now,basTarih:now,bitisTarih:'',oncelik:'Normal',durum:'Bekliyor',aciklama:'',kullanici:u,...extra};
 }
+function scheduleTemplate(){return currentCompany==='syntegra'?SYNTEGRA_CIZELGE:GOREV_CIZELGE;}
 function scheduleDefaultRows(){
-  const rows=[scheduleBaseRow({baslik:S_META,durum:'Aktif',aciklama:JSON.stringify({title:GOREV_CIZELGE.title,subtitle:GOREV_CIZELGE.subtitle,days:GOREV_CIZELGE.days,dates:GOREV_CIZELGE.dates,goals:GOREV_CIZELGE.goals})})];
-  GOREV_CIZELGE.persons.forEach(p=>rows.push(scheduleBaseRow({baslik:S_PERSON,atanan:p.name,durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:p.role||''})})));
-  Object.entries(GOREV_CIZELGE.tasks).forEach(([cell,tasks])=>{
+  const tpl=scheduleTemplate(),dates=tpl.dates||GOREV_CIZELGE.dates;
+  const rows=[scheduleBaseRow({baslik:S_META,durum:'Aktif',aciklama:JSON.stringify({title:tpl.title,subtitle:tpl.subtitle,days:tpl.days,dates,goals:tpl.goals||[]})})];
+  tpl.persons.forEach(p=>rows.push(scheduleBaseRow({baslik:S_PERSON,atanan:p.name,durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:p.role||''})})));
+  Object.entries(tpl.tasks||{}).forEach(([cell,tasks])=>{
     const cut=cell.lastIndexOf('-'),atanan=cell.slice(0,cut),dayIndex=parseInt(cell.slice(cut+1),10);
-    tasks.forEach(task=>rows.push(scheduleBaseRow({baslik:task.t,kategori:task.category||'Diğer',atanan,tarih:S_DATES[dayIndex]||'',basTarih:S_DATES[dayIndex]||'',oncelik:S_PRIO_TO_ON[task.p]||'Normal',aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:task.p||'teal',goalId:task.goalId||'',category:task.category||'',note:task.note||''})})));
+    tasks.forEach(task=>rows.push(scheduleBaseRow({baslik:task.t,kategori:task.category||'Diğer',atanan,tarih:dates[dayIndex]||'',basTarih:dates[dayIndex]||'',oncelik:S_PRIO_TO_ON[task.p]||'Normal',aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:task.p||'teal',goalId:task.goalId||'',category:task.category||'',note:task.note||''})})));
   });
   return rows;
 }
 function scheduleDefaultTaskCount(){
-  return Object.values(GOREV_CIZELGE.tasks).reduce((n,arr)=>n+arr.length,0);
+  return Object.values(scheduleTemplate().tasks||{}).reduce((n,arr)=>n+arr.length,0);
 }
 async function ensureScheduleOnline(){
   if(C.Gorevler.some(scheduleIsRow))return;
@@ -523,7 +587,8 @@ function scheduleMetaRow(){
 }
 function scheduleMeta(){
   const m=scheduleJSON(scheduleMetaRow().aciklama,{});
-  return {title:m.title||GOREV_CIZELGE.title,subtitle:m.subtitle||GOREV_CIZELGE.subtitle,days:Array.isArray(m.days)&&m.days.length?m.days:GOREV_CIZELGE.days,dates:Array.isArray(m.dates)&&m.dates.length?m.dates:GOREV_CIZELGE.dates,goals:Array.isArray(m.goals)?m.goals:[]};
+  const tpl=scheduleTemplate();
+  return {title:m.title||tpl.title,subtitle:m.subtitle||tpl.subtitle,days:Array.isArray(m.days)&&m.days.length?m.days:tpl.days,dates:Array.isArray(m.dates)&&m.dates.length?m.dates:tpl.dates,goals:Array.isArray(m.goals)?m.goals:(tpl.goals||[])};
 }
 function scheduleData(){
   const meta=scheduleMeta(),persons=[],seen=new Set(),tasks={},done={};
@@ -541,7 +606,7 @@ function scheduleData(){
     const item={id:r.id,t:r.baslik||'Görev',p:['red','amber','teal','blue'].includes(priority)?priority:'teal',done:r.durum==='Tamamlandı',goalId:m.goalId||''};
     tasks[ck].push(item);if(item.done)done[item.id]=true;
   });
-  if(!persons.length)GOREV_CIZELGE.persons.forEach(p=>persons.push({...p}));
+  if(!persons.length)scheduleTemplate().persons.forEach(p=>persons.push({...p}));
   return {...meta,persons,tasks,done};
 }
 async function scheduleSaveAndRefresh(message='Çizelge güncellendi ✓'){
@@ -585,7 +650,7 @@ function scheduleHTML(compact=false){
       ${admin?`<button class="btn btn-primary btn-sm" onclick="scheduleAddGoal()">+ Ana Hedef</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="scheduleSelectMode=!scheduleSelectMode;scheduleRefresh()">${scheduleSelectMode?'Seçimi Kapat':'Toplu Seç'}</button>
       ${scheduleSelectMode?`<button class="btn btn-danger btn-sm" onclick="scheduleDeleteSelected()">Seçilenleri Sil (${scheduleSelected.size})</button>`:''}
-      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button><button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">11-15 Mayıs Planını Yükle</button>`:''}
+      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button><button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">${currentCompany==='syntegra'?'Syntegra Plan Şablonunu Yükle':'11-15 Mayıs Planını Yükle'}</button>`:''}
     </div>`:''}
     <div class="table-wrap"><table class="schedule-table">
       <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} ${admin?`<button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button>`:''}</th>`).join('')}</tr></thead>
@@ -720,8 +785,9 @@ async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.si
 async function scheduleClearTasks(){if(!scheduleAdminGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
 async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
 async function scheduleResetWeek(){
-  if(!scheduleAdminGuard()||!confirm('Mevcut çizelge silinip Excelden aktarılan 11-15 Mayıs 2026 planı yüklensin mi?'))return;
-  loading(true,'11-15 Mayıs planı yükleniyor...');
+  const label=currentCompany==='syntegra'?'Syntegra üretim plan şablonu':'Excelden aktarılan 11-15 Mayıs 2026 planı';
+  if(!scheduleAdminGuard()||!confirm('Mevcut çizelge silinip '+label+' yüklensin mi?'))return;
+  loading(true,label+' yükleniyor...');
   try{
     const others=C.Gorevler.filter(r=>!scheduleIsRow(r));
     C.Gorevler=[...others,...scheduleDefaultRows()];
@@ -730,7 +796,7 @@ async function scheduleResetWeek(){
     await save('Gorevler');
     await syncAll();
     renderCal();
-    toast(`11-15 Mayıs planı yüklendi: ${scheduleDefaultTaskCount()} görev ✓`);
+    toast(`${label} yüklendi: ${scheduleDefaultTaskCount()} görev ✓`);
   }catch(e){
     toast('Plan yüklenemedi: '+e.message,'err');
   }finally{
@@ -786,6 +852,7 @@ function dashboard(){
   const son=[...C.StokHareketleri.map(h=>({ad:h.stokAd,lab:h.tip,tarih:h.tarih,kullanici:h.kullanici,_t:'Stok '+h.tip,_r:h.tip==='Girdi'?'badge-green':'badge-purple'})),...C.Analiz.map(a=>({...a,_t:'Analiz',_r:'badge-blue'}))].sort((a,b)=>new Date(b.tarih||0)-new Date(a.tarih||0)).slice(0,8);
   const temizlikGecmis=C.Temizlik.filter(t=>t.sonrakiTarih&&new Date(t.sonrakiTarih)<bugun&&t.durum!=='Tamamlandı');
   document.getElementById('content').innerHTML=`
+    <div class="alert alert-blue mb-16"><strong>${esc(companyLabel())}</strong> alanındasınız. Bu ekranda görünen kayıtlar seçili operasyon alanına aittir.</div>
     <div class="mb-24 grid-4">
       <div class="stat-card"><div class="stat-label">Toplam Stok</div><div class="stat-value stat-blue">${C.Stok.length}</div><div class="stat-sub">kayıtlı malzeme</div></div>
       <div class="stat-card"><div class="stat-label">Kritik Seviye</div><div class="stat-value ${kritik.length>0?'stat-red':'stat-green'}">${kritik.length}</div><div class="stat-sub">düşük stok</div></div>
@@ -1445,7 +1512,7 @@ async function iletisimSil(id){if(!canDelete()){toast('Kişi silmek için admin 
 // ── DOSYA DEPOLAMA ──
 let fileCache=[],fileSearch='',fileFolder='';
 async function driveApi(action,payload={}){
-  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,token:authToken,...payload})});
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,token:authToken,company:currentCompany,...payload})});
   const data=await res.json();if(data.error)throw new Error(data.error);return data;
 }
 function fileSize(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB';}
@@ -1700,10 +1767,11 @@ function admin(){
 }
 function renderAdmin(){
   const missingEmails=C.Users.filter(u=>!normEmail(u.email)).length;
-  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Durum</th><th>Oluşturma</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
+  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Operasyon</th><th>Durum</th><th>Oluşturma</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
     <td class="td-main">${u.ad||'—'}</td><td class="text-mono">${u.username}</td>
     <td>${u.email?`<span class="text-mono" style="font-size:11px">${esc(u.email)}</span>`:`<span class="badge badge-amber">Eksik</span>`}</td>
     <td><span class="badge ${u.role==='admin'?'badge-blue':'badge-gray'}">${u.role==='admin'?'Admin':'Kullanıcı'}</span></td>
+    <td>${companyAccess(u).map(k=>`<span class="badge badge-blue" style="margin-right:4px">${esc(COMPANIES[k].short)}</span>`).join('')}</td>
     <td><span class="badge ${u.active===true||u.active==='true'?'badge-green':'badge-red'}">${u.active===true||u.active==='true'?'Aktif':'Pasif'}</span></td>
     <td class="text-mono" style="font-size:11px">${fmt(u.olusturma)}</td>
     <td>${u.id!==currentUser.id?`<button class="btn btn-ghost btn-sm" onclick="kullaniciDuzenle('${u.id}')">Düzenle</button><button class="btn btn-${u.active===true||u.active==='true'?'danger':'success'} btn-sm" onclick="kullaniciToggle('${u.id}')">${u.active===true||u.active==='true'?'Pasif Et':'Aktif Et'}</button>`:'<span class="text-muted text-sm">Mevcut oturum</span>'}</td>
@@ -1714,11 +1782,14 @@ function uForm(u={}){return`
   <div class="form-group"><label>Google E-posta</label><input type="text" id="u-email" value="${u.email||''}" placeholder="ad.soyad@gmail.com"></div>
   <div class="form-row"><div class="form-group"><label>${u.id?'Yeni Şifre (boş=değişmez)':'Şifre *'}</label><input type="password" id="u-pass" placeholder="••••••••"></div>
   <div class="form-group"><label>Rol</label><select id="u-rol"><option value="user" ${u.role==='user'?'selected':''}>Kullanıcı</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Operasyon Erişimi</label><select id="u-company-access" multiple style="min-height:74px">${Object.entries(COMPANIES).map(([k,c])=>`<option value="${k}" ${companyAccess(u).includes(k)?'selected':''}>${esc(c.label)}</option>`).join('')}</select></div>
+  <div class="form-group"><label>Varsayılan Operasyon</label><select id="u-default-company">${Object.entries(COMPANIES).map(([k,c])=>`<option value="${k}" ${(u.defaultCompany||'fuwell')===k?'selected':''}>${esc(c.label)}</option>`).join('')}</select></div></div>
   <div class="text-sm text-muted">Bu alan, Google Sheets ve Drive yetkilerini eşleştirmek için kullanılacak. E-posta boşsa kullanıcı sisteme giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
 function kullaniciYeni(){showModal('Yeni Kullanıcı',uForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciKaydet()">Kaydet</button>`);}
-async function kullaniciKaydet(){const ad=document.getElementById('u-ad').value.trim();const un=document.getElementById('u-un').value.trim();const email=normEmail(document.getElementById('u-email').value);const p=document.getElementById('u-pass').value;if(!ad||!un||!p){toast('Tüm alanlar zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(C.Users.find(u=>u.username===un)){toast('Bu kullanıcı adı zaten var.','err');return;}if(email&&C.Users.find(u=>normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}C.Users.push({id:uid(),ad,username:un,passwordHash:hash(p),role:document.getElementById('u-rol').value,email,active:'true',olusturma:new Date().toISOString()});closeModalDirect();loading(true,'Kaydediliyor...');try{await save('Users');loading(false);toast('Kullanıcı eklendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
+function readUserCompanyFields(){const access=[...document.getElementById('u-company-access').selectedOptions].map(o=>o.value);const defaultCompany=document.getElementById('u-default-company').value;return {companyAccess:(access.length?access:['fuwell']).join(','),defaultCompany:access.includes(defaultCompany)?defaultCompany:access[0]||'fuwell'};}
+async function kullaniciKaydet(){const ad=document.getElementById('u-ad').value.trim();const un=document.getElementById('u-un').value.trim();const email=normEmail(document.getElementById('u-email').value);const p=document.getElementById('u-pass').value;if(!ad||!un||!p){toast('Tüm alanlar zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(C.Users.find(u=>u.username===un)){toast('Bu kullanıcı adı zaten var.','err');return;}if(email&&C.Users.find(u=>normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}C.Users.push({id:uid(),ad,username:un,passwordHash:hash(p),role:document.getElementById('u-rol').value,email,...readUserCompanyFields(),active:'true',olusturma:new Date().toISOString()});closeModalDirect();loading(true,'Kaydediliyor...');try{await save('Users');loading(false);toast('Kullanıcı eklendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
 function kullaniciDuzenle(id){const u=C.Users.find(x=>x.id===id);if(!u)return;showModal('Kullanıcı Düzenle',uForm(u),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciGuncelle('${id}')">Güncelle</button>`);}
-async function kullaniciGuncelle(id){const ad=document.getElementById('u-ad').value.trim();const email=normEmail(document.getElementById('u-email').value);if(!ad){toast('Ad zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(email&&C.Users.find(u=>u.id!==id&&normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}const idx=C.Users.findIndex(x=>x.id===id);const p=document.getElementById('u-pass').value;C.Users[idx]={...C.Users[idx],ad,email,role:document.getElementById('u-rol').value};if(p)C.Users[idx].passwordHash=hash(p);closeModalDirect();loading(true,'Güncelleniyor...');try{await save('Users');loading(false);toast('Güncellendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
+async function kullaniciGuncelle(id){const ad=document.getElementById('u-ad').value.trim();const email=normEmail(document.getElementById('u-email').value);if(!ad){toast('Ad zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(email&&C.Users.find(u=>u.id!==id&&normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}const idx=C.Users.findIndex(x=>x.id===id);const p=document.getElementById('u-pass').value;C.Users[idx]={...C.Users[idx],ad,email,role:document.getElementById('u-rol').value,...readUserCompanyFields()};if(p)C.Users[idx].passwordHash=hash(p);closeModalDirect();loading(true,'Güncelleniyor...');try{await save('Users');loading(false);toast('Güncellendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
 async function kullaniciToggle(id){const idx=C.Users.findIndex(x=>x.id===id);C.Users[idx].active=C.Users[idx].active==='true'||C.Users[idx].active===true?'false':'true';loading(true);try{await save('Users');loading(false);toast('Güncellendi ✓');renderAdmin();}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
 </script>
 </body>
