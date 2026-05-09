@@ -240,52 +240,56 @@ const LABS=['Lab-1','Ek Lab'];
 const FREQLAR=['Aylık','3 Aylık','6 Aylık','Yıllık'];
 const GOREV_CIZELGE={
   title:'Haftalık Görev Çizelgesi',
-  subtitle:'4 - 9 Mayıs 2026 · Mirkan Emir Sancak, Genel Koordinatör',
+  subtitle:'11 - 15 Mayıs 2026 · Haftalık lab ve proje planı',
   persons:[
     {name:'Mirkan',role:'Koordinatör'},
-    {name:'Fatma',role:'Laborant'},
-    {name:'Ozan',role:'Proje Koor.'},
-    {name:'Çağatay',role:'Operatör'},
+    {name:'Fatma',role:'Analiz & Lab'},
+    {name:'Soner',role:'Sistem & Teknik'},
+    {name:'Ozan',role:'Proje / ERP'},
     {name:'Yiğit',role:'Satın Alma'},
-    {name:'Soner',role:'Elektrik/El.'}
+    {name:'Çağatay',role:'Operasyon'},
+    {name:'Müjde',role:'Koordinasyon'},
+    {name:'Uğur',role:'Etiket / Cihaz'}
   ],
   days:['Pazartesi','Salı','Çarşamba','Perşembe','Cuma'],
+  dates:['2026-05-11','2026-05-12','2026-05-13','2026-05-14','2026-05-15'],
+  goals:[
+    {id:'g-analitik',title:'Analitik altyapıyı çalışır duruma getirmek',scope:'Haftalık',color:'#2e75b6',note:'HPLC, numuneler, MVR/VPR ve sarf/donanım eksikleri üretime hazır olsun.'},
+    {id:'g-camur',title:'Çamur projesini resmi olarak başlatmak',scope:'Haftalık',color:'#548235',note:'GTÜ dilekçesi, ön faz ve ilk deneylerle proje tezgaha insin.'},
+    {id:'g-paydas',title:'Paydaş iletişimini ve karar mekanizmalarını kurmak',scope:'Haftalık',color:'#bf8f00',note:'Dış paydaşlar, toplantılar ve karar mekanizması açık kalsın.'},
+    {id:'g-sistem',title:'Ekip ve sistem altyapısını kurmak',scope:'Haftalık',color:'#c65911',note:'Gantt, ERP üretim sistemi ve fiziksel/idari düzen otursun.'}
+  ],
   tasks:{
-    'Mirkan-0':[{t:'Yiğit Bey - kimyasal tedarik deadline',p:'red'},{t:'Selami toplantısı gündem taslağı',p:'red'},{t:'TÜBİTAK imza takvimi - Selçuk Bey',p:'amber'}],
-    'Mirkan-1':[{t:'Neha pozisyon tanımı taslağı',p:'amber'},{t:'Gaziantep teknik yanıt + doküman',p:'teal'},{t:'Selami Bey toplantısı (14:00)',p:'blue'}],
-    'Mirkan-2':[{t:'Adil Kama teklifi takibi',p:'amber'},{t:'Ferhat Bey - imar durumu',p:'amber'},{t:'BPR montajı durumu - Soner',p:'teal'}],
-    'Mirkan-3':[{t:'Aşağı lab analiz güncelleme takibi',p:'teal'},{t:'Standart sipariş listesi derle',p:'blue'},{t:'Selami çıktılarını kaydet',p:'teal'}],
-    'Mirkan-4':[{t:'Neha - Selçuk Bey geri bildirimi',p:'amber'},{t:'TÜBİTAK kargo takip kodu',p:'teal'},{t:'Haftalık ekip değerlendirmesi (16:00)',p:'blue'}],
-    'Fatma-0':[{t:'Wet analiz & kalibrasyon günü (FFA)',p:'teal'},{t:'Aşağı lab kayıtlarını sisteme gir',p:'teal'}],
-    'Fatma-1':[{t:'Kabak çekirdeği yağı şişeleme',p:'blue'}],
-    'Fatma-2':[{t:'HPLC kalibrasyonu (tam gün)',p:'red'},{t:'Fenolik profil analizi - kalibrasyon sonrası başla',p:'amber'}],
-    'Fatma-3':[{t:'Analiz kayıtları güncelleme devam',p:'teal'}],
-    'Fatma-4':[{t:'GC kalibrasyon hazırlığı',p:'blue'}],
-    'Ozan-0':[{t:'Selçuk Bey - TÜBİTAK imza randevusu al',p:'red'}],
-    'Ozan-1':[{t:'Gaziantep teknik doküman hazırlık',p:'amber'}],
-    'Ozan-2':[{t:'Standart sipariş listesi taslağı',p:'amber'}],
-    'Ozan-3':[{t:'TÜBİTAK evrakı kargoya ver',p:'teal'}],
-    'Ozan-4':[{t:'Haftalık rapor girdisi hazırla',p:'blue'}],
-    'Çağatay-0':[{t:'Döhler - pompa takibi & devam',p:'red'},{t:'Eski kabak stoğunu sisteme yükle',p:'amber'}],
-    'Çağatay-1':[{t:'Döhler süreci takip',p:'teal'}],
-    'Çağatay-2':[{t:'Döhler süreci takip',p:'teal'},{t:'Fatma’ya thinfilm destek',p:'blue'}],
-    'Çağatay-3':[{t:'Döhler süreci takip',p:'teal'}],
-    'Çağatay-4':[{t:'Haftalık operasyon raporu',p:'blue'}],
-    'Yiğit-0':[{t:'Etanol/MeOH/gliserin - net teslim tarihi al',p:'red'}],
-    'Yiğit-1':[{t:'Teslim tarihi yoksa alternatif tedarikçi',p:'red'},{t:'Eksik lab malzemeleri listesi tamamla',p:'amber'}],
-    'Yiğit-2':[{t:'BPR montajı teyit - Soner ile koordine',p:'amber'}],
-    'Yiğit-3':[{t:'Siparişleri takip et',p:'teal'}],
-    'Yiğit-4':[{t:'Adil Kama teklifi - Metin Turan’a ilet',p:'blue'}],
-    'Soner-0':[{t:'MVR tam otomasyon - feedback entegrasyon',p:'amber'}],
-    'Soner-1':[{t:'Alt sistem BPR tamiri',p:'amber'}],
-    'Soner-2':[{t:'MVR sistem temizliği',p:'teal'}],
-    'Soner-3':[{t:'Otomasyon test & doğrulama',p:'blue'}],
-    'Soner-4':[{t:'Sistem durum raporu',p:'blue'}]
+    'Mirkan-0':[{t:'Adil Kama → teklif → Metin Turan',p:'red',goalId:'g-paydas',category:'Resmi & Dış',note:'Dış cevap bekleniyor'},{t:'Çamur dilekçesi takibi (GTÜ)',p:'red',goalId:'g-camur',category:'Resmi & Dış',note:'Çamur deneylerinin önkoşulu'},{t:'Selçuk abi mailleri',p:'red',goalId:'g-paydas',category:'Resmi & Dış'},{t:'HPLC kalibrasyonu (başla)',p:'red',goalId:'g-analitik',category:'Analiz & Lab',note:'HPLC numunelerinin önkoşulu'},{t:'Gülay Hanım toplantısı ayarla',p:'red',goalId:'g-paydas',category:'Toplantı & Koord.'},{t:'Haftalık ekip + Selçuk abi toplantı düzeni',p:'red',goalId:'g-paydas',category:'Toplantı & Koord.'},{t:'Gantt şeması hazırla (başla)',p:'red',goalId:'g-sistem',category:'Planlama'}],
+    'Mirkan-1':[{t:'HPLC kalibrasyonu (bitir)',p:'red',goalId:'g-analitik',category:'Analiz & Lab'},{t:'HPLC numuneleri (başla)',p:'amber',goalId:'g-analitik',category:'Analiz & Lab',note:'Kalibrasyon sonrası'},{t:'MVR + VPR güncellemeleri (başla)',p:'amber',goalId:'g-analitik',category:'Sistem & Teknik'},{t:'Satın alma listesi düzenle (yazıcı, kimyasallar, kolon, dolum cihazı)',p:'amber',goalId:'g-analitik',category:'Satın Alma'},{t:'Selami Bey belgelerini incele',p:'amber',goalId:'g-paydas',category:'Toplantı & Koord.'},{t:'Gantt şeması — yazıcıdan çıktı + ekip toplantısı',p:'red',goalId:'g-sistem',category:'Planlama'}],
+    'Mirkan-2':[{t:'HPLC numuneleri (devam/bitir)',p:'amber',goalId:'g-analitik',category:'Analiz & Lab'},{t:'MVR + VPR (bitir)',p:'amber',goalId:'g-analitik',category:'Sistem & Teknik'},{t:'Çamur deneyleri ön faz',p:'teal',goalId:'g-camur',category:'Çamur Projesi',note:'Dilekçe sonrası'},{t:'İç toplantı — Selami Bey belgeleri',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.',note:'İnceleme sonrası'},{t:'ERP üretim sistemi yazılımsal kurulum',p:'amber',goalId:'g-sistem',category:'Sistem & Teknik'},{t:'Satın alma — siparişleri başlat',p:'amber',goalId:'g-analitik',category:'Satın Alma'}],
+    'Mirkan-3':[{t:'Çamur deneyleri',p:'teal',goalId:'g-camur',category:'Çamur Projesi'},{t:'Kimyasal dolabı / raf siparişi',p:'teal',goalId:'g-analitik',category:'Satın Alma'},{t:'Bilimsel projeler toplantısı',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.'},{t:'ERP üretim sistemi toplantısı',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.',note:'Üretim ekibi dahil'},{t:'Selami Bey + Melek Hanım toplantısı',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.'}],
+    'Mirkan-4':[{t:'Çamur deneyleri (bitir)',p:'teal',goalId:'g-camur',category:'Çamur Projesi'},{t:'Satın alma — açık kalan kalemler',p:'teal',goalId:'g-analitik',category:'Satın Alma'},{t:'Hafta kapanış / değerlendirme',p:'teal',goalId:'g-sistem',category:'Planlama'},{t:'Genel düzen: temizlik, etiket, giriş, kart, şifre',p:'blue',goalId:'g-sistem',category:'İdari'}],
+    'Fatma-0':[{t:'HPLC kalibrasyonu (başla)',p:'red',goalId:'g-analitik',category:'Analiz & Lab'}],
+    'Fatma-1':[{t:'HPLC kalibrasyonu (bitir)',p:'red',goalId:'g-analitik',category:'Analiz & Lab'},{t:'HPLC numuneleri (başla)',p:'amber',goalId:'g-analitik',category:'Analiz & Lab'},{t:'Yaprak ve kabak numuneleri',p:'amber',goalId:'g-analitik',category:'Analiz & Lab'},{t:'Satın alma listesi düzenle (yazıcı, kimyasallar, kolon, dolum cihazı)',p:'amber',goalId:'g-analitik',category:'Satın Alma'},{t:'Selami Bey belgelerini incele',p:'amber',goalId:'g-paydas',category:'Toplantı & Koord.'}],
+    'Fatma-2':[{t:'HPLC numuneleri (devam/bitir)',p:'amber',goalId:'g-analitik',category:'Analiz & Lab'},{t:'Yaprak ve kabak (devam)',p:'amber',goalId:'g-analitik',category:'Analiz & Lab'},{t:'İç toplantı — Selami Bey belgeleri',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.'},{t:'Satın alma — siparişleri başlat',p:'amber',goalId:'g-analitik',category:'Satın Alma'}],
+    'Fatma-3':[{t:'Etiket cihazları',p:'teal',goalId:'g-analitik',category:'Analiz & Lab'},{t:'Selami Bey + Melek Hanım toplantısı',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.'}],
+    'Fatma-4':[{t:'Satın alma — açık kalan kalemler',p:'teal',goalId:'g-analitik',category:'Satın Alma'}],
+    'Soner-1':[{t:'MVR + VPR güncellemeleri (başla)',p:'amber',goalId:'g-analitik',category:'Sistem & Teknik'}],
+    'Soner-2':[{t:'MVR + VPR (bitir)',p:'amber',goalId:'g-analitik',category:'Sistem & Teknik'}],
+    'Ozan-1':[{t:'MVR + VPR güncellemeleri (başla)',p:'amber',goalId:'g-analitik',category:'Sistem & Teknik'}],
+    'Ozan-2':[{t:'MVR + VPR (bitir)',p:'amber',goalId:'g-analitik',category:'Sistem & Teknik'}],
+    'Ozan-3':[{t:'Bilimsel projeler toplantısı',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.'},{t:'ERP üretim sistemi toplantısı',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.',note:'Üretim ekibi dahil'}],
+    'Yiğit-1':[{t:'Satın alma listesi düzenle (yazıcı, kimyasallar, kolon, dolum cihazı)',p:'amber',goalId:'g-analitik',category:'Satın Alma'}],
+    'Yiğit-2':[{t:'Satın alma — siparişleri başlat',p:'amber',goalId:'g-analitik',category:'Satın Alma'}],
+    'Yiğit-3':[{t:'Kimyasal dolabı / raf siparişi',p:'teal',goalId:'g-analitik',category:'Satın Alma'}],
+    'Yiğit-4':[{t:'Satın alma — açık kalan kalemler',p:'teal',goalId:'g-analitik',category:'Satın Alma'}],
+    'Çağatay-1':[{t:'Selami Bey belgelerini incele',p:'amber',goalId:'g-paydas',category:'Toplantı & Koord.'}],
+    'Çağatay-2':[{t:'Çamur deneyleri ön faz',p:'teal',goalId:'g-camur',category:'Çamur Projesi'},{t:'İç toplantı — Selami Bey belgeleri',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.'}],
+    'Çağatay-3':[{t:'Çamur deneyleri',p:'teal',goalId:'g-camur',category:'Çamur Projesi'},{t:'Selami Bey + Melek Hanım toplantısı',p:'teal',goalId:'g-paydas',category:'Toplantı & Koord.'}],
+    'Çağatay-4':[{t:'Çamur deneyleri (bitir)',p:'teal',goalId:'g-camur',category:'Çamur Projesi'}],
+    'Müjde-0':[{t:'Gülay Hanım toplantısı ayarla',p:'red',goalId:'g-paydas',category:'Toplantı & Koord.'},{t:'Haftalık ekip + Selçuk abi toplantı düzeni',p:'red',goalId:'g-paydas',category:'Toplantı & Koord.'}],
+    'Uğur-3':[{t:'Etiket cihazları',p:'teal',goalId:'g-analitik',category:'Analiz & Lab'}]
   }
 };
 let scheduleSelectMode=false,scheduleSelected=new Set();
 const S_META='__CIZELGE_META__',S_PERSON='__CIZELGE_PERSON__',S_TASK='__CIZELGE_TASK__';
-const S_DATES=['2026-05-04','2026-05-05','2026-05-06','2026-05-07','2026-05-08','2026-05-09','2026-05-10'];
+const S_DATES=GOREV_CIZELGE.dates;
 const S_PRIO_TO_ON={red:'Kritik',amber:'Yüksek',teal:'Normal',blue:'Düşük'};
 const S_ON_TO_PRIO={Kritik:'red',Yüksek:'amber',Normal:'teal',Düşük:'blue'};
 
@@ -486,11 +490,11 @@ function scheduleBaseRow(extra){
   return {id:uid(),baslik:'',kategori:'Diğer',atanan:'',atayan:u,tarih:now,basTarih:now,bitisTarih:'',oncelik:'Normal',durum:'Bekliyor',aciklama:'',kullanici:u,...extra};
 }
 function scheduleDefaultRows(){
-  const rows=[scheduleBaseRow({baslik:S_META,durum:'Aktif',aciklama:JSON.stringify({title:GOREV_CIZELGE.title,subtitle:GOREV_CIZELGE.subtitle,days:GOREV_CIZELGE.days})})];
+  const rows=[scheduleBaseRow({baslik:S_META,durum:'Aktif',aciklama:JSON.stringify({title:GOREV_CIZELGE.title,subtitle:GOREV_CIZELGE.subtitle,days:GOREV_CIZELGE.days,dates:GOREV_CIZELGE.dates,goals:GOREV_CIZELGE.goals})})];
   GOREV_CIZELGE.persons.forEach(p=>rows.push(scheduleBaseRow({baslik:S_PERSON,atanan:p.name,durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:p.role||''})})));
   Object.entries(GOREV_CIZELGE.tasks).forEach(([cell,tasks])=>{
     const cut=cell.lastIndexOf('-'),atanan=cell.slice(0,cut),dayIndex=parseInt(cell.slice(cut+1),10);
-    tasks.forEach(task=>rows.push(scheduleBaseRow({baslik:task.t,atanan,tarih:S_DATES[dayIndex]||'',basTarih:S_DATES[dayIndex]||'',oncelik:S_PRIO_TO_ON[task.p]||'Normal',aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:task.p||'teal'})})));
+    tasks.forEach(task=>rows.push(scheduleBaseRow({baslik:task.t,kategori:task.category||'Diğer',atanan,tarih:S_DATES[dayIndex]||'',basTarih:S_DATES[dayIndex]||'',oncelik:S_PRIO_TO_ON[task.p]||'Normal',aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:task.p||'teal',goalId:task.goalId||'',category:task.category||'',note:task.note||''})})));
   });
   return rows;
 }
@@ -506,7 +510,7 @@ function scheduleMetaRow(){
 }
 function scheduleMeta(){
   const m=scheduleJSON(scheduleMetaRow().aciklama,{});
-  return {title:m.title||GOREV_CIZELGE.title,subtitle:m.subtitle||GOREV_CIZELGE.subtitle,days:Array.isArray(m.days)&&m.days.length?m.days:GOREV_CIZELGE.days,goals:Array.isArray(m.goals)?m.goals:[]};
+  return {title:m.title||GOREV_CIZELGE.title,subtitle:m.subtitle||GOREV_CIZELGE.subtitle,days:Array.isArray(m.days)&&m.days.length?m.days:GOREV_CIZELGE.days,dates:Array.isArray(m.dates)&&m.dates.length?m.dates:GOREV_CIZELGE.dates,goals:Array.isArray(m.goals)?m.goals:[]};
 }
 function scheduleData(){
   const meta=scheduleMeta(),persons=[],seen=new Set(),tasks={},done={};
@@ -568,7 +572,7 @@ function scheduleHTML(compact=false){
       ${admin?`<button class="btn btn-primary btn-sm" onclick="scheduleAddGoal()">+ Ana Hedef</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="scheduleSelectMode=!scheduleSelectMode;scheduleRefresh()">${scheduleSelectMode?'Seçimi Kapat':'Toplu Seç'}</button>
       ${scheduleSelectMode?`<button class="btn btn-danger btn-sm" onclick="scheduleDeleteSelected()">Seçilenleri Sil (${scheduleSelected.size})</button>`:''}
-      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button><button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">Haftayı Sıfırla</button>`:''}
+      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button><button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">11-15 Mayıs Planını Yükle</button>`:''}
     </div>`:''}
     <div class="table-wrap"><table class="schedule-table">
       <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} ${admin?`<button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button>`:''}</th>`).join('')}</tr></thead>
@@ -611,7 +615,7 @@ async function scheduleSaveNewTask(){
   if(!scheduleGuard())return;
   const v=scheduleReadTask();if(!v)return;
   const D=scheduleData(),pObj=D.persons[parseInt(document.getElementById('sch-person-idx').value,10)||0];if(!pObj)return;
-  const dayIndex=parseInt(document.getElementById('sch-day-idx').value,10)||0,date=S_DATES[dayIndex]||today();
+  const dayIndex=parseInt(document.getElementById('sch-day-idx').value,10)||0,date=D.dates?.[dayIndex]||S_DATES[dayIndex]||today();
   const row=scheduleBaseRow({baslik:v.title,atanan:pObj.name,tarih:date,basTarih:date,oncelik:S_PRIO_TO_ON[v.priority]||'Normal',durum:v.durum,aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:v.priority,goalId:v.goalId,role:pObj.role||''})});
   C.Gorevler.push(row);
   const sendMail=document.getElementById('sch-mail')?.checked;
@@ -667,7 +671,7 @@ function scheduleDragLeave(ev){ev.currentTarget.classList.remove('drag-over');}
 async function scheduleDropTask(ev,personIdx,dayIndex){
   if(!scheduleGuard())return;ev.preventDefault();ev.currentTarget.classList.remove('drag-over');
   const id=ev.dataTransfer.getData('text/plain'),r=C.Gorevler.find(x=>x.id===id),D=scheduleData(),p=D.persons[personIdx];if(!r||!p)return;
-  const m=scheduleTaskMeta(r)||{};m.dayIndex=dayIndex;m.role=p.role||'';r.atanan=p.name;r.tarih=S_DATES[dayIndex]||today();r.basTarih=r.tarih;r.aciklama=JSON.stringify({...m,type:S_TASK});
+  const m=scheduleTaskMeta(r)||{};m.dayIndex=dayIndex;m.role=p.role||'';r.atanan=p.name;r.tarih=D.dates?.[dayIndex]||S_DATES[dayIndex]||today();r.basTarih=r.tarih;r.aciklama=JSON.stringify({...m,type:S_TASK});
   await scheduleSaveAndRefresh('Görev taşındı ✓');
 }
 async function scheduleAddPerson(){if(!scheduleAdminGuard())return;const name=prompt('Kişi adı');if(!name)return;const role=prompt('Rol','')||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
@@ -685,11 +689,11 @@ async function scheduleEditPerson(idx){
   await scheduleSaveAndRefresh('Kişi güncellendi ✓');
 }
 async function scheduleRemovePerson(idx){if(!scheduleAdminGuard())return;const D=scheduleData(),p=D.persons[idx];if(!p||!confirm('Bu kişi ve görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
-async function scheduleAddDay(){if(!scheduleAdminGuard())return;const day=prompt('Gün adı');if(!day)return;const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
+async function scheduleAddDay(){if(!scheduleAdminGuard())return;const day=prompt('Gün adı');if(!day)return;const date=prompt('Tarih (YYYY-AA-GG)',today())||'';const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());m.dates.push(date.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
 async function scheduleRemoveDay(idx){
   if(!scheduleAdminGuard())return;
   if(!confirm('Bu gün ve içindeki görevler silinsin mi?'))return;
-  const r=scheduleMetaRow(),m=scheduleMeta();m.days.splice(idx,1);r.aciklama=JSON.stringify(m);
+  const r=scheduleMetaRow(),m=scheduleMeta();m.days.splice(idx,1);m.dates.splice(idx,1);r.aciklama=JSON.stringify(m);
   C.Gorevler=C.Gorevler.filter(row=>{
     const tm=scheduleTaskMeta(row);if(!tm)return true;
     const di=parseInt(tm.dayIndex,10)||0;if(di===idx)return false;
@@ -702,7 +706,7 @@ function scheduleToggleSelect(id){if(!scheduleGuard())return;scheduleSelected.ha
 async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.size===0)return;if(!confirm(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
 async function scheduleClearTasks(){if(!scheduleAdminGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
 async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
-async function scheduleResetWeek(){if(!scheduleAdminGuard()||!confirm('Çizelge varsayılan haftalık içerikle sıfırlansın mı?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('Haftalık çizelge sıfırlandı ✓');}
+async function scheduleResetWeek(){if(!scheduleAdminGuard()||!confirm('Mevcut çizelge silinip Excelden aktarılan 11-15 Mayıs 2026 planı yüklensin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('11-15 Mayıs planı yüklendi ✓');}
 
 // ── BİLDİRİMLER ──
 function bildirim(){
