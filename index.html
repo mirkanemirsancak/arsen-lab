@@ -167,7 +167,6 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('stok')"><span class="nav-icon">◉</span> Stok Takibi <span class="nav-badge" id="stok-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('analiz')"><span class="nav-icon">⌬</span> Analiz Sonuçları</div>
       <div class="nav-item" onclick="showPage('ekipman')"><span class="nav-icon">⚙</span> Ekipman Takibi <span class="nav-badge" id="ekip-badge" style="display:none">0</span></div>
-      <div class="nav-item" onclick="showPage('temizlik')"><span class="nav-icon">✦</span> Temizlik Planı</div>
       <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> Metodlar ve İzlekler</div>
       <div class="nav-item" onclick="showPage('sfe')"><span class="nav-icon">◇</span> Süperkritik CO₂</div>
       <div class="nav-section">Ekip</div>
@@ -424,10 +423,10 @@ function doLogout(){currentUser=null;authToken=null;notifReady=false;knownNotifI
 function showPage(page,silent=false){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','stok','analiz','ekipman','temizlik','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
+  const map=['dashboard','stok','analiz','ekipman','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
-  const titles={dashboard:'Dashboard',stok:'Stok Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',metod:'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
+  const titles={dashboard:'Dashboard',stok:'Stok Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',metod:'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
   ({dashboard,stok,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin})[page]?.();
