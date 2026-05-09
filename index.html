@@ -169,6 +169,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('ekipman')"><span class="nav-icon">⚙</span> Ekipman Takibi <span class="nav-badge" id="ekip-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('temizlik')"><span class="nav-icon">✦</span> Temizlik Planı</div>
       <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> Metodlar ve İzlekler</div>
+      <div class="nav-item" onclick="showPage('sfe')"><span class="nav-icon">◇</span> Süperkritik CO₂</div>
       <div class="nav-section">Ekip</div>
       <div class="nav-item" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> Görev Takvimi</div>
@@ -234,7 +235,7 @@ const COLS={
   DuzenlemeLoglari:['id','modul','kayitId','kullanici','tarih','onceki','sonraki']
 };
 const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[]};
-let currentUser=null,currentPage=null,syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set();
+let currentUser=null,currentPage=null,syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
 const LABS=['Lab-1','Ek Lab'];
 const FREQLAR=['Aylık','3 Aylık','6 Aylık','Yıllık'];
 const GOREV_CIZELGE={
@@ -375,12 +376,18 @@ async function syncAll(){
       const reads=await Promise.all(SHEETS.map(async s=>[s,await apiRead(s)]));
       data=Object.fromEntries(reads);
     }
-    SHEETS.forEach(s=>{C[s]=(data[s]||[]).map(r=>parseRow(s,r));});
+    SHEETS.forEach(s=>{if(!dirtySheets.has(s))C[s]=(data[s]||[]).map(r=>parseRow(s,r));});
     setSS('ok');updateBadges();handleNewNotifications();return true;
   }
   catch(e){setSS('err');toast('Bağlantı hatası: '+e.message,'err');return false;}
 }
-async function save(sheet){await apiWrite(sheet,C[sheet]);}
+async function save(sheet){
+  const snapshot=(C[sheet]||[]).map(r=>({...r}));
+  dirtySheets.add(sheet);
+  const p=(saveQueues[sheet]||Promise.resolve()).then(()=>apiWrite(sheet,snapshot)).catch(e=>toast(`${sheet} kaydedilemedi: ${e.message}`,'err')).finally(()=>{if(saveQueues[sheet]===p){delete saveQueues[sheet];dirtySheets.delete(sheet);}});
+  saveQueues[sheet]=p;
+  return Promise.resolve();
+}
 
 // ── AUTH ──
 async function doLogin(){
@@ -413,13 +420,13 @@ function doLogout(){currentUser=null;authToken=null;notifReady=false;knownNotifI
 function showPage(page,silent=false){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','stok','analiz','ekipman','temizlik','metod','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
+  const map=['dashboard','stok','analiz','ekipman','temizlik','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
-  const titles={dashboard:'Dashboard',stok:'Stok Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',metod:'Metodlar ve İzlekler',bildirim:'Bildirimler',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
+  const titles={dashboard:'Dashboard',stok:'Stok Takibi',analiz:'Analiz Sonuçları',ekipman:'Ekipman Takibi',temizlik:'Temizlik Planı',metod:'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:'Günlük Log',rapor:'Raporlama',admin:'Kullanıcı Yönetimi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
-  ({dashboard,stok,analiz,ekipman,temizlik,metod,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin})[page]?.();
+  ({dashboard,stok,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin})[page]?.();
 }
 function updateBadges(){
   const k=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0)).length;
@@ -521,23 +528,25 @@ function scheduleData(){
   return {...meta,persons,tasks,done};
 }
 async function scheduleSaveAndRefresh(message='Çizelge güncellendi ✓'){
-  loading(true,'Çizelge güncelleniyor...');
   try{
     await save('Gorevler');scheduleSelected=new Set([...scheduleSelected].filter(id=>C.Gorevler.some(r=>r.id===id)));
-    loading(false);if(message)toast(message);if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();
-  }catch(e){loading(false);toast('Çizelge kaydedilemedi: '+e.message,'err');}
+    if(message)toast(message);if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();
+  }catch(e){toast('Çizelge kaydedilemedi: '+e.message,'err');}
 }
 function scheduleRefresh(){if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();}
-function scheduleCanEdit(){return canDelete();}
-function scheduleGuard(){if(scheduleCanEdit())return true;toast('Çizelgeyi yalnızca admin düzenleyebilir.','err');return false;}
+function scheduleCanEdit(){return !!currentUser;}
+function scheduleCanManage(){return canDelete();}
+function scheduleGuard(){if(scheduleCanEdit())return true;toast('Çizelgeyi düzenlemek için giriş yapmalısınız.','err');return false;}
+function scheduleAdminGuard(){if(scheduleCanManage())return true;toast('Bu alanı yalnızca admin düzenleyebilir.','err');return false;}
 function scheduleHTML(compact=false){
   const D=scheduleData();
   const total=Object.values(D.tasks).reduce((n,arr)=>n+arr.length,0);
   const done=Object.values(D.tasks).flat().filter(t=>t.done).length;
-  const editable=scheduleCanEdit();
+  const editable=scheduleCanEdit(),admin=scheduleCanManage();
   const goals=scheduleGoals();
-  const titleEdit=editable?`contenteditable="true" onblur="scheduleEditMeta('title',this.textContent)"`:'';
-  const subEdit=editable?`contenteditable="true" onblur="scheduleEditMeta('subtitle',this.textContent)"`:'';
+  const shownGoals=goalScopeFilter?goals.filter(g=>(g.scope||'Haftalık')===goalScopeFilter):goals;
+  const titleEdit=admin?`contenteditable="true" onblur="scheduleEditMeta('title',this.textContent)"`:'';
+  const subEdit=admin?`contenteditable="true" onblur="scheduleEditMeta('subtitle',this.textContent)"`:'';
   if(!editable&&scheduleSelectMode){scheduleSelectMode=false;scheduleSelected.clear();}
   return`
     <div class="schedule-meta">
@@ -549,23 +558,22 @@ function scheduleHTML(compact=false){
         <div class="schedule-leg"><span class="schedule-dot blue"></span>Planlı</div>
       </div>
     </div>
+    <div class="filter-bar">
+      ${['','Haftalık','Aylık','3 Aylık','6 Aylık','Yıllık'].map(s=>`<button class="filter-btn ${goalScopeFilter===s?'active':''}" onclick="goalScopeFilter='${s}';scheduleRefresh()">${s||'Tüm Hedefler'}</button>`).join('')}
+    </div>
     <div class="schedule-goals">
-      ${goals.length?goals.map(g=>`<div class="schedule-goal" style="border-left-color:${esc(g.color||'#4f9cf9')}"><strong>${esc(g.title)}</strong>${g.note?`<span>${esc(g.note)}</span>`:''}${editable?`<div class="schedule-goal-actions"><button class="schedule-mini" onclick="scheduleEditGoal('${g.id}')">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemoveGoal('${g.id}')">Sil</button></div>`:''}</div>`).join(''):`<div class="schedule-goal"><strong>Ana hedef yok</strong><span>${editable?'Admin olarak bu haftanın ana hedeflerini ekleyebilirsin.':'Bu hafta için ana hedef girilmemiş.'}</span></div>`}
+      ${shownGoals.length?shownGoals.map(g=>`<div class="schedule-goal" style="border-left-color:${esc(g.color||'#4f9cf9')}"><strong>${esc(g.title)}</strong><span>${esc(g.scope||'Haftalık')}</span>${g.note?`<span>${esc(g.note)}</span>`:''}${admin?`<div class="schedule-goal-actions"><button class="schedule-mini" onclick="scheduleEditGoal('${g.id}')">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemoveGoal('${g.id}')">Sil</button></div>`:''}</div>`).join(''):`<div class="schedule-goal"><strong>Ana hedef yok</strong><span>${admin?'Admin olarak hedefleri dönemlerine göre ekleyebilirsin.':'Bu dönem için ana hedef girilmemiş.'}</span></div>`}
     </div>
     ${editable?`<div class="schedule-tools">
-      <button class="btn btn-primary btn-sm" onclick="scheduleAddGoal()">+ Ana Hedef</button>
-      <button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button>
-      <button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>
+      ${admin?`<button class="btn btn-primary btn-sm" onclick="scheduleAddGoal()">+ Ana Hedef</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="scheduleSelectMode=!scheduleSelectMode;scheduleRefresh()">${scheduleSelectMode?'Seçimi Kapat':'Toplu Seç'}</button>
       ${scheduleSelectMode?`<button class="btn btn-danger btn-sm" onclick="scheduleDeleteSelected()">Seçilenleri Sil (${scheduleSelected.size})</button>`:''}
-      <button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button>
-      <button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button>
-      <button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">Haftayı Sıfırla</button>
+      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button><button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">Haftayı Sıfırla</button>`:''}
     </div>`:''}
     <div class="table-wrap"><table class="schedule-table">
-      <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} ${editable?`<button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button>`:''}</th>`).join('')}</tr></thead>
+      <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} ${admin?`<button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button>`:''}</th>`).join('')}</tr></thead>
       <tbody>${D.persons.map((p,pIdx)=>`<tr>
-        <td class="schedule-person"><strong>${esc(p.name)}</strong><span>${esc(p.role||'')}</span>${editable?`<div class="schedule-person-actions"><button class="schedule-mini" onclick="scheduleEditPerson(${pIdx})">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemovePerson(${pIdx})">Sil</button></div>`:''}</td>
+        <td class="schedule-person"><strong>${esc(p.name)}</strong><span>${esc(p.role||'')}</span>${admin?`<div class="schedule-person-actions"><button class="schedule-mini" onclick="scheduleEditPerson(${pIdx})">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemovePerson(${pIdx})">Sil</button></div>`:''}</td>
         ${D.days.map((_,idx)=>{
           const ck=scheduleCellKey(p.name,idx);
           const tasks=D.tasks[ck]||[];
@@ -574,7 +582,7 @@ function scheduleHTML(compact=false){
       </tr>`).join('')}</tbody>
     </table></div>`;
 }
-async function scheduleEditMeta(field,value){if(!scheduleGuard())return;const r=scheduleMetaRow(),m=scheduleMeta();m[field]=value.trim()||GOREV_CIZELGE[field];r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Başlık güncellendi ✓');}
+async function scheduleEditMeta(field,value){if(!scheduleAdminGuard())return;const r=scheduleMetaRow(),m=scheduleMeta();m[field]=value.trim()||GOREV_CIZELGE[field];r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Başlık güncellendi ✓');}
 function scheduleTaskForm(task={},personIdx=0,dayIndex=0){
   const meta=scheduleTaskMeta(task)||{};
   const goals=scheduleGoals();
@@ -631,22 +639,23 @@ async function scheduleToggleDone(id){if(!scheduleGuard())return;const r=C.Gorev
 async function scheduleCyclePriority(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;const m=scheduleTaskMeta(r)||{},order=['red','amber','teal','blue'];m.priority=order[(order.indexOf(m.priority||S_ON_TO_PRIO[r.oncelik]||'teal')+1)%order.length];r.oncelik=S_PRIO_TO_ON[m.priority]||'Normal';r.aciklama=JSON.stringify({...m,type:S_TASK});await scheduleSaveAndRefresh('');}
 function scheduleGoalForm(g={}){return`
   <div class="form-group"><label>Ana Hedef *</label><input type="text" id="sg-title" value="${esc(g.title||'')}" placeholder="ör: Kabak çekirdeği proses standardizasyonu"></div>
-  <div class="form-row"><div class="form-group"><label>Renk</label><input type="color" id="sg-color" value="${esc(g.color||'#4f9cf9')}"></div>
-  <div class="form-group"><label>Kısa Not</label><input type="text" id="sg-note" value="${esc(g.note||'')}"></div></div>`;}
-function scheduleAddGoal(){if(!scheduleGuard())return;showModal('Yeni Ana Hedef',scheduleGoalForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleSaveGoal()">Kaydet</button>`);}
+  <div class="form-row"><div class="form-group"><label>Dönem</label><select id="sg-scope">${['Haftalık','Aylık','3 Aylık','6 Aylık','Yıllık'].map(s=>`<option ${g.scope===s?'selected':''}>${s}</option>`).join('')}</select></div>
+  <div class="form-group"><label>Renk</label><input type="color" id="sg-color" value="${esc(g.color||'#4f9cf9')}"></div></div>
+  <div class="form-group"><label>Kısa Not</label><input type="text" id="sg-note" value="${esc(g.note||'')}"></div>`;}
+function scheduleAddGoal(){if(!scheduleAdminGuard())return;showModal('Yeni Ana Hedef',scheduleGoalForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleSaveGoal()">Kaydet</button>`);}
 async function scheduleSaveGoal(){
-  if(!scheduleGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
-  const r=scheduleMetaRow(),m=scheduleMeta();m.goals=[...scheduleGoals(),{id:uid(),title,color:document.getElementById('sg-color').value,note:document.getElementById('sg-note').value}];r.aciklama=JSON.stringify(m);
+  if(!scheduleAdminGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
+  const r=scheduleMetaRow(),m=scheduleMeta();m.goals=[...scheduleGoals(),{id:uid(),title,scope:document.getElementById('sg-scope').value,color:document.getElementById('sg-color').value,note:document.getElementById('sg-note').value}];r.aciklama=JSON.stringify(m);
   closeModalDirect();await scheduleSaveAndRefresh('Ana hedef eklendi ✓');
 }
-function scheduleEditGoal(id){if(!scheduleGuard())return;const g=scheduleGoals().find(x=>x.id===id);if(!g)return;showModal('Ana Hedef Düzenle',scheduleGoalForm(g),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleUpdateGoal('${id}')">Güncelle</button>`);}
+function scheduleEditGoal(id){if(!scheduleAdminGuard())return;const g=scheduleGoals().find(x=>x.id===id);if(!g)return;showModal('Ana Hedef Düzenle',scheduleGoalForm(g),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleUpdateGoal('${id}')">Güncelle</button>`);}
 async function scheduleUpdateGoal(id){
-  if(!scheduleGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
-  const r=scheduleMetaRow(),m=scheduleMeta();m.goals=scheduleGoals().map(g=>g.id===id?{...g,title,color:document.getElementById('sg-color').value,note:document.getElementById('sg-note').value}:g);r.aciklama=JSON.stringify(m);
+  if(!scheduleAdminGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
+  const r=scheduleMetaRow(),m=scheduleMeta();m.goals=scheduleGoals().map(g=>g.id===id?{...g,title,scope:document.getElementById('sg-scope').value,color:document.getElementById('sg-color').value,note:document.getElementById('sg-note').value}:g);r.aciklama=JSON.stringify(m);
   closeModalDirect();await scheduleSaveAndRefresh('Ana hedef güncellendi ✓');
 }
 async function scheduleRemoveGoal(id){
-  if(!scheduleGuard()||!confirm('Bu ana hedef silinsin mi? Görevlerdeki bağlantısı da kaldırılır.'))return;
+  if(!scheduleAdminGuard()||!confirm('Bu ana hedef silinsin mi? Görevlerdeki bağlantısı da kaldırılır.'))return;
   const r=scheduleMetaRow(),m=scheduleMeta();m.goals=scheduleGoals().filter(g=>g.id!==id);r.aciklama=JSON.stringify(m);
   C.Gorevler.forEach(row=>{const tm=scheduleTaskMeta(row);if(tm&&tm.goalId===id){delete tm.goalId;row.aciklama=JSON.stringify(tm);}});
   await scheduleSaveAndRefresh('Ana hedef silindi.');
@@ -661,9 +670,9 @@ async function scheduleDropTask(ev,personIdx,dayIndex){
   const m=scheduleTaskMeta(r)||{};m.dayIndex=dayIndex;m.role=p.role||'';r.atanan=p.name;r.tarih=S_DATES[dayIndex]||today();r.basTarih=r.tarih;r.aciklama=JSON.stringify({...m,type:S_TASK});
   await scheduleSaveAndRefresh('Görev taşındı ✓');
 }
-async function scheduleAddPerson(){if(!scheduleGuard())return;const name=prompt('Kişi adı');if(!name)return;const role=prompt('Rol','')||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
+async function scheduleAddPerson(){if(!scheduleAdminGuard())return;const name=prompt('Kişi adı');if(!name)return;const role=prompt('Rol','')||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
 async function scheduleEditPerson(idx){
-  if(!scheduleGuard())return;
+  if(!scheduleAdminGuard())return;
   const D=scheduleData(),old=D.persons[idx];if(!old)return;
   const name=prompt('Kişi adı',old.name);if(!name)return;const role=prompt('Rol',old.role||'')||'',n=name.trim();
   C.Gorevler.forEach(r=>{
@@ -675,10 +684,10 @@ async function scheduleEditPerson(idx){
   });
   await scheduleSaveAndRefresh('Kişi güncellendi ✓');
 }
-async function scheduleRemovePerson(idx){if(!scheduleGuard())return;const D=scheduleData(),p=D.persons[idx];if(!p||!confirm('Bu kişi ve görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
-async function scheduleAddDay(){if(!scheduleGuard())return;const day=prompt('Gün adı');if(!day)return;const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
+async function scheduleRemovePerson(idx){if(!scheduleAdminGuard())return;const D=scheduleData(),p=D.persons[idx];if(!p||!confirm('Bu kişi ve görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
+async function scheduleAddDay(){if(!scheduleAdminGuard())return;const day=prompt('Gün adı');if(!day)return;const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
 async function scheduleRemoveDay(idx){
-  if(!scheduleGuard())return;
+  if(!scheduleAdminGuard())return;
   if(!confirm('Bu gün ve içindeki görevler silinsin mi?'))return;
   const r=scheduleMetaRow(),m=scheduleMeta();m.days.splice(idx,1);r.aciklama=JSON.stringify(m);
   C.Gorevler=C.Gorevler.filter(row=>{
@@ -691,9 +700,9 @@ async function scheduleRemoveDay(idx){
 }
 function scheduleToggleSelect(id){if(!scheduleGuard())return;scheduleSelected.has(id)?scheduleSelected.delete(id):scheduleSelected.add(id);scheduleRefresh();}
 async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.size===0)return;if(!confirm(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
-async function scheduleClearTasks(){if(!scheduleGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
-async function scheduleClearPeopleAndTasks(){if(!scheduleGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
-async function scheduleResetWeek(){if(!scheduleGuard()||!confirm('Çizelge varsayılan haftalık içerikle sıfırlansın mı?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('Haftalık çizelge sıfırlandı ✓');}
+async function scheduleClearTasks(){if(!scheduleAdminGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
+async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
+async function scheduleResetWeek(){if(!scheduleAdminGuard()||!confirm('Çizelge varsayılan haftalık içerikle sıfırlansın mı?'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsRow(r));C.Gorevler.push(...scheduleDefaultRows());scheduleSelected.clear();scheduleSelectMode=false;await scheduleSaveAndRefresh('Haftalık çizelge sıfırlandı ✓');}
 
 // ── BİLDİRİMLER ──
 function bildirim(){
@@ -900,6 +909,55 @@ function metodDuzenle(id){const m=C.Metodlar.find(x=>x.id===id);if(!m)return;sho
 async function metodGuncelle(id){const v=metodOku();if(!v)return;const idx=C.Metodlar.findIndex(x=>x.id===id);C.Metodlar[idx]={...C.Metodlar[idx],...v};closeModalDirect();loading(true,'Güncelleniyor...');try{await save('Metodlar');loading(false);toast('Güncellendi ✓');renderMetod(mAra,mTur,mKat);}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
 function metodDetay(id){const m=C.Metodlar.find(x=>x.id===id);if(!m)return;showModal(m.baslik,`<div class="mb-16"><span class="badge ${m.tur==='Standart Metod'?'badge-blue':'badge-green'}">${esc(m.tur)}</span> <span class="badge badge-gray">${esc(m.kategori||'Genel')}</span></div><table style="width:100%;font-size:13px;border-collapse:collapse">${[['Kod',m.kod],['Kaynak',m.kaynak],['Hammadde/Matris',m.hammadde],['Not',m.not]].map(([k,v])=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 0;color:var(--text3);width:140px;font-family:var(--mono);font-size:11px">${k}</td><td style="padding:8px 0;color:var(--text)">${esc(v||'—')}</td></tr>`).join('')}</table><label>Adımlar</label><div style="white-space:pre-wrap;line-height:1.55;color:var(--text2)">${esc(m.adimlar)}</div>`,`<button class="btn btn-primary" onclick="closeModalDirect()">Kapat</button>`);}
 async function metodSil(id){if(!confirm('Bu metod/izlek silinsin mi?'))return;C.Metodlar=C.Metodlar.filter(x=>x.id!==id);loading(true);try{await save('Metodlar');loading(false);toast('Silindi.','err');renderMetod(mAra,mTur,mKat);}catch(e){loading(false);toast('Hata: '+e.message,'err');}}
+
+// ── SÜPERKRİTİK CO2 ──
+function sfe(){
+  document.getElementById('topbar-actions').innerHTML='';
+  document.getElementById('content').innerHTML=`
+    <div class="grid-2 gap-16">
+      <div class="card"><div class="card-header"><span class="card-title">Proses Girdileri</span></div>
+        <div class="form-row"><div class="form-group"><label>Basınç (bar)</label><input type="number" id="sfe-p" value="250" step="any" oninput="sfeCalc()"></div>
+        <div class="form-group"><label>Sıcaklık (°C)</label><input type="number" id="sfe-t" value="45" step="any" oninput="sfeCalc()"></div></div>
+        <div class="form-row"><div class="form-group"><label>CO₂ Debisi (g/dk)</label><input type="number" id="sfe-flow" value="30" step="any" oninput="sfeCalc()"></div>
+        <div class="form-group"><label>Ekstraksiyon Süresi (dk)</label><input type="number" id="sfe-time" value="120" step="any" oninput="sfeCalc()"></div></div>
+        <div class="form-row"><div class="form-group"><label>Hammadde Miktarı (g)</label><input type="number" id="sfe-feed" value="500" step="any" oninput="sfeCalc()"></div>
+        <div class="form-group"><label>Beklenen Verim (%)</label><input type="number" id="sfe-yield" value="8" step="any" oninput="sfeCalc()"></div></div>
+        <div class="form-row"><div class="form-group"><label>Co-solvent (%)</label><input type="number" id="sfe-cos" value="0" step="any" oninput="sfeCalc()"></div>
+        <div class="form-group"><label>CO₂ Geri Kazanım (%)</label><input type="number" id="sfe-rec" value="85" step="any" oninput="sfeCalc()"></div></div>
+        <div class="form-row"><div class="form-group"><label>CO₂ Yoğunluğu (g/mL)</label><input type="number" id="sfe-rho" value="0.8" step="any" oninput="sfeCalc()"></div>
+        <div class="form-group"><label>Ekstraktör Hacmi (L)</label><input type="number" id="sfe-vol" value="2" step="any" oninput="sfeCalc()"></div></div>
+        <div class="form-row"><div class="form-group"><label>Yatak Porozitesi</label><input type="number" id="sfe-eps" value="0.4" step="any" oninput="sfeCalc()"></div></div>
+      </div>
+      <div class="card"><div class="card-header"><span class="card-title">Hesap Sonuçları</span></div>
+        <div id="sfe-result"></div>
+      </div>
+    </div>
+    <div class="card mt-16"><div class="card-header"><span class="card-title">Model Notu</span></div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6">
+        Bu hesaplayıcı proses planlama içindir. CO₂ kritik noktası 31.1 °C ve yaklaşık 73.8 bar kabul edilir. Yoğunluk gerçek gaz davranışına bağlıdır; hassas çalışma için NIST/WebBook veya paylaşacağın referans sitedeki yoğunluk değeri girilmelidir.
+      </div>
+    </div>`;
+  sfeCalc();
+}
+function sfeNum(id){return parseFloat(document.getElementById(id).value)||0;}
+function sfeCalc(){
+  const p=sfeNum('sfe-p'),t=sfeNum('sfe-t'),flow=sfeNum('sfe-flow'),time=sfeNum('sfe-time'),feed=sfeNum('sfe-feed'),y=sfeNum('sfe-yield'),cos=sfeNum('sfe-cos'),rec=sfeNum('sfe-rec'),rho=sfeNum('sfe-rho'),vol=sfeNum('sfe-vol'),eps=sfeNum('sfe-eps');
+  const sc=t>=31.1&&p>=73.8,co2g=flow*time,co2kg=co2g/1000,feedkg=feed/1000,sf=feedkg>0?co2kg/feedkg:0,extract=feed*y/100,fresh=co2kg*(1-rec/100),cosolvent=co2kg*cos/100;
+  const qml=rho>0?flow/rho:0,voidMl=vol*1000*eps,res=qml>0?voidMl/qml:0;
+  document.getElementById('sfe-result').innerHTML=`
+    <div class="mb-16"><span class="badge ${sc?'badge-green':'badge-red'}">${sc?'Süperkritik bölgede':'Süperkritik değil'}</span></div>
+    <div class="grid-2 gap-12">
+      ${[
+        ['Toplam CO₂',co2kg.toFixed(2)+' kg'],
+        ['Taze CO₂ ihtiyacı',fresh.toFixed(2)+' kg'],
+        ['Solvent/Hammadde',sf.toFixed(1)+' kg/kg'],
+        ['Tahmini ekstrakt',extract.toFixed(1)+' g'],
+        ['Co-solvent miktarı',cosolvent.toFixed(2)+' kg'],
+        ['Yaklaşık residence time',res.toFixed(1)+' dk']
+      ].map(([l,v])=>`<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value stat-blue" style="font-size:24px">${v}</div></div>`).join('')}
+    </div>
+    ${!sc?'<div class="alert alert-amber mt-16">CO₂ için kritik sıcaklık ve basınç eşiğinin altında kalıyorsun. Süperkritik ekstraksiyon için iki koşul da sağlanmalı.</div>':''}`;
+}
 
 // ── ÇIKTI ──
 let cAra='';

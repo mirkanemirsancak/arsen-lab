@@ -31,6 +31,10 @@ Guncelleme oncesi ana dosyalar bu lokal calisma alaninda `backups/` klasorune ko
 - Admin panelden ekibe veya kisiye bildirim gonderebilir; istege bagli olarak kullanicinin kurumsal e-posta adresine Apps Script uzerinden mail gider.
 - Cizelgeye yeni gorev eklenirken atanan kisiye popup ve opsiyonel e-posta bildirimi gonderilir. Ekstra mesai onay/red islemlerinde de kullanici bilgilendirilir.
 - Bildirimler backend tarafinda kullaniciya gore filtrelenir; kullanici yalnizca kendi bildirimlerini okundu yapabilir.
+- Kayit islemleri ekrani bekletmeden arka planda siraya alinir; acik sheet yazimi bitene kadar otomatik senkronizasyon o modulu ezmez. Bu, ozellikle cizelgede kisi/gorev silme ve ekleme islemlerini anlik hale getirir.
+- Cizelgede gorev ekleme, silme, duzenleme ve tasima tum giris yapmis kullanicilara acildi; kisi/gun/ana hedef yapisini yonetme yetkisi adminde kalir.
+- Ana hedefler `Haftalik`, `Aylik`, `3 Aylik`, `6 Aylik` ve `Yillik` donemlerine ayrildi ve cizelge uzerinden filtrelenebilir hale getirildi.
+- `Superkritik CO2` hesaplayici sekmesi eklendi. CO2 kritik bolge kontrolu, CO2 tuketimi, solvent/hammadde orani, tahmini ekstrakt, co-solvent ve residence time hesaplari yapilir.
 
 ## Not
 
