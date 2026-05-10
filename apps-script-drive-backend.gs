@@ -16,7 +16,12 @@ var DEFAULT_SHEET_HEADERS = {
   Gorevler: ['id','company','baslik','kategori','atanan','atayan','tarih','basTarih','bitisTarih','oncelik','durum','aciklama','kullanici'],
   GunlukLog: ['id','company','kullanici','kullaniciAd','tarih','kategori','baslik','icerik','duzenlendi','duzenlemeTarihi'],
   IletisimKisileri: ['id','company','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
-  Bildirimler: ['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi']
+  Bildirimler: ['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi'],
+  SynProjeler: ['id','company','projeKodu','musteri','projeAdi','arsenSorumlu','syntegraSorumlu','asama','durum','oncelik','baslangic','hedefTermin','butce','gercekMaliyet','ilerleme','sartnameLink','cizimLink','sozlesmeLink','not','olusturan','guncelleme'],
+  SynTimeline: ['id','company','projeId','isKalemi','asama','sorumlu','baslangic','bitis','bagimliIs','durum','ilerleme','risk','not','kullanici'],
+  SynSatinalma: ['id','company','projeId','kalem','tedarikci','miktar','birim','butce','teklif','gercekMaliyet','paraBirimi','termin','durum','evrakLink','not','kullanici'],
+  SynMaliyet: ['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
+  SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici']
 };
 
 function json(result) {
