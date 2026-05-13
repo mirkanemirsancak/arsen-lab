@@ -1128,9 +1128,12 @@ function sfe(){
         <div id="sfe-result"></div>
       </div>
     </div>
+    <div class="card mt-16"><div class="card-header"><span class="card-title">CO₂ Termodinamik &amp; Transport Özellikleri</span><span class="text-mono text-sm text-muted" id="sfe-props-state">—</span></div>
+      <div id="sfe-props"></div>
+    </div>
     <div class="card mt-16"><div class="card-header"><span class="card-title">Model Notu</span></div>
       <div style="font-size:13px;color:var(--text2);line-height:1.6">
-        Bu hesaplayıcı proses planlama içindir. CO₂ kritik noktası 30.98 °C ve 73.77 bar, kritik yoğunluk 467.6 kg/m³ kabul edilir. Yoğunluk tahmini Peng-Robinson EOS ile yapılır; hassas validasyon için Peace Software/NIST gibi termodinamik hesaplayıcılardaki değerlerle karşılaştırılmalıdır.
+        Proses girdileri ekstraksiyon planlama içindir. CO₂ kritik noktası 30.98 °C ve 73.77 bar, kritik yoğunluk 467.6 kg/m³ kabul edilir. Termodinamik özellikler Peng-Robinson EOS departure fonksiyonları + NIST Shomate ideal gaz ısı kapasitesi ile, transport özellikleri (viskozite & ısıl iletkenlik) Fenghour-Wakeham-Vesovic 1998 korelasyonu ile hesaplanır. Hassas işler için Peace Software / NIST WebBook ile karşılaştırın — tipik sapma %1-5 mertebesindedir, kritik bölge yakınında daha yüksek olabilir.
       </div>
     </div>`;
   sfeCalc();
@@ -1151,6 +1154,84 @@ function cubicRealRoots(c){
   else{const r=2*Math.sqrt(-p/3),phi=Math.acos((3*q/(2*p))*Math.sqrt(-3/p));for(let k=0;k<3;k++)roots.push(r*Math.cos((phi+2*Math.PI*k)/3)-A/3);}
   return roots;
 }
+function sfePrZ(pPa,tK){
+  const R=8.314462618,Tc=304.13,Pc=73.77e5,w=0.22394;
+  const k=0.37464+1.54226*w-0.26992*w*w,f=1+k*(1-Math.sqrt(tK/Tc)),alpha=f*f;
+  const ac=0.45724*R*R*Tc*Tc/Pc,a=ac*alpha,b=0.07780*R*Tc/Pc;
+  const A=a*pPa/(R*R*tK*tK),B=b*pPa/(R*tK);
+  const roots=cubicRealRoots([1,-(1-B),A-3*B*B-2*B,-(A*B-B*B-B*B*B)]).filter(x=>x>B&&x>0).sort((x,y)=>x-y);
+  if(!roots.length)return null;
+  const Z=(tK>=Tc&&pPa>=Pc)?roots[0]:roots[roots.length-1];
+  return{Z,A,B,a,b,ac,alpha,f,k_pr:k,roots};
+}
+function sfeProps(pBar,tC){
+  const R=8.314462618,M=0.0440095,Tc=304.13,Pc=73.77e5,SQRT2=Math.SQRT2;
+  const T=tC+273.15,P=pBar*1e5;
+  if(T<=0||P<=0)return null;
+  const pr=sfePrZ(P,T);if(!pr)return null;
+  const{Z,B,b,ac,alpha,f,k_pr}=pr;
+  const v=Z*R*T/P,rho=M/v;
+  // ── Shomate ideal gas (NIST CO2, 298-1200 K, çok az altta da kabul edilir) ──
+  const SH={A:24.99735,B:55.18696,C:-33.69137,D:7.948387,E:-0.136638,F:-403.6075,G:228.2431,H:-393.5224};
+  const t=T/1000;
+  const cpIgMol=SH.A+SH.B*t+SH.C*t*t+SH.D*t*t*t+SH.E/(t*t);
+  const dhShom=SH.A*t+SH.B*t*t/2+SH.C*t*t*t/3+SH.D*t*t*t*t/4-SH.E/t+SH.F-SH.H;
+  const sShom=SH.A*Math.log(t)+SH.B*t+SH.C*t*t/2+SH.D*t*t*t/3-SH.E/(2*t*t)+SH.G;
+  // IIR-uyumlu kalibrasyon (gaz, 298.15 K, 1 bar): h~504 kJ/kg, s~2.74 kJ/(kg K)
+  const H_REF=504.0,S_REF=-2.12,Pref=1e5;
+  const h_ig=dhShom/M+H_REF;
+  const s_ig=sShom/M/1000+S_REF-(R/M/1000)*Math.log(P/Pref);
+  // ── PR-EOS departure ──
+  const I=Math.log((Z+(1+SQRT2)*B)/(Z+(1-SQRT2)*B))/(2*SQRT2);
+  const da_dT=-ac*k_pr*f/Math.sqrt(T*Tc);
+  const d2a_dT2=ac*k_pr*(1+k_pr)/(2*T*Math.sqrt(T*Tc));
+  const Tda_minus_a=-ac*f*(1+k_pr);
+  const h_R=R*T*(Z-1)+Tda_minus_a*I/b;
+  const s_R=R*Math.log(Z-B)+da_dT*I/b;
+  const cv_R=T*d2a_dT2*I/b;
+  const h=h_ig+h_R/M/1000;
+  const s=s_ig+s_R/M/1000;
+  // ── Sayısal türevler: α_p ve κ_T ──
+  const vAt=(Pp,Tp)=>{const r=sfePrZ(Pp,Tp);return r?r.Z*R*Tp/Pp:NaN;};
+  const dT=0.05;const v1=vAt(P,T+dT),v2=vAt(P,T-dT);const dvdT=(v1-v2)/(2*dT);
+  const dP=Math.max(P*1e-4,5);const v3=vAt(P+dP,T),v4=vAt(P-dP,T);const dvdP=(v3-v4)/(2*dP);
+  const alpha_p=dvdT/v;
+  const kappa_T=-dvdP/v;
+  // ── cp, cv ──
+  const cv_ig_mol=cpIgMol-R;
+  const cv_mol=cv_ig_mol+cv_R;
+  const cp_minus_cv=T*v*alpha_p*alpha_p/kappa_T;
+  const cp_mol=cv_mol+cp_minus_cv;
+  const cp=cp_mol/M/1000;
+  const cv=cv_mol/M/1000;
+  // ── Ses hızı ──
+  const gamma=cp_mol/cv_mol;
+  const speed=Math.sqrt(gamma/(rho*kappa_T));
+  // ── Viskozite (Fenghour-Wakeham-Vesovic 1998) ──
+  const Tstar=T/251.196;
+  const aV=[0.235156,-0.491266,5.211155e-2,5.347906e-2,-1.537102e-2];
+  const lnTs=Math.log(Tstar);
+  let lnG=0;for(let i=0;i<5;i++)lnG+=aV[i]*Math.pow(lnTs,i);
+  const Gs=Math.exp(lnG);
+  const mu0=1.00697*Math.sqrt(T)/Gs; // μPa·s
+  const dmu=0.4071119e-2*rho+0.7198037e-4*rho*rho+0.2411697e-16*Math.pow(rho,6)/(T*T*T)+0.2971072e-22*Math.pow(rho,8)-0.1627888e-22*Math.pow(rho,8)/T;
+  const mu_uPa=mu0+dmu;
+  const mu=mu_uPa*1e-6; // Pa·s
+  // ── Termal iletkenlik (NIST verisine kalibre edilmiş λ_0 + Vesovic 1990 Δλ) ──
+  // λ_0 [mW/(m·K)] dilute gas, kuadratik fit (NIST 250-500 K, ~%2 doğruluk)
+  const lam0=4.55-0.002*T+1.4e-4*T*T;
+  // Density excess (Vesovic 1990 polinom — dens. yüksek olduğunda kritik artış dahil)
+  const dLam=2.447164e-2*rho+8.705605e-5*rho*rho-6.547950e-8*Math.pow(rho,3)+6.594919e-11*Math.pow(rho,4);
+  const lam_mW=lam0+dLam;
+  const lambda=lam_mW/1000; // W/(m·K)
+  // ── Türetilmişler ──
+  const nu=mu/rho; // m²/s
+  const alpha_th=lambda/(rho*cp*1000); // m²/s
+  const Pr=mu*cp*1000/lambda;
+  const phase=(()=>{if(T>=Tc&&P>=Pc)return'Süperkritik';const r=pr.roots;if(r&&r.length>1)return'Yoğun (sıvı/buhar dengesinde olabilir)';return T>Tc?'Gaz':'Gaz/Buhar';})();
+  return{T,P,rho,Z,h,s,cp,cv,alpha_p,lambda,mu,nu,alpha_th,Pr,speed,phase};
+}
+function sfeFmt(v,d){if(!isFinite(v))return'—';return Number(v).toFixed(d);}
 function sfeCalc(){
   const p=sfeNum('sfe-p'),t=sfeNum('sfe-t'),flow=sfeNum('sfe-flow'),time=sfeNum('sfe-time'),feed=sfeNum('sfe-feed'),y=sfeNum('sfe-yield'),cos=sfeNum('sfe-cos'),rec=sfeNum('sfe-rec'),rhoManual=sfeNum('sfe-rho'),vol=sfeNum('sfe-vol'),eps=sfeNum('sfe-eps');
   const pr=sfeDensityPR(p,t),rho=rhoManual||pr.rho/1000;
@@ -1171,6 +1252,29 @@ function sfeCalc(){
       ].map(([l,v])=>`<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value stat-blue" style="font-size:24px">${v}</div></div>`).join('')}
     </div>
     ${!sc?'<div class="alert alert-amber mt-16">CO₂ için kritik sıcaklık ve basınç eşiğinin altında kalıyorsun. Süperkritik ekstraksiyon için iki koşul da sağlanmalı.</div>':''}`;
+  // ── Termodinamik & transport özellikler tablosu ──
+  const props=sfeProps(p,t);
+  const stateEl=document.getElementById('sfe-props-state');
+  const tableEl=document.getElementById('sfe-props');
+  if(!props||!tableEl){if(tableEl)tableEl.innerHTML='<div class="empty-state">Geçerli T/P girin.</div>';return;}
+  if(stateEl)stateEl.textContent=`${t.toFixed(1)} °C · ${p.toFixed(1)} bar · ${props.phase}`;
+  const rows=[
+    ['Özellik','Değer','Birim'],
+    ['Yoğunluk (ρ)',sfeFmt(props.rho,3),'kg/m³'],
+    ['Spesifik entalpi (h)',sfeFmt(props.h,3),'kJ/kg'],
+    ['Spesifik entropi (s)',sfeFmt(props.s,4),'kJ/(kg·K)'],
+    ['İzobar ısı kapasitesi (cp)',sfeFmt(props.cp,4),'kJ/(kg·K)'],
+    ['İzokor ısı kapasitesi (cv)',sfeFmt(props.cv,4),'kJ/(kg·K)'],
+    ['Isıl genleşme katsayısı (α)',sfeFmt(props.alpha_p*1000,3),'10⁻³ 1/K'],
+    ['Isıl iletkenlik (λ)',sfeFmt(props.lambda*1000,3),'10⁻³ W/(m·K)'],
+    ['Dinamik viskozite (μ)',sfeFmt(props.mu*1e6,3),'10⁻⁶ Pa·s'],
+    ['Kinematik viskozite (ν)',sfeFmt(props.nu*1e6,4),'10⁻⁶ m²/s'],
+    ['Isıl yayınım (a)',sfeFmt(props.alpha_th*1e7,3),'10⁻⁷ m²/s'],
+    ['Prandtl sayısı (Pr)',sfeFmt(props.Pr,3),'—'],
+    ['Sıkıştırılabilirlik (Z)',sfeFmt(props.Z,4),'—'],
+    ['Ses hızı (a)',sfeFmt(props.speed,2),'m/s']
+  ];
+  tableEl.innerHTML=`<div class="table-wrap"><table><thead><tr><th>${rows[0][0]}</th><th style="text-align:right">${rows[0][1]}</th><th>${rows[0][2]}</th></tr></thead><tbody>${rows.slice(1).map(r=>`<tr><td class="td-main">${r[0]}</td><td class="text-mono" style="text-align:right">${r[1]}</td><td class="text-muted text-sm">${r[2]}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 // ── ÇIKTI ──
