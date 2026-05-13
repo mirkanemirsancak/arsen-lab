@@ -4,11 +4,14 @@ var OVERTIME_SHEET_NAME = 'Mesai';
 var OVERTIME_HEADERS = ['id','company','kullanici','kullaniciAd','tarih','baslangic','bitis','molaDakika','toplamSaat','aciklama','durum','olusturma','onaylayan','onayTarihi','adminNot'];
 var TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 var COMPANIES = ['fuwell', 'syntegra'];
+var KURUMS = ['arsen', 'fuwell', 'syntegra'];
+var UMBRELLA_KURUM = 'arsen';
 var DEFAULT_SHEET_HEADERS = {
-  Users: ['id','username','passwordHash','role','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Users: ['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma'],
   Stok: ['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
   StokHareketleri: ['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
   Metodlar: ['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
+  Cikti: ['id','company','batchId','ad','hammadde','hammaddeMiktar','hammaddeBirim','ciktiMiktar','ciktiBirim','tarih','operator','kosullar','not','kullanici'],
   Analiz: ['id','company','numuneId','numune','tur','yontem','sonuc','birim','tarih','analist','batchId','not','kullanici'],
   Ekipman: ['id','company','ad','model','seriNo','lab','konum','kalibrasyonTarihi','kalibrasyonFrekans','bakimTarihi','sorumlu','durum','not','kullanici'],
   KalibTarihce: ['id','company','ekipmanId','ekipmanAd','tarih','yapan','not','kullanici'],
@@ -16,7 +19,8 @@ var DEFAULT_SHEET_HEADERS = {
   Gorevler: ['id','company','baslik','kategori','atanan','atayan','tarih','basTarih','bitisTarih','oncelik','durum','aciklama','kullanici'],
   GunlukLog: ['id','company','kullanici','kullaniciAd','tarih','kategori','baslik','icerik','duzenlendi','duzenlemeTarihi'],
   IletisimKisileri: ['id','company','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
-  Bildirimler: ['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi'],
+  Bildirimler: ['id','company','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi'],
+  DuzenlemeLoglari: ['id','company','modul','kayitId','kullanici','tarih','onceki','sonraki'],
   SynProjeler: ['id','company','projeKodu','musteri','projeAdi','arsenSorumlu','syntegraSorumlu','asama','durum','oncelik','baslangic','hedefTermin','butce','gercekMaliyet','ilerleme','sartnameLink','cizimLink','sozlesmeLink','not','olusturan','guncelleme'],
   SynTimeline: ['id','company','projeId','isKalemi','asama','sorumlu','baslangic','bitis','bagimliIs','durum','ilerleme','risk','not','kullanici'],
   SynSatinalma: ['id','company','projeId','kalem','tedarikci','miktar','birim','butce','teklif','gercekMaliyet','paraBirimi','termin','durum','evrakLink','not','kullanici'],
@@ -37,15 +41,29 @@ function normalizeCompany(company) {
   return COMPANIES.indexOf(company) >= 0 ? company : 'fuwell';
 }
 
+function normalizeKurum(kurum) {
+  kurum = String(kurum || '').trim().toLowerCase();
+  return KURUMS.indexOf(kurum) >= 0 ? kurum : '';
+}
+
+function userKurum(user) {
+  var k = normalizeKurum(user.kurum);
+  if (k) return k;
+  // Backwards-compat: if kurum not set, infer from role + companyAccess.
+  // admin without explicit kurum → Arşen şemsiyesi (oversight); regular user → defaultCompany or first allowed company.
+  if (user.role === 'admin') return UMBRELLA_KURUM;
+  var raw = String(user.companyAccess || '').trim().toLowerCase();
+  if (raw.indexOf(',') >= 0) return UMBRELLA_KURUM; // had multi-company access
+  var def = normalizeCompany(user.defaultCompany || raw || 'fuwell');
+  return def;
+}
+
+function isUmbrella(user) { return userKurum(user) === UMBRELLA_KURUM; }
+
 function companyAccess(user) {
-  var raw = String(user.companyAccess || '').trim();
-  if (user.role === 'admin' && (!raw || raw === 'all')) return COMPANIES.slice();
-  var parts = raw.split(','), out = [];
-  for (var i = 0; i < parts.length; i++) {
-    var c = normalizeCompany(parts[i]);
-    if (out.indexOf(c) < 0) out.push(c);
-  }
-  return out.length ? out : ['fuwell'];
+  if (isUmbrella(user)) return COMPANIES.slice();
+  var k = userKurum(user);
+  return COMPANIES.indexOf(k) >= 0 ? [k] : ['fuwell'];
 }
 
 function requireCompany(user, company) {
@@ -148,16 +166,18 @@ function activeEmails() {
 }
 
 function publicUser(user) {
-  var access = String(user.companyAccess || '').trim();
-  if (!access) access = user.role === 'admin' ? 'all' : 'fuwell';
-  var def = normalizeCompany(user.defaultCompany || 'fuwell');
+  var kurum = userKurum(user);
+  var accessList = (kurum === UMBRELLA_KURUM) ? COMPANIES.slice() : [(COMPANIES.indexOf(kurum) >= 0 ? kurum : 'fuwell')];
+  var def = normalizeCompany(user.defaultCompany || accessList[0]);
+  if (accessList.indexOf(def) < 0) def = accessList[0];
   return {
     id: user.id || '',
     username: user.username || '',
     role: user.role || 'user',
+    kurum: kurum,
     ad: user.ad || user.username || '',
     email: normEmail(user.email),
-    companyAccess: access,
+    companyAccess: accessList.join(','),
     defaultCompany: def,
     active: user.active === true || user.active === 'true' ? 'true' : 'false',
     olusturma: user.olusturma || ''
@@ -385,6 +405,7 @@ function appendNotification(target, data, user) {
   }
   var row = {
     id: Utilities.getUuid().replace(/-/g, '').substring(0, 14),
+    company: normalizeCompany(data.company || 'fuwell'),
     kime: target.username,
     baslik: data.baslik || 'Bildirim',
     mesaj: data.mesaj || '',
@@ -405,18 +426,22 @@ function createNotification(data, user) {
   if (user.role !== 'admin') throw new Error('Bildirim gondermek icin admin yetkisi gerekli.');
   var company = requireCompany(user, data.company);
   if (!data.baslik || !data.mesaj) throw new Error('Bildirim basligi ve mesaji gerekli.');
+  var sender_isUmbrella = isUmbrella(user);
   var recipients = data.recipients || [];
   var targets = [];
   if (recipients.indexOf('all') >= 0) targets = activeUsers().filter(function(u) { return companyAccess(u).indexOf(company) >= 0; });
   else {
     for (var i = 0; i < recipients.length; i++) {
       var target = findUser(recipients[i]);
-      if (target && (target.active === true || target.active === 'true')) targets.push(target);
+      if (!target || !(target.active === true || target.active === 'true')) continue;
+      // Sub-firm admin can only message users who have access to this company.
+      if (!sender_isUmbrella && companyAccess(target).indexOf(company) < 0) continue;
+      targets.push(target);
     }
   }
   if (!targets.length) throw new Error('Gecerli alici bulunamadi.');
   var created = [];
-  for (var j = 0; j < targets.length; j++) created.push(appendNotification(targets[j], data, user));
+  for (var j = 0; j < targets.length; j++) created.push(appendNotification(targets[j], { company: company, baslik: data.baslik, mesaj: data.mesaj, tur: data.tur, sayfa: data.sayfa, kayitId: data.kayitId, sendEmail: data.sendEmail }, user));
   return { ok: true, created: created.length };
 }
 
@@ -548,6 +573,7 @@ function writeOvertimeRows(rows) {
   var sh = overtimeSheet();
   sh.clearContents();
   sh.getRange(1, 1, values.length, OVERTIME_HEADERS.length).setValues(values);
+  _bumpBatchVersion();
 }
 
 function listOvertime(user, company) {
