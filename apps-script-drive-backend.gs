@@ -54,35 +54,72 @@ function requireCompany(user, company) {
   return company;
 }
 
+// ── Request-scoped caching (module level, re-used by V8 isolate when possible) ──
+var __SS = null;
+var __SHEETS = {};
+var __HDR_VERIFIED = {};
+
+function _ss() {
+  if (!__SS) __SS = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return __SS;
+}
+
 function ensureHeaders(sh, headers) {
   if (!headers || !headers.length) return;
+  var name = sh.getName();
+  if (__HDR_VERIFIED[name]) return;
+  // Cross-request flag in CacheService — once verified we don't re-check for an hour
+  try {
+    var c = CacheService.getScriptCache();
+    if (c.get('hdr_' + name)) { __HDR_VERIFIED[name] = true; return; }
+  } catch (e) {}
   if (sh.getLastRow() === 0 || !sh.getRange(1, 1).getValue()) {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]);
-    return;
-  }
-  var current = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(function(h) { return String(h || ''); });
-  var changed = false;
-  for (var i = 0; i < headers.length; i++) {
-    if (current.indexOf(headers[i]) < 0) {
-      current.push(headers[i]);
-      changed = true;
+  } else {
+    var current = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(function(h) { return String(h || ''); });
+    var changed = false;
+    for (var i = 0; i < headers.length; i++) {
+      if (current.indexOf(headers[i]) < 0) { current.push(headers[i]); changed = true; }
     }
+    if (changed) sh.getRange(1, 1, 1, current.length).setValues([current]);
   }
-  if (changed) sh.getRange(1, 1, 1, current.length).setValues([current]);
+  __HDR_VERIFIED[name] = true;
+  try { CacheService.getScriptCache().put('hdr_' + name, '1', 3600); } catch (e) {}
 }
 
 function sheetByName(name) {
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  if (__SHEETS[name]) return __SHEETS[name];
+  var ss = _ss();
   var sh = ss.getSheetByName(name);
   var headers = DEFAULT_SHEET_HEADERS[name];
   if (!sh && headers) {
     sh = ss.insertSheet(name);
     sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    __SHEETS[name] = sh;
+    __HDR_VERIFIED[name] = true;
     return sh;
   }
   if (!sh) throw new Error('Sheet bulunamadi: ' + name);
   ensureHeaders(sh, headers);
+  __SHEETS[name] = sh;
   return sh;
+}
+
+// ── Cross-request batch cache (CacheService, invalidated on writes) ──
+function _batchVersion() {
+  try {
+    var c = CacheService.getScriptCache();
+    var v = c.get('bv');
+    if (!v) { v = '1'; c.put('bv', v, 21600); }
+    return v;
+  } catch (e) { return '0'; }
+}
+function _bumpBatchVersion() {
+  try {
+    var c = CacheService.getScriptCache();
+    var cur = parseInt(c.get('bv') || '0', 10) + 1;
+    c.put('bv', String(cur), 21600);
+  } catch (e) {}
 }
 
 function rowsFromSheet(name) {
@@ -240,12 +277,29 @@ function readSheet(name, user, company) {
 }
 
 function readSheets(names, user, company) {
+  var normCompany = normalizeCompany(company);
+  var key = 'br_' + (user.username || '') + '_' + normCompany + '_' + _batchVersion() + '_' + names.length;
+  var cache = null;
+  try { cache = CacheService.getUserCache(); } catch (e) {}
+  if (cache) {
+    var hit = cache.get(key);
+    if (hit) {
+      try { return JSON.parse(hit); } catch (e) {}
+    }
+  }
   var result = {};
   for (var i = 0; i < names.length; i++) {
     var name = String(names[i] || '');
     if (name) result[name] = readSheet(name, user, company).values;
   }
-  return { valuesBySheet: result };
+  var out = { valuesBySheet: result };
+  if (cache) {
+    try {
+      var s = JSON.stringify(out);
+      if (s.length < 95000) cache.put(key, s, 25);
+    } catch (e) {}
+  }
+  return out;
 }
 
 function writeSheet(name, values, user, company) {
@@ -279,6 +333,7 @@ function writeSheet(name, values, user, company) {
   }
   sh.clearContents();
   if (values && values.length) sh.getRange(1, 1, values.length, values[0].length).setValues(values);
+  _bumpBatchVersion();
   return { ok: true };
 }
 
@@ -301,6 +356,7 @@ function markNotificationsRead(data, user) {
   var sh = sheetByName('Bildirimler');
   sh.clearContents();
   if (values.length) sh.getRange(1, 1, values.length, headers.length).setValues(values);
+  _bumpBatchVersion();
   return { ok: true };
 }
 
@@ -341,6 +397,7 @@ function appendNotification(target, data, user) {
     emailGonderildi: emailSent
   };
   sheetByName('Bildirimler').appendRow(headers.map(function(h) { return row[h] || ''; }));
+  _bumpBatchVersion();
   return row;
 }
 
