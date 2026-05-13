@@ -153,6 +153,11 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .flex{display:flex;}.items-center{align-items:center;}.justify-between{justify-content:space-between;}
 .gap-8{gap:8px;}.gap-12{gap:12px;}.gap-16{gap:16px;}.mb-8{margin-bottom:8px;}.mb-16{margin-bottom:16px;}.mb-24{margin-bottom:24px;}.mt-8{margin-top:8px;}.mt-16{margin-top:16px;}
 .text-muted{color:var(--text2);}.text-sm{font-size:12px;}.text-mono{font-family:var(--mono);}.w-full{width:100%;}
+.company-badge{display:none;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;background:rgba(var(--tint),0.05);border:1px solid var(--company-color,var(--accent));color:var(--company-color,var(--accent));font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);white-space:nowrap;}
+.company-badge.show{display:inline-flex;}
+.company-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--company-color,var(--accent));box-shadow:0 0 0 3px rgba(var(--tint),0.08);}
+.kurum-badge{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-top:6px;padding:2px 8px;border:1px solid var(--border);border-radius:999px;}
+.kurum-badge.arsen{color:var(--accent);border-color:var(--accent);}
 .theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:34px;height:34px;border-radius:999px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;transition:transform .25s ease,color .2s,border-color .2s,background-color .2s,box-shadow .2s;font-size:15px;line-height:1;}
 .theme-toggle:hover{color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px var(--ring);}
 .theme-toggle:active{transform:scale(0.94);}
@@ -238,11 +243,12 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-mark.png?v=6" alt="Arşen Process"></div>
-    <div class="sidebar-user"><span>Oturum</span><strong id="sidebar-username">—</strong><span id="sidebar-role" class="badge badge-blue" style="margin-top:4px;font-size:10px;"></span><select id="company-select" onchange="switchCompany(this.value)" style="display:none;margin-top:10px;width:100%;height:32px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 8px;font-size:12px"></select></div>
+    <div class="sidebar-user"><span>Oturum</span><strong id="sidebar-username">—</strong><span id="sidebar-role" class="badge badge-blue" style="margin-top:4px;font-size:10px;"></span><br><span id="sidebar-kurum" class="kurum-badge"></span><select id="company-select" onchange="switchCompany(this.value)" style="display:none;margin-top:10px;width:100%;height:32px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 8px;font-size:12px"></select></div>
     <div class="sync-status" id="sync-status"><span class="sync-ok">● Bağlı</span></div>
     <nav>
       <div class="nav-section">Genel</div>
       <div class="nav-item active" onclick="showPage('dashboard')"><span class="nav-icon">◈</span> Dashboard</div>
+      <div class="nav-item" id="nav-genel" onclick="showPage('genel')" style="display:none"><span class="nav-icon">◉</span> Arşen Genel Bakış</div>
       <div class="nav-section">Modüller</div>
       <div class="nav-item" onclick="showPage('stok')"><span class="nav-icon">◉</span> <span id="nav-stok-label">Stok Takibi</span> <span class="nav-badge" id="stok-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('analiz')"><span class="nav-icon">⌬</span> <span id="nav-analiz-label">Analiz Sonuçları</span></div>
@@ -259,6 +265,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('rapor')"><span class="nav-icon">▤</span> Raporlama</div>
       <div class="nav-section" id="admin-nav-section">Yönetim</div>
       <div class="nav-item" id="admin-nav-item" onclick="showPage('admin')"><span class="nav-icon">◎</span> Kullanıcılar</div>
+      <div class="nav-item" id="nav-audit" onclick="showPage('audit')" style="display:none"><span class="nav-icon">⌥</span> Düzenleme Geçmişi</div>
     </nav>
     <div class="sidebar-footer">
       <button class="theme-toggle" type="button" onclick="toggleTheme()" title="Tema değiştir" aria-label="Tema değiştir"><span class="theme-toggle-icon" id="sidebar-theme-icon">◐</span><span class="theme-toggle-label" id="sidebar-theme-label">Tema</span></button>
@@ -270,6 +277,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
     <div class="topbar">
       <button class="hamburger" type="button" onclick="toggleSidebar()" aria-label="Menüyü aç/kapat"><span></span><span></span><span></span></button>
       <span class="topbar-title" id="page-title">Dashboard</span>
+      <span class="company-badge" id="company-badge"></span>
       <div class="topbar-search">
         <span class="topbar-search-icon">⌕</span>
         <input type="text" placeholder="Tüm modüllerde ara..." id="gsi" autocomplete="off">
@@ -300,11 +308,17 @@ const KBADGE={'Analiz':'badge-blue','Ekstraksiyon/Proses':'badge-purple','Ekipma
 const TR_AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const TR_GUN=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
 const COMPANIES={
-  fuwell:{label:'Fuwell · Lab/Ar-Ge',short:'Fuwell',mode:'lab'},
-  syntegra:{label:'Syntegra · İmalat',short:'Syntegra',mode:'manufacturing'}
+  fuwell:{label:'Fuwell · Lab/Ar-Ge',short:'Fuwell',mode:'lab',accent:'#4f9cf9'},
+  syntegra:{label:'Syntegra · İmalat',short:'Syntegra',mode:'manufacturing',accent:'#f5a623'}
 };
+const KURUMS={
+  arsen:{label:'Arşen Proses · Şemsiye',short:'Arşen Proses'},
+  fuwell:{label:'Fuwell',short:'Fuwell'},
+  syntegra:{label:'Syntegra',short:'Syntegra'}
+};
+const UMBRELLA_KURUM='arsen';
 const COLS={
-  Users:['id','username','passwordHash','role','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Users:['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma'],
   Stok:['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
   StokHareketleri:['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
   Metodlar:['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
@@ -316,7 +330,7 @@ const COLS={
   Gorevler:['id','company','baslik','kategori','atanan','atayan','tarih','basTarih','bitisTarih','oncelik','durum','aciklama','kullanici'],
   GunlukLog:['id','company','kullanici','kullaniciAd','tarih','kategori','baslik','icerik','duzenlendi','duzenlemeTarihi'],
   IletisimKisileri:['id','company','ad','kurum','unvan','telefon','email','kategori','sonGorusme','not','kullanici','guncelleme'],
-  Bildirimler:['id','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi'],
+  Bildirimler:['id','company','kime','baslik','mesaj','tur','okundu','tarih','olusturan','sayfa','kayitId','emailGonderildi'],
   DuzenlemeLoglari:['id','company','modul','kayitId','kullanici','tarih','onceki','sonraki'],
   SynProjeler:['id','company','projeKodu','musteri','projeAdi','arsenSorumlu','syntegraSorumlu','asama','durum','oncelik','baslangic','hedefTermin','butce','gercekMaliyet','ilerleme','sartnameLink','cizimLink','sozlesmeLink','not','olusturan','guncelleme'],
   SynTimeline:['id','company','projeId','isKalemi','asama','sorumlu','baslangic','bitis','bagimliIs','durum','ilerleme','risk','not','kullanici'],
@@ -416,14 +430,25 @@ function fmtDt(d){if(!d)return'—';try{return new Date(d).toLocaleString('tr-TR
 function localISODate(d=new Date()){const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10);}
 function localISODateTime(d=new Date()){const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,16);}
 function today(){return localISODate();}
+function userKurum(user=currentUser){
+  const raw=String(user?.kurum||'').trim().toLowerCase();
+  if(KURUMS[raw])return raw;
+  // backwards-compat: admin → arşen şemsiyesi, others → single company from access
+  if(user?.role==='admin')return UMBRELLA_KURUM;
+  const acc=String(user?.companyAccess||'').toLowerCase();
+  if(acc.indexOf(',')>=0)return UMBRELLA_KURUM;
+  const def=String(user?.defaultCompany||acc||'fuwell').toLowerCase();
+  return COMPANIES[def]?def:'fuwell';
+}
+function isUmbrella(user=currentUser){return userKurum(user)===UMBRELLA_KURUM;}
 function companyAccess(user=currentUser){
-  const raw=String(user?.companyAccess||'').trim();
-  if(user?.role==='admin'&&(!raw||raw==='all'))return Object.keys(COMPANIES);
-  const arr=raw.split(',').map(x=>x.trim()).filter(x=>COMPANIES[x]);
-  return arr.length?arr:['fuwell'];
+  if(isUmbrella(user))return Object.keys(COMPANIES);
+  const k=userKurum(user);
+  return COMPANIES[k]?[k]:['fuwell'];
 }
 function canUseCompany(key){return companyAccess().includes(key);}
 function companyLabel(key=currentCompany){return COMPANIES[key]?.label||key||'Fuwell';}
+function kurumLabel(key=userKurum()){return KURUMS[key]?.short||key||'Arşen';}
 function isCompanySheet(sheet){return COLS[sheet]?.includes('company');}
 function withCompanyRecord(sheet,row){return isCompanySheet(sheet)?{company:currentCompany,...row,company:row.company||currentCompany}:row;}
 function toast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='show toast-'+type;clearTimeout(t._t);t._t=setTimeout(()=>t.className='',2800);}
@@ -595,6 +620,21 @@ function updateCompanyUI(){
     'nav-gunluk-label':syn?'Üretim Log':'Günlük Log'
   };
   Object.entries(labels).forEach(([id,text])=>{const el=document.getElementById(id);if(el)el.textContent=text;});
+  const badge=document.getElementById('company-badge');
+  if(badge){
+    const cfg=COMPANIES[currentCompany];
+    badge.style.setProperty('--company-color',cfg?.accent||'var(--accent)');
+    badge.textContent=cfg?.short||currentCompany;
+    badge.classList.add('show');
+  }
+  // Umbrella-only nav items
+  const umb=isUmbrella();
+  ['nav-genel','nav-audit'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=umb?'':'none';});
+  const ums=document.getElementById('umbrella-nav-section');if(ums)ums.style.display=umb?'':'none';
+  // Sub-firm users: hide the company selector altogether (defense-in-depth on top of access check)
+  const sel=document.getElementById('company-select');if(sel&&!umb)sel.style.display='none';
+  // Kurum badge in sidebar
+  const kb=document.getElementById('sidebar-kurum');if(kb){const k=userKurum();kb.textContent=KURUMS[k]?.short||k;kb.className='kurum-badge '+(k===UMBRELLA_KURUM?'arsen':'');}
 }
 async function switchCompany(key){
   if(!COMPANIES[key]||key===currentCompany)return;
@@ -606,18 +646,20 @@ async function switchCompany(key){
 
 // ── NAV ──
 function showPage(page,silent=false){
+  // Umbrella-only pages
+  if((page==='genel'||page==='audit')&&!isUmbrella()){toast('Bu sayfa yalnızca Arşen Proses yetkililerine açıktır.','err');page='dashboard';}
   currentPage=page;
   closeSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','stok','analiz','ekipman','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
+  const map=['dashboard','genel','stok','analiz','ekipman','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin','audit'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
   const syn=currentCompany==='syntegra';
-  const titles={dashboard:'Dashboard',stok:syn?'Projeler':'Stok Takibi',analiz:syn?'Timetable':'Analiz Sonuçları',ekipman:syn?'Satın Alma':'Ekipman Takibi',metod:syn?'Maliyet':'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:syn?'Görevler':'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:syn?'Üretim Log':'Günlük Log',rapor:syn?'Proje Raporları':'Raporlama',admin:'Kullanıcı Yönetimi'};
+  const titles={dashboard:'Dashboard',genel:'Arşen Genel Bakış',stok:syn?'Projeler':'Stok Takibi',analiz:syn?'Timetable':'Analiz Sonuçları',ekipman:syn?'Satın Alma':'Ekipman Takibi',metod:syn?'Maliyet':'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:syn?'Görevler':'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:syn?'Üretim Log':'Günlük Log',rapor:syn?'Proje Raporları':'Raporlama',admin:'Kullanıcı Yönetimi',audit:'Düzenleme Geçmişi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
   if(syn&&({stok:synProjeler,analiz:synTimeline,ekipman:synSatinalma,metod:synMaliyet,rapor:synRaporlar})[page])return ({stok:synProjeler,analiz:synTimeline,ekipman:synSatinalma,metod:synMaliyet,rapor:synRaporlar})[page]();
-  ({dashboard,stok,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin})[page]?.();
+  ({dashboard,genel:genelBakis,stok,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin,audit:auditLog})[page]?.();
 }
 function updateBadges(){
   const k=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0)).length;
@@ -953,8 +995,11 @@ async function bildirimOku(id){const n=C.Bildirimler.find(x=>x.id===id);if(!n)re
 async function bildirimHepsiniOku(){myNotifications().forEach(n=>n.okundu='true');try{await markNotificationsRead({all:true});updateNotificationBadge();renderBildirim();}catch(e){toast('Hata: '+e.message,'err');}}
 async function bildirimAc(id,page){await bildirimOku(id);showPage(page);}
 function bildirimYeni(){
-  const opts=`<option value="all">Tüm ekip</option>${C.Users.filter(u=>u.active===true||u.active==='true').map(u=>`<option value="${u.username}">${esc(u.ad||u.username)}</option>`).join('')}`;
+  const umb=isUmbrella();
+  const eligible=C.Users.filter(u=>(u.active===true||u.active==='true')&&(umb||companyAccess(u).includes(currentCompany)));
+  const opts=`<option value="all">${umb?'Tüm aktif kullanıcılar':'Bu şirketin tüm aktif kullanıcıları ('+companyLabel()+')'}</option>${eligible.map(u=>`<option value="${u.username}">${esc(u.ad||u.username)}${umb?` · ${esc(KURUMS[userKurum(u)]?.short||'')}`:''}</option>`).join('')}`;
   showModal('Bildirim Gönder',`
+    <div class="alert alert-${umb?'green':'amber'} mb-16" style="font-size:12px">${umb?'Arşen şemsiyesi olarak tüm kullanıcılara bildirim gönderebilirsin.':'Yalnızca '+companyLabel()+' şirketine erişimi olan kullanıcılara bildirim gönderebilirsin.'}</div>
     <div class="form-row"><div class="form-group"><label>Alıcı</label><select id="bn-kime">${opts}</select></div>
     <div class="form-group"><label>Tür</label><select id="bn-tur"><option>Duyuru</option><option>Görev</option><option>Mesai</option><option>Sistem</option></select></div></div>
     <div class="form-group"><label>Başlık *</label><input type="text" id="bn-baslik"></div>
@@ -1307,6 +1352,110 @@ function sfeCalc(){
     ['Ses hızı (a)',sfeFmt(props.speed,2),'m/s']
   ];
   tableEl.innerHTML=`<div class="table-wrap"><table><thead><tr><th>${rows[0][0]}</th><th style="text-align:right">${rows[0][1]}</th><th>${rows[0][2]}</th></tr></thead><tbody>${rows.slice(1).map(r=>`<tr><td class="td-main">${r[0]}</td><td class="text-mono" style="text-align:right">${r[1]}</td><td class="text-muted text-sm">${r[2]}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+// ── ARŞEN GENEL BAKIŞ (umbrella-only) ──
+let __overviewCache=null;
+async function fetchCompanySheets(company){
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'batchRead',sheets:SHEETS,company,token:authToken})});
+  const d=await res.json();if(d.error)throw new Error(d.error);
+  const out={};
+  SHEETS.forEach(s=>{
+    const vals=d.valuesBySheet?.[s]||[];if(!vals.length){out[s]=[];return;}
+    const headers=vals[0],rows=[];
+    for(let i=1;i<vals.length;i++){const o={};headers.forEach((h,j)=>o[h]=vals[i][j]===undefined?'':String(vals[i][j]));rows.push(parseRow(s,o));}
+    out[s]=rows;
+  });
+  return out;
+}
+async function loadOverview(force){
+  if(!force&&__overviewCache&&Date.now()-__overviewCache.t<25000)return __overviewCache.data;
+  const companies=Object.keys(COMPANIES);
+  const data={};
+  // currentCompany data already in C — clone it
+  data[currentCompany]={};SHEETS.forEach(s=>data[currentCompany][s]=(C[s]||[]).slice());
+  // fetch the others
+  for(const c of companies){if(c!==currentCompany)data[c]=await fetchCompanySheets(c);}
+  __overviewCache={t:Date.now(),data};
+  return data;
+}
+function genelBakis(){
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="__overviewCache=null;genelBakis()">↺ Yenile</button>`;
+  document.getElementById('content').innerHTML=`<div class="card"><div class="empty-state"><div class="empty-icon">◉</div><div>Tüm şirketlerin verileri toplanıyor...</div></div></div>`;
+  loadOverview(false).then(data=>{
+    const companies=Object.keys(COMPANIES);
+    const sum=(c,key,filt)=>(data[c]?.[key]||[]).filter(filt||(()=>true)).length;
+    const stokCnt=c=>sum(c,'Stok');
+    const stokKritik=c=>sum(c,'Stok',r=>(parseFloat(r.miktar)||0)<=(parseFloat(r.kritikSeviye)||0));
+    const acikGorev=c=>sum(c,'Gorevler',r=>r.durum&&r.durum!=='Tamamlandı'&&!r.baslik?.startsWith('__'));
+    const ekipKritik=c=>sum(c,'Ekipman',r=>{const t=r.kalibrasyonTarihi;if(!t)return false;const d=new Date(t);if(isNaN(d))return false;return d-Date.now()<7*86400000;});
+    const aktifProje=c=>sum(c,'SynProjeler',r=>r.durum&&r.durum!=='Tamamlandı'&&r.durum!=='İptal');
+    const bekleyenMesai=c=>sum(c,'Mesai',r=>r.durum==='Bekliyor');
+    const recentLogs=c=>(data[c]?.GunlukLog||[]).slice(-5).reverse();
+    document.getElementById('content').innerHTML=`
+      <div class="alert alert-green mb-16">◉ Arşen Proses şemsiye görünümü — tüm bağlı şirketlerin anlık durumu.</div>
+      <div class="grid-2 gap-16 mb-16">
+        ${companies.map(c=>{
+          const cfg=COMPANIES[c];
+          return `<div class="card" style="border-top:3px solid ${cfg.accent}">
+            <div class="card-header"><span class="card-title">${esc(cfg.label)}</span><button class="btn btn-ghost btn-sm" onclick="switchCompany('${c}')">Geç →</button></div>
+            <div class="grid-2 gap-12 mb-16">
+              <div class="stat-card"><div class="stat-label">Toplam Stok</div><div class="stat-value stat-blue" style="font-size:24px">${stokCnt(c)}</div><div class="stat-sub">${stokKritik(c)} kritik seviyede</div></div>
+              <div class="stat-card"><div class="stat-label">Açık Görev</div><div class="stat-value stat-amber" style="font-size:24px">${acikGorev(c)}</div></div>
+              <div class="stat-card"><div class="stat-label">Aktif Proje</div><div class="stat-value stat-green" style="font-size:24px">${aktifProje(c)}</div></div>
+              <div class="stat-card"><div class="stat-label">Bekleyen Mesai</div><div class="stat-value stat-red" style="font-size:24px">${bekleyenMesai(c)}</div></div>
+              <div class="stat-card"><div class="stat-label">Yaklaşan Kalibrasyon</div><div class="stat-value stat-amber" style="font-size:24px">${ekipKritik(c)}</div><div class="stat-sub">7 gün içinde</div></div>
+              <div class="stat-card"><div class="stat-label">Toplam Kullanıcı</div><div class="stat-value stat-blue" style="font-size:24px">${(data[c]?.Users||[]).filter(u=>u.active==='true'||u.active===true).length}</div></div>
+            </div>
+            <div class="text-sm text-muted" style="font-weight:600;margin-bottom:6px">Son loglar</div>
+            ${recentLogs(c).length?recentLogs(c).map(l=>`<div style="font-size:12px;color:var(--text2);padding:6px 0;border-bottom:1px solid var(--border)"><span class="text-mono text-sm">${(l.tarih||'').slice(0,10)}</span> · <strong>${esc(l.baslik||l.kategori||'')}</strong> <span style="color:var(--text3)">— ${esc(l.kullaniciAd||l.kullanici||'')}</span></div>`).join(''):'<div class="text-sm text-muted">Log yok</div>'}
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Çapraz şirket toplamları</span></div>
+        <div class="grid-4">
+          <div class="stat-card"><div class="stat-label">Toplam Stok Kalemi</div><div class="stat-value stat-blue">${companies.reduce((a,c)=>a+stokCnt(c),0)}</div></div>
+          <div class="stat-card"><div class="stat-label">Kritik Stok</div><div class="stat-value stat-red">${companies.reduce((a,c)=>a+stokKritik(c),0)}</div></div>
+          <div class="stat-card"><div class="stat-label">Açık Görev</div><div class="stat-value stat-amber">${companies.reduce((a,c)=>a+acikGorev(c),0)}</div></div>
+          <div class="stat-card"><div class="stat-label">Bekleyen Mesai</div><div class="stat-value stat-red">${companies.reduce((a,c)=>a+bekleyenMesai(c),0)}</div></div>
+        </div>
+      </div>`;
+  }).catch(e=>{
+    document.getElementById('content').innerHTML=`<div class="alert alert-red">Genel bakış verileri alınamadı: ${esc(e.message)}</div>`;
+  });
+}
+function auditLog(){
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="__overviewCache=null;auditLog()">↺ Yenile</button>`;
+  document.getElementById('content').innerHTML=`<div class="card"><div class="empty-state"><div class="empty-icon">⌥</div><div>Düzenleme kayıtları toplanıyor...</div></div></div>`;
+  loadOverview(false).then(data=>{
+    const companies=Object.keys(COMPANIES);
+    const all=[];
+    companies.forEach(c=>{(data[c]?.DuzenlemeLoglari||[]).forEach(r=>all.push({...r,_company:c}));});
+    all.sort((a,b)=>new Date(b.tarih||0)-new Date(a.tarih||0));
+    document.getElementById('content').innerHTML=`
+      <div class="card">
+        <div class="card-header"><span class="card-title">Düzenleme Geçmişi</span><span class="text-muted text-sm">${all.length} kayıt</span></div>
+        ${all.length?`<div class="table-wrap"><table>
+          <thead><tr><th>Tarih</th><th>Şirket</th><th>Modül</th><th>Kayıt ID</th><th>Kullanıcı</th><th>Detay</th></tr></thead>
+          <tbody>${all.slice(0,200).map(r=>`<tr>
+            <td class="text-mono text-sm">${(r.tarih||'').replace('T',' ').slice(0,16)}</td>
+            <td><span class="badge" style="color:${COMPANIES[r._company]?.accent||'var(--text)'};border:1px solid ${COMPANIES[r._company]?.accent||'var(--border)'};background:transparent">${COMPANIES[r._company]?.short||r._company}</span></td>
+            <td class="td-main">${esc(r.modul||'')}</td>
+            <td class="text-mono text-sm">${esc((r.kayitId||'').slice(0,12))}</td>
+            <td>${esc(r.kullanici||'')}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick='auditDetay(${JSON.stringify(r).replace(/'/g,"&apos;")})'>Önce/Sonra</button></td>
+          </tr>`).join('')}</tbody>
+        </table></div>${all.length>200?'<div class="text-sm text-muted" style="padding:8px 14px">İlk 200 kayıt gösteriliyor.</div>':''}`:'<div class="empty-state">Henüz düzenleme kaydı yok.</div>'}
+      </div>`;
+  }).catch(e=>{
+    document.getElementById('content').innerHTML=`<div class="alert alert-red">Düzenleme geçmişi alınamadı: ${esc(e.message)}</div>`;
+  });
+}
+function auditDetay(r){
+  let onceki='',sonraki='';try{onceki=JSON.stringify(JSON.parse(r.onceki||'{}'),null,2);}catch(e){onceki=r.onceki||'';}
+  try{sonraki=JSON.stringify(JSON.parse(r.sonraki||'{}'),null,2);}catch(e){sonraki=r.sonraki||'';}
+  showModal('Düzenleme Detayı',`<div class="grid-2 gap-16"><div><div class="text-sm text-muted mb-8">Önce</div><pre style="background:var(--bg3);padding:12px;border-radius:6px;font-size:12px;max-height:300px;overflow:auto">${esc(onceki)}</pre></div><div><div class="text-sm text-muted mb-8">Sonra</div><pre style="background:var(--bg3);padding:12px;border-radius:6px;font-size:12px;max-height:300px;overflow:auto">${esc(sonraki)}</pre></div></div>`,`<button class="btn btn-ghost" onclick="closeModalDirect()">Kapat</button>`);
 }
 
 // ── ÇIKTI ──
@@ -2073,26 +2222,25 @@ function admin(){
 }
 function renderAdmin(){
   const missingEmails=C.Users.filter(u=>!normEmail(u.email)).length;
-  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Operasyon</th><th>Durum</th><th>Oluşturma</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
+  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Kurum</th><th>Erişim</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
     <td class="td-main">${u.ad||'—'}</td><td class="text-mono">${u.username}</td>
     <td>${u.email?`<span class="text-mono" style="font-size:11px">${esc(u.email)}</span>`:`<span class="badge badge-amber">Eksik</span>`}</td>
     <td><span class="badge ${u.role==='admin'?'badge-blue':'badge-gray'}">${u.role==='admin'?'Admin':'Kullanıcı'}</span></td>
-    <td>${companyAccess(u).map(k=>`<span class="badge badge-blue" style="margin-right:4px">${esc(COMPANIES[k].short)}</span>`).join('')}</td>
+    <td><span class="badge ${userKurum(u)===UMBRELLA_KURUM?'badge-blue':'badge-gray'}">${esc(KURUMS[userKurum(u)]?.short||userKurum(u))}</span></td>
+    <td>${companyAccess(u).map(k=>`<span class="badge" style="margin-right:4px;color:${COMPANIES[k].accent};border:1px solid ${COMPANIES[k].accent};background:transparent">${esc(COMPANIES[k].short)}</span>`).join('')}</td>
     <td><span class="badge ${u.active===true||u.active==='true'?'badge-green':'badge-red'}">${u.active===true||u.active==='true'?'Aktif':'Pasif'}</span></td>
-    <td class="text-mono" style="font-size:11px">${fmt(u.olusturma)}</td>
     <td>${u.id!==currentUser.id?`<button class="btn btn-ghost btn-sm" onclick="kullaniciDuzenle('${u.id}')">Düzenle</button><button class="btn btn-${u.active===true||u.active==='true'?'danger':'success'} btn-sm" onclick="kullaniciToggle('${u.id}')">${u.active===true||u.active==='true'?'Pasif Et':'Aktif Et'}</button>`:'<span class="text-muted text-sm">Mevcut oturum</span>'}</td>
   </tr>`).join('')}</tbody></table></div>`;}
-function uForm(u={}){return`
+function uForm(u={}){const uk=userKurum(u);return`
   <div class="form-row"><div class="form-group"><label>Ad Soyad *</label><input type="text" id="u-ad" value="${u.ad||''}"></div>
   <div class="form-group"><label>Kullanıcı Adı *</label><input type="text" id="u-un" value="${u.username||''}" ${u.id?'readonly':''}></div></div>
   <div class="form-group"><label>Google E-posta</label><input type="text" id="u-email" value="${u.email||''}" placeholder="ad.soyad@gmail.com"></div>
   <div class="form-row"><div class="form-group"><label>${u.id?'Yeni Şifre (boş=değişmez)':'Şifre *'}</label><input type="password" id="u-pass" placeholder="••••••••"></div>
   <div class="form-group"><label>Rol</label><select id="u-rol"><option value="user" ${u.role==='user'?'selected':''}>Kullanıcı</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></div></div>
-  <div class="form-row"><div class="form-group"><label>Operasyon Erişimi</label><select id="u-company-access" multiple style="min-height:74px">${Object.entries(COMPANIES).map(([k,c])=>`<option value="${k}" ${companyAccess(u).includes(k)?'selected':''}>${esc(c.label)}</option>`).join('')}</select></div>
-  <div class="form-group"><label>Varsayılan Operasyon</label><select id="u-default-company">${Object.entries(COMPANIES).map(([k,c])=>`<option value="${k}" ${(u.defaultCompany||'fuwell')===k?'selected':''}>${esc(c.label)}</option>`).join('')}</select></div></div>
-  <div class="text-sm text-muted">Bu alan, Google Sheets ve Drive yetkilerini eşleştirmek için kullanılacak. E-posta boşsa kullanıcı sisteme giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
+  <div class="form-group"><label>Bağlı Olduğu Kurum *</label><select id="u-kurum">${Object.entries(KURUMS).map(([k,c])=>`<option value="${k}" ${uk===k?'selected':''}>${esc(c.label)}</option>`).join('')}</select></div>
+  <div class="text-sm text-muted">Arşen Proses kademesi her iki şirketi de yönetebilir. Fuwell veya Syntegra seçilirse kullanıcı yalnızca o şirketin verilerine erişir. Şirketler arası geçiş yapamaz. E-posta boşsa kullanıcı sisteme giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
 function kullaniciYeni(){showModal('Yeni Kullanıcı',uForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciKaydet()">Kaydet</button>`);}
-function readUserCompanyFields(){const access=[...document.getElementById('u-company-access').selectedOptions].map(o=>o.value);const defaultCompany=document.getElementById('u-default-company').value;return {companyAccess:(access.length?access:['fuwell']).join(','),defaultCompany:access.includes(defaultCompany)?defaultCompany:access[0]||'fuwell'};}
+function readUserCompanyFields(){const k=document.getElementById('u-kurum').value;const access=k===UMBRELLA_KURUM?Object.keys(COMPANIES):[COMPANIES[k]?k:'fuwell'];return {kurum:k,companyAccess:access.join(','),defaultCompany:access[0]};}
 async function kullaniciKaydet(){const ad=document.getElementById('u-ad').value.trim();const un=document.getElementById('u-un').value.trim();const email=normEmail(document.getElementById('u-email').value);const p=document.getElementById('u-pass').value;if(!ad||!un||!p){toast('Tüm alanlar zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(C.Users.find(u=>u.username===un)){toast('Bu kullanıcı adı zaten var.','err');return;}if(email&&C.Users.find(u=>normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}C.Users.push({id:uid(),ad,username:un,passwordHash:hash(p),role:document.getElementById('u-rol').value,email,...readUserCompanyFields(),active:'true',olusturma:new Date().toISOString()});closeModalDirect();renderAdmin();save('Users').then(()=>toast('Kullanıcı eklendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function kullaniciDuzenle(id){const u=C.Users.find(x=>x.id===id);if(!u)return;showModal('Kullanıcı Düzenle',uForm(u),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciGuncelle('${id}')">Güncelle</button>`);}
 async function kullaniciGuncelle(id){const ad=document.getElementById('u-ad').value.trim();const email=normEmail(document.getElementById('u-email').value);if(!ad){toast('Ad zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(email&&C.Users.find(u=>u.id!==id&&normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}const idx=C.Users.findIndex(x=>x.id===id);const p=document.getElementById('u-pass').value;C.Users[idx]={...C.Users[idx],ad,email,role:document.getElementById('u-rol').value,...readUserCompanyFields()};if(p)C.Users[idx].passwordHash=hash(p);closeModalDirect();renderAdmin();save('Users').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
