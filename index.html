@@ -428,7 +428,15 @@ function isCompanySheet(sheet){return COLS[sheet]?.includes('company');}
 function withCompanyRecord(sheet,row){return isCompanySheet(sheet)?{company:currentCompany,...row,company:row.company||currentCompany}:row;}
 function toast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='show toast-'+type;clearTimeout(t._t);t._t=setTimeout(()=>t.className='',2800);}
 function loading(show,text='İşleniyor...'){document.getElementById('loading-text').textContent=text;document.getElementById('loading-overlay').classList.toggle('show',show);}
-function setSS(s){const e=document.getElementById('sync-status');e.innerHTML=s==='ok'?'<span class="sync-ok">● Bağlı</span>':s==='loading'?'<span class="sync-loading">↺ Senkronize...</span>':'<span class="sync-err">● Bağlantı hatası</span>';}
+function setSS(s){const e=document.getElementById('sync-status');if(!e)return;e.innerHTML=s==='ok'?'<span class="sync-ok">● Bağlı</span>':s==='loading'?'<span class="sync-loading">↺ Senkronize...</span>':'<span class="sync-err">● Bağlantı hatası</span>';}
+// ── SESSION PERSISTENCE ──
+const SS_AUTH_KEY='arsenSession_v1',SS_CACHE_KEY='arsenCache_v1';
+function saveSession(){if(!authToken||!currentUser)return;try{localStorage.setItem(SS_AUTH_KEY,JSON.stringify({token:authToken,user:currentUser,company:currentCompany,t:Date.now()}));}catch(e){}}
+function saveCache(){try{const payload={company:currentCompany,t:Date.now(),sheets:{}};SHEETS.forEach(s=>{payload.sheets[s]=C[s]||[];});localStorage.setItem(SS_CACHE_KEY,JSON.stringify(payload));}catch(e){}}
+function loadSession(){try{const raw=localStorage.getItem(SS_AUTH_KEY);return raw?JSON.parse(raw):null;}catch(e){return null;}}
+function loadCache(){try{const raw=localStorage.getItem(SS_CACHE_KEY);return raw?JSON.parse(raw):null;}catch(e){return null;}}
+function clearSession(){try{localStorage.removeItem(SS_AUTH_KEY);localStorage.removeItem(SS_CACHE_KEY);}catch(e){}}
+function isAuthError(msg){return /token|yetki|auth|oturum|geçersiz/i.test(String(msg||''));}
 function showModal(t,b,f){document.getElementById('modal-title').textContent=t;document.getElementById('modal-body').innerHTML=b;document.getElementById('modal-footer').innerHTML=f||'';document.getElementById('modal-overlay').classList.add('open');}
 function closeModal(e){if(e.target===document.getElementById('modal-overlay'))closeModalDirect();}
 function closeModalDirect(){document.getElementById('modal-overlay').classList.remove('open');}
@@ -446,6 +454,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }
   document.addEventListener('click',e=>{if(!e.target.closest('.topbar-search'))document.getElementById('gsr').style.display='none';});
+  bootstrapSession().catch(()=>{});
 });
 function runGS(q){
   const box=document.getElementById('gsr');
@@ -505,9 +514,13 @@ async function syncAll(){
       data=Object.fromEntries(reads);
     }
     SHEETS.forEach(s=>{if(!dirtySheets.has(s))C[s]=(data[s]||[]).map(r=>parseRow(s,r));});
-    setSS('ok');updateBadges();handleNewNotifications();return true;
+    setSS('ok');updateBadges();handleNewNotifications();saveCache();return true;
   }
-  catch(e){setSS('err');toast('Bağlantı hatası: '+e.message,'err');return false;}
+  catch(e){
+    setSS('err');
+    if(isAuthError(e.message)&&authToken){clearSession();authToken=null;currentUser=null;toast('Oturum sona erdi, yeniden giriş yap.','err');setTimeout(()=>location.reload(),1200);return false;}
+    toast('Bağlantı hatası: '+e.message,'err');return false;
+  }
 }
 async function save(sheet){
   const snapshot=(C[sheet]||[]).map(r=>withCompanyRecord(sheet,{...r}));
@@ -518,6 +531,19 @@ async function save(sheet){
 }
 
 // ── AUTH ──
+function enterApp(){
+  document.getElementById('login-err').style.display='none';
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('sidebar-username').textContent=currentUser.ad||currentUser.username;
+  document.getElementById('sidebar-role').textContent=currentUser.role==='admin'?'Admin':'Kullanıcı';
+  renderCompanySelector();
+  updateCompanyUI();
+  document.getElementById('admin-nav-section').style.display='';
+  document.getElementById('admin-nav-item').style.display='';
+  if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
+}
+function startAutoSync(){if(syncTimer)clearInterval(syncTimer);syncTimer=setInterval(()=>syncAll().then(ok=>{if(ok&&currentPage&&!document.getElementById('modal-overlay').classList.contains('open'))showPage(currentPage,true);}),90000);}
 async function doLogin(){
   const u=document.getElementById('login-user').value.trim();const p=document.getElementById('login-pass').value;if(!u||!p)return;
   loading(true,'Bağlanıyor...');
@@ -528,25 +554,31 @@ async function doLogin(){
     currentCompany=access.includes(currentUser.defaultCompany)?currentUser.defaultCompany:access[0];
     const ok=await syncAll();if(!ok){loading(false);return;}
     loading(false);
-    document.getElementById('login-err').style.display='none';
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').classList.add('visible');
-    document.getElementById('sidebar-username').textContent=currentUser.ad||currentUser.username;
-    document.getElementById('sidebar-role').textContent=currentUser.role==='admin'?'Admin':'Kullanıcı';
-    renderCompanySelector();
-    updateCompanyUI();
-    document.getElementById('admin-nav-section').style.display='';
-    document.getElementById('admin-nav-item').style.display='';
-    if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
+    saveSession();
+    enterApp();
     initNotifications();
     showPage('dashboard');
     ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});
     refreshMesaiBadge().catch(()=>{});
-    syncTimer=setInterval(()=>syncAll().then(ok=>{if(ok&&currentPage&&!document.getElementById('modal-overlay').classList.contains('open'))showPage(currentPage,true);}),90000);
+    startAutoSync();
   }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
+async function bootstrapSession(){
+  const sess=loadSession();if(!sess||!sess.token||!sess.user)return false;
+  authToken=sess.token;currentUser=sess.user;currentCompany=sess.company||'fuwell';
+  const cache=loadCache();
+  if(cache&&cache.sheets&&cache.company===currentCompany){SHEETS.forEach(s=>{if(cache.sheets[s])C[s]=cache.sheets[s];});}
+  enterApp();
+  showPage('dashboard');
+  setSS('loading');
+  syncAll().then(ok=>{
+    if(ok){if(currentPage)showPage(currentPage,true);initNotifications();ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});refreshMesaiBadge().catch(()=>{});}
+  }).catch(()=>{});
+  startAutoSync();
+  return true;
+}
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-pass')===document.activeElement)doLogin();});
-function doLogout(){currentUser=null;authToken=null;currentCompany='fuwell';notifReady=false;knownNotifIds.clear();clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
+function doLogout(){clearSession();currentUser=null;authToken=null;currentCompany='fuwell';notifReady=false;knownNotifIds.clear();clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
 function renderCompanySelector(){
   const sel=document.getElementById('company-select'),access=companyAccess();
   sel.innerHTML=access.map(k=>`<option value="${k}" ${currentCompany===k?'selected':''}>${esc(COMPANIES[k].label)}</option>`).join('');
@@ -568,7 +600,7 @@ async function switchCompany(key){
   if(!COMPANIES[key]||key===currentCompany)return;
   if(!canUseCompany(key)){toast('Bu operasyon alanına erişim yetkiniz yok.','err');renderCompanySelector();return;}
   currentCompany=key;goalScopeFilter='';knownNotifIds.clear();loading(true,companyLabel()+' yükleniyor...');
-  try{await syncAll();loading(false);updateCompanyUI();renderCompanySelector();showPage('dashboard');ensureScheduleOnline().catch(()=>{});toast(companyLabel()+' alanına geçildi ✓');}
+  try{await syncAll();loading(false);saveSession();updateCompanyUI();renderCompanySelector();showPage('dashboard');ensureScheduleOnline().catch(()=>{});toast(companyLabel()+' alanına geçildi ✓');}
   catch(e){loading(false);toast('Geçiş yapılamadı: '+e.message,'err');}
 }
 
