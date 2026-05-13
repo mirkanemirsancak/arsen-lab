@@ -2,7 +2,9 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1018" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)">
 <title>Arşen Proses — Lab Takip</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -18,7 +20,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 #login-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 40%,var(--accent-soft) 0%,transparent 60%),radial-gradient(ellipse at 70% 70%,rgba(62,207,142,0.06) 0%,transparent 50%);pointer-events:none;}
 .login-box{width:380px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:40px;position:relative;z-index:1;box-shadow:var(--shadow-md);}
 .login-box::before{content:'';position:absolute;left:14px;right:14px;top:0;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.7;}
-.login-logo{margin-bottom:34px;text-align:center;}.login-logo img{width:250px;height:auto;max-height:138px;display:block;margin:0 auto;object-fit:contain;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
+.login-logo{margin-bottom:34px;text-align:center;}.login-logo img{width:250px;height:auto;max-height:138px;display:block;margin:0 auto;object-fit:contain;background:#fff;border-radius:12px;padding:10px 14px;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
 .login-logo h1{font-size:22px;font-weight:600;}.login-logo span{color:var(--accent);}.login-subtitle{font-size:12px;color:var(--text3);margin-top:2px;}
 .login-err{color:var(--red);font-size:12px;margin-top:10px;display:none;}
 label{display:block;font-size:11px;font-weight:500;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;margin-top:16px;}
@@ -35,25 +37,33 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 #loading-overlay.show{display:flex;}.spinner{width:32px;height:32px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}.loading-text{font-size:13px;color:var(--text2);font-family:var(--mono);}
 #app{display:none;height:100vh;overflow:hidden;}#app.visible{display:flex;}
-.sidebar{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;}
+.sidebar{width:240px;min-width:240px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;transition:transform .28s ease;}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99;}
 .sidebar-header{padding:18px 16px;border-bottom:1px solid var(--border);text-align:center;}
-.sidebar-logo{width:178px;height:auto;max-height:96px;display:block;margin:0 auto;object-fit:contain;}
+.sidebar-logo{width:178px;height:auto;max-height:96px;display:block;margin:0 auto;object-fit:contain;background:#fff;border-radius:10px;padding:6px 10px;}
 .sidebar-brand{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:2px;margin-bottom:2px;}
 .sidebar-title{font-size:15px;font-weight:600;}.sidebar-title span{color:var(--accent);}
 .sidebar-user{padding:12px 16px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);}
 .sidebar-user strong{color:var(--text2);display:block;font-size:12px;}
 .sync-status{padding:8px 16px;border-bottom:1px solid var(--border);font-size:11px;font-family:var(--mono);}
 .sync-ok{color:var(--green);}.sync-err{color:var(--red);}.sync-loading{color:var(--amber);}
-nav{flex:1;padding:8px 0;}
-.nav-section{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:2px;padding:12px 16px 4px;}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;color:var(--text2);cursor:pointer;transition:all 0.15s;font-size:13px;border-left:2px solid transparent;}
-.nav-item:hover{color:var(--text);background:var(--bg3);}.nav-item.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent);}
-.nav-icon{font-size:16px;width:20px;text-align:center;}
-.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-family:var(--mono);padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;}
+nav{flex:1;padding:10px 10px;}
+.nav-section{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:2px;padding:14px 10px 6px;text-transform:uppercase;}
+.nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;margin:2px 0;color:var(--text2);cursor:pointer;transition:background-color .18s,color .18s,transform .12s,box-shadow .2s;font-size:13px;font-weight:500;border-radius:10px;position:relative;user-select:none;}
+.nav-item:hover{color:var(--text);background:var(--bg3);}
+.nav-item:active{transform:scale(0.985);}
+.nav-item.active{color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px rgba(var(--tint),0.04);}
+.nav-item.active .nav-icon{background:var(--accent);color:#fff;}
+.nav-icon{font-size:14px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:rgba(var(--tint),0.05);color:var(--text2);flex-shrink:0;transition:background-color .18s,color .18s;}
+.nav-item:hover .nav-icon{background:rgba(var(--tint),0.09);color:var(--text);}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:10px;min-width:20px;text-align:center;font-weight:600;}
 .sidebar-footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.topbar{height:52px;min-height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;}
+.topbar{height:56px;min-height:56px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;}
 .topbar-title{font-size:16px;font-weight:600;min-width:140px;}
+.hamburger{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;align-items:center;justify-content:center;flex-direction:column;gap:4px;padding:0;transition:border-color .15s,background-color .15s,color .15s;flex-shrink:0;}
+.hamburger:hover{border-color:var(--accent);color:var(--accent);}
+.hamburger span{display:block;width:18px;height:2px;background:currentColor;border-radius:1px;transition:transform .25s,opacity .2s;}
 .topbar-search{flex:1;position:relative;max-width:360px;}
 .topbar-search input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 12px 7px 32px;outline:none;}
 .topbar-search input:focus{border-color:var(--accent);}
@@ -160,6 +170,51 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 [data-theme="light"] .file-icon{background:var(--accent-soft);}
 [data-theme="light"] thead tr{background:var(--bg3);}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+@media (max-width:900px){
+  .hamburger{display:inline-flex;}
+  #app.visible{display:block;height:100vh;overflow:hidden;}
+  .sidebar{position:fixed;top:0;left:0;height:100vh;width:84vw;max-width:300px;z-index:100;transform:translateX(-105%);box-shadow:var(--shadow-md);}
+  .sidebar.open{transform:translateX(0);}
+  body.sidebar-open .sidebar-backdrop{display:block;}
+  .main{height:100vh;overflow:hidden;}
+  .topbar{padding:0 12px;gap:8px;}
+  .topbar-title{font-size:15px;min-width:0;flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .topbar-search{max-width:none;}
+  .content{padding:16px 14px;}
+  .grid-2,.form-row{grid-template-columns:1fr;}
+  .grid-4{grid-template-columns:repeat(2,1fr);}
+  .form-row-3{grid-template-columns:1fr;}
+  .mesai-summary{grid-template-columns:repeat(2,1fr);}
+  .modal{max-width:calc(100vw - 24px);border-radius:14px;}
+  .modal-body,.modal-header,.modal-footer{padding-left:18px;padding-right:18px;}
+  .schedule-meta,.schedule-tools{gap:10px;}
+  .filter-bar{gap:6px;}
+  .stat-value{font-size:24px;}
+  table{font-size:12px;}
+  th,td{padding:8px 10px;}
+  .btn{padding:10px 14px;font-size:13px;min-height:40px;}
+  .btn-sm{padding:7px 11px;font-size:12px;min-height:32px;}
+  input,select,textarea{font-size:16px!important;}
+  .nav-item{padding:11px 12px;font-size:14px;}
+  .nav-icon{width:30px;height:30px;font-size:15px;}
+  .login-box{width:100%;max-width:380px;padding:28px 22px;border-radius:14px;margin:16px;}
+  #login-theme-toggle{top:14px;right:14px;}
+  .notif-btn{padding:9px 11px;}
+  .file-grid{grid-template-columns:1fr;}
+  .topbar-search input{font-size:14px!important;}
+}
+@media (max-width:560px){
+  .grid-4{grid-template-columns:1fr;}
+  .mesai-summary{grid-template-columns:1fr;}
+  .topbar-title{display:none;}
+  .stat-value{font-size:22px;}
+  .content{padding:14px 12px;}
+  .card{padding:16px;}
+}
+@supports(padding:max(0px)){
+  body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
+  .sidebar{padding-top:env(safe-area-inset-top);}
+}
 </style>
 </head>
 <body>
@@ -168,7 +223,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   <button class="theme-toggle" id="login-theme-toggle" type="button" onclick="toggleTheme()" title="Tema değiştir" aria-label="Tema değiştir"><span class="theme-toggle-icon" id="login-theme-icon">◐</span></button>
   <div class="login-box">
     <div class="login-logo">
-      <img src="assets/arsen-process-mark.png?v=4" alt="Arşen Process">
+      <img src="assets/arsen-process-mark.png?v=6" alt="Arşen Process">
     </div>
     <div class="form-group"><label>Kullanıcı Adı</label><input type="text" id="login-user" placeholder="kullanici_adi" autocomplete="username"></div>
     <div class="form-group"><label>Şifre</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
@@ -180,8 +235,9 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 <div id="loading-overlay"><div class="spinner"></div><div class="loading-text" id="loading-text">Yükleniyor...</div></div>
 
 <div id="app">
-  <div class="sidebar">
-    <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-mark.png?v=4" alt="Arşen Process"></div>
+  <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-mark.png?v=6" alt="Arşen Process"></div>
     <div class="sidebar-user"><span>Oturum</span><strong id="sidebar-username">—</strong><span id="sidebar-role" class="badge badge-blue" style="margin-top:4px;font-size:10px;"></span><select id="company-select" onchange="switchCompany(this.value)" style="display:none;margin-top:10px;width:100%;height:32px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 8px;font-size:12px"></select></div>
     <div class="sync-status" id="sync-status"><span class="sync-ok">● Bağlı</span></div>
     <nav>
@@ -212,6 +268,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   </div>
   <div class="main">
     <div class="topbar">
+      <button class="hamburger" type="button" onclick="toggleSidebar()" aria-label="Menüyü aç/kapat"><span></span><span></span><span></span></button>
       <span class="topbar-title" id="page-title">Dashboard</span>
       <div class="topbar-search">
         <span class="topbar-search-icon">⌕</span>
@@ -272,6 +329,8 @@ let currentUser=null,currentPage=null,currentCompany='fuwell',syncTimer=null,aut
 function applyTheme(t){const root=document.documentElement;root.setAttribute('data-theme',t);const ic=t==='light'?'☀':'☾';const lt=document.getElementById('login-theme-icon');if(lt)lt.textContent=ic;const st=document.getElementById('sidebar-theme-icon');if(st)st.textContent=ic;const sl=document.getElementById('sidebar-theme-label');if(sl)sl.textContent=t==='light'?'Aydınlık':'Karanlık';document.querySelectorAll('.theme-toggle').forEach(b=>b.setAttribute('data-mode',t));}
 function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';const next=cur==='light'?'dark':'light';try{localStorage.setItem('arsenTheme',next);}catch(e){}applyTheme(next);}
 applyTheme(document.documentElement.getAttribute('data-theme')||'dark');
+function toggleSidebar(){const sb=document.getElementById('sidebar');if(!sb)return;const open=sb.classList.toggle('open');document.body.classList.toggle('sidebar-open',open);}
+function closeSidebar(){const sb=document.getElementById('sidebar');if(!sb)return;sb.classList.remove('open');document.body.classList.remove('sidebar-open');}
 const LABS=['Lab-1','Ek Lab'];
 const FREQLAR=['Aylık','3 Aylık','6 Aylık','Yıllık'];
 const GOREV_CIZELGE={
@@ -516,6 +575,7 @@ async function switchCompany(key){
 // ── NAV ──
 function showPage(page,silent=false){
   currentPage=page;
+  closeSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const map=['dashboard','stok','analiz','ekipman','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin'];
   const items=document.querySelectorAll('.nav-item');
