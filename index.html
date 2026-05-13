@@ -20,7 +20,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 #login-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 40%,var(--accent-soft) 0%,transparent 60%),radial-gradient(ellipse at 70% 70%,rgba(62,207,142,0.06) 0%,transparent 50%);pointer-events:none;}
 .login-box{width:380px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:40px;position:relative;z-index:1;box-shadow:var(--shadow-md);}
 .login-box::before{content:'';position:absolute;left:14px;right:14px;top:0;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.7;}
-.login-logo{margin-bottom:34px;text-align:center;}.login-logo img{width:250px;height:auto;max-height:138px;display:block;margin:0 auto;object-fit:contain;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
+.login-logo{margin-bottom:34px;text-align:center;}.login-logo img{width:250px;height:auto;max-height:138px;display:block;margin:0 auto;object-fit:contain;background:#fff;border-radius:12px;padding:10px 14px;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
 .login-logo h1{font-size:22px;font-weight:600;}.login-logo span{color:var(--accent);}.login-subtitle{font-size:12px;color:var(--text3);margin-top:2px;}
 .login-err{color:var(--red);font-size:12px;margin-top:10px;display:none;}
 label{display:block;font-size:11px;font-weight:500;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;margin-top:16px;}
@@ -40,7 +40,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 .sidebar{width:240px;min-width:240px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;transition:transform .28s ease;}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99;}
 .sidebar-header{padding:18px 16px;border-bottom:1px solid var(--border);text-align:center;}
-.sidebar-logo{width:178px;height:auto;max-height:96px;display:block;margin:0 auto;object-fit:contain;}
+.sidebar-logo{width:178px;height:auto;max-height:96px;display:block;margin:0 auto;object-fit:contain;background:#fff;border-radius:10px;padding:6px 10px;}
 .sidebar-brand{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:2px;margin-bottom:2px;}
 .sidebar-title{font-size:15px;font-weight:600;}.sidebar-title span{color:var(--accent);}
 .sidebar-user{padding:12px 16px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);}
@@ -223,7 +223,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   <button class="theme-toggle" id="login-theme-toggle" type="button" onclick="toggleTheme()" title="Tema değiştir" aria-label="Tema değiştir"><span class="theme-toggle-icon" id="login-theme-icon">◐</span></button>
   <div class="login-box">
     <div class="login-logo">
-      <img src="assets/arsen-process-mark.png?v=5" alt="Arşen Process">
+      <img src="assets/arsen-process-mark.png?v=6" alt="Arşen Process">
     </div>
     <div class="form-group"><label>Kullanıcı Adı</label><input type="text" id="login-user" placeholder="kullanici_adi" autocomplete="username"></div>
     <div class="form-group"><label>Şifre</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
@@ -237,7 +237,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 <div id="app">
   <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
   <div class="sidebar" id="sidebar">
-    <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-mark.png?v=5" alt="Arşen Process"></div>
+    <div class="sidebar-header"><img class="sidebar-logo" src="assets/arsen-process-mark.png?v=6" alt="Arşen Process"></div>
     <div class="sidebar-user"><span>Oturum</span><strong id="sidebar-username">—</strong><span id="sidebar-role" class="badge badge-blue" style="margin-top:4px;font-size:10px;"></span><select id="company-select" onchange="switchCompany(this.value)" style="display:none;margin-top:10px;width:100%;height:32px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 8px;font-size:12px"></select></div>
     <div class="sync-status" id="sync-status"><span class="sync-ok">● Bağlı</span></div>
     <nav>
