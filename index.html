@@ -455,12 +455,18 @@ function toast(msg,type='ok'){const t=document.getElementById('toast');t.textCon
 function loading(show,text='İşleniyor...'){document.getElementById('loading-text').textContent=text;document.getElementById('loading-overlay').classList.toggle('show',show);}
 function setSS(s){const e=document.getElementById('sync-status');if(!e)return;e.innerHTML=s==='ok'?'<span class="sync-ok">● Bağlı</span>':s==='loading'?'<span class="sync-loading">↺ Senkronize...</span>':'<span class="sync-err">● Bağlantı hatası</span>';}
 // ── SESSION PERSISTENCE ──
-const SS_AUTH_KEY='arsenSession_v1',SS_CACHE_KEY='arsenCache_v1';
+const SS_AUTH_KEY='arsenSession_v1',SS_CACHE_KEY='arsenCacheMulti_v2',SS_CACHE_LEGACY_KEY='arsenCache_v1';
 function saveSession(){if(!authToken||!currentUser)return;try{localStorage.setItem(SS_AUTH_KEY,JSON.stringify({token:authToken,user:currentUser,company:currentCompany,t:Date.now()}));}catch(e){}}
-function saveCache(){try{const payload={company:currentCompany,t:Date.now(),sheets:{}};SHEETS.forEach(s=>{payload.sheets[s]=C[s]||[];});localStorage.setItem(SS_CACHE_KEY,JSON.stringify(payload));}catch(e){}}
-function loadSession(){try{const raw=localStorage.getItem(SS_AUTH_KEY);return raw?JSON.parse(raw):null;}catch(e){return null;}}
-function loadCache(){try{const raw=localStorage.getItem(SS_CACHE_KEY);return raw?JSON.parse(raw):null;}catch(e){return null;}}
-function clearSession(){try{localStorage.removeItem(SS_AUTH_KEY);localStorage.removeItem(SS_CACHE_KEY);}catch(e){}}
+function _readCacheBlob(){try{const raw=localStorage.getItem(SS_CACHE_KEY);return raw?JSON.parse(raw):{};}catch(e){return {};}}
+function saveCache(company=currentCompany){try{const blob=_readCacheBlob();blob[company]={t:Date.now(),sheets:{}};SHEETS.forEach(s=>{blob[company].sheets[s]=C[s]||[];});localStorage.setItem(SS_CACHE_KEY,JSON.stringify(blob));}catch(e){}}
+function loadCache(company=currentCompany){
+  const blob=_readCacheBlob();
+  if(blob[company])return blob[company];
+  // legacy migration: single-company cache from v1
+  try{const raw=localStorage.getItem(SS_CACHE_LEGACY_KEY);if(raw){const o=JSON.parse(raw);if(o&&o.company===company)return o;}}catch(e){}
+  return null;
+}
+function clearSession(){try{localStorage.removeItem(SS_AUTH_KEY);localStorage.removeItem(SS_CACHE_KEY);localStorage.removeItem(SS_CACHE_LEGACY_KEY);}catch(e){}}
 function isAuthError(msg){return /token|yetki|auth|oturum|geçersiz/i.test(String(msg||''));}
 function showModal(t,b,f){document.getElementById('modal-title').textContent=t;document.getElementById('modal-body').innerHTML=b;document.getElementById('modal-footer').innerHTML=f||'';document.getElementById('modal-overlay').classList.add('open');}
 function closeModal(e){if(e.target===document.getElementById('modal-overlay'))closeModalDirect();}
@@ -586,6 +592,7 @@ async function doLogin(){
     ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});
     refreshMesaiBadge().catch(()=>{});
     startAutoSync();
+    prefetchOtherCompanies();
   }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
 async function bootstrapSession(){
@@ -597,7 +604,7 @@ async function bootstrapSession(){
   showPage('dashboard');
   setSS('loading');
   syncAll().then(ok=>{
-    if(ok){if(currentPage)showPage(currentPage,true);initNotifications();ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});refreshMesaiBadge().catch(()=>{});}
+    if(ok){if(currentPage)showPage(currentPage,true);initNotifications();ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});refreshMesaiBadge().catch(()=>{});prefetchOtherCompanies();}
   }).catch(()=>{});
   startAutoSync();
   return true;
@@ -639,9 +646,23 @@ function updateCompanyUI(){
 async function switchCompany(key){
   if(!COMPANIES[key]||key===currentCompany)return;
   if(!canUseCompany(key)){toast('Bu operasyon alanına erişim yetkiniz yok.','err');renderCompanySelector();return;}
-  currentCompany=key;goalScopeFilter='';knownNotifIds.clear();loading(true,companyLabel()+' yükleniyor...');
-  try{await syncAll();loading(false);saveSession();updateCompanyUI();renderCompanySelector();showPage('dashboard');ensureScheduleOnline().catch(()=>{});toast(companyLabel()+' alanına geçildi ✓');}
-  catch(e){loading(false);toast('Geçiş yapılamadı: '+e.message,'err');}
+  currentCompany=key;goalScopeFilter='';knownNotifIds.clear();
+  const cache=loadCache(key);
+  if(cache&&cache.sheets){
+    // Instant switch from cache, refresh in background
+    SHEETS.forEach(s=>{if(cache.sheets[s])C[s]=cache.sheets[s];});
+    saveSession();updateCompanyUI();renderCompanySelector();showPage('dashboard');
+    setSS('loading');
+    syncAll().then(ok=>{if(ok&&currentPage)showPage(currentPage,true);ensureScheduleOnline().catch(()=>{});}).catch(()=>{});
+    toast(companyLabel()+' alanına geçildi ✓');
+    return;
+  }
+  // No cache yet → small status indicator instead of full overlay
+  setSS('loading');
+  updateCompanyUI();renderCompanySelector();
+  document.getElementById('content').innerHTML=`<div class="card"><div class="empty-state"><div class="empty-icon">◉</div><div>${esc(companyLabel())} verileri yükleniyor...</div></div></div>`;
+  try{await syncAll();saveSession();showPage('dashboard');ensureScheduleOnline().catch(()=>{});toast(companyLabel()+' alanına geçildi ✓');}
+  catch(e){toast('Geçiş yapılamadı: '+e.message,'err');}
 }
 
 // ── NAV ──
@@ -1366,7 +1387,13 @@ async function fetchCompanySheets(company){
     for(let i=1;i<vals.length;i++){const o={};headers.forEach((h,j)=>o[h]=vals[i][j]===undefined?'':String(vals[i][j]));rows.push(parseRow(s,o));}
     out[s]=rows;
   });
+  // warm the per-company cache so switchCompany lands instantly next time
+  try{const blob=_readCacheBlob();blob[company]={t:Date.now(),sheets:out};localStorage.setItem(SS_CACHE_KEY,JSON.stringify(blob));}catch(e){}
   return out;
+}
+function prefetchOtherCompanies(){
+  if(!isUmbrella())return;
+  Object.keys(COMPANIES).filter(c=>c!==currentCompany&&!loadCache(c)).forEach(c=>{fetchCompanySheets(c).catch(()=>{});});
 }
 async function loadOverview(force){
   if(!force&&__overviewCache&&Date.now()-__overviewCache.t<25000)return __overviewCache.data;
@@ -2075,8 +2102,8 @@ function renderGunluk(kulF,katF){
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:11px;font-family:var(--mono);color:var(--text3)">${fmt(l.tarih)}</span>
-            ${benimMi?`<button class="btn btn-ghost btn-sm" onclick="logDuzenle('${l.id}')">Düzenle</button>`:''}
-            ${canDelete()&&!benimMi?`<button class="btn btn-danger btn-sm" onclick="logSil('${l.id}')">Sil</button>`:''}
+            ${(benimMi||canDelete())?`<button class="btn btn-ghost btn-sm" onclick="logDuzenle('${l.id}')">Düzenle</button>`:''}
+            ${canDelete()?`<button class="btn btn-danger btn-sm" onclick="logSil('${l.id}')">Sil</button>`:''}
           </div>
         </div>
         ${l.baslik?`<div style="font-size:13px;font-weight:600;margin-bottom:6px">${l.baslik}</div>`:''}
