@@ -25,7 +25,9 @@ var DEFAULT_SHEET_HEADERS = {
   SynTimeline: ['id','company','projeId','isKalemi','asama','sorumlu','baslangic','bitis','bagimliIs','durum','ilerleme','risk','not','kullanici'],
   SynSatinalma: ['id','company','projeId','kalem','tedarikci','miktar','birim','butce','teklif','gercekMaliyet','paraBirimi','termin','durum','evrakLink','not','kullanici'],
   SynMaliyet: ['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
-  SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici']
+  SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
+  Syn2_Projeler: ['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
+  Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme']
 };
 
 function json(result) {
@@ -528,6 +530,58 @@ function uploadFile(data, user) {
   return { ok: true, file: info(file, folder.getName()) };
 }
 
+// ── Syn2 project helpers (umbrella project intake → engineering → purchasing) ──
+function _projectCounterKey(year) { return 'PROJ_CTR_' + year; }
+function nextProjectCodePreview(customer) {
+  var initial = String(customer || 'X').trim().toUpperCase().replace(/[^A-ZÇĞİÖŞÜ]/g, '').charAt(0) || 'X';
+  var year = new Date().getFullYear();
+  var props = PropertiesService.getScriptProperties();
+  var cur = parseInt(props.getProperty(_projectCounterKey(year)) || '0', 10) + 1;
+  return { code: 'ARS-' + year + '-' + ('000' + cur).slice(-3) + '-' + initial, year: year, counter: cur, initial: initial };
+}
+function nextProjectCode(customer) {
+  var initial = String(customer || 'X').trim().toUpperCase().replace(/[^A-ZÇĞİÖŞÜ]/g, '').charAt(0) || 'X';
+  var year = new Date().getFullYear();
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(8000); } catch (e) { throw new Error('Sistem yogun, lütfen tekrar deneyin.'); }
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var key = _projectCounterKey(year);
+    var cur = parseInt(props.getProperty(key) || '0', 10) + 1;
+    props.setProperty(key, String(cur));
+    return { code: 'ARS-' + year + '-' + ('000' + cur).slice(-3) + '-' + initial, year: year, counter: cur, initial: initial };
+  } finally { lock.releaseLock(); }
+}
+function getOrCreateProjectFolder(projectCode) {
+  var root = rootFolder();
+  var ex = root.getFoldersByName(projectCode);
+  if (ex.hasNext()) return ex.next();
+  var f = root.createFolder(projectCode);
+  try { f.setDescription('Arsen Lab proje klasoru\nProjectCode: ' + projectCode + '\nOlusturma: ' + new Date().toISOString()); } catch (ignored) {}
+  return f;
+}
+function getOrCreateSubfolder(parent, name) {
+  var safe = String(name || 'Genel').replace(/[\\/]/g, '-').trim() || 'Genel';
+  var ex = parent.getFoldersByName(safe);
+  if (ex.hasNext()) return ex.next();
+  return parent.createFolder(safe);
+}
+function uploadProjectFile(data, user) {
+  if (!data.projectCode || !data.base64 || !data.name) throw new Error('Proje dosya bilgisi eksik.');
+  var pf = getOrCreateProjectFolder(data.projectCode);
+  var target = data.subfolder ? getOrCreateSubfolder(pf, data.subfolder) : pf;
+  var blob = Utilities.newBlob(Utilities.base64Decode(data.base64), data.mimeType || 'application/octet-stream', data.name);
+  var file = target.createFile(blob);
+  var desc = 'ProjectCode: ' + data.projectCode + '\nSubfolder: ' + (data.subfolder || '-') + '\nYukleyen: ' + (user.ad || user.username || 'Bilinmiyor') + '\nYuklemeTarihi: ' + new Date().toISOString();
+  file.setDescription(desc);
+  return { ok: true, file: { id: file.getId(), name: file.getName(), url: file.getUrl(), downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId(), folder: target.getName(), size: file.getSize(), mimeType: file.getMimeType(), uploadedAt: new Date().toISOString(), uploadedBy: user.ad || user.username || '' } };
+}
+function deleteProjectFile(data, user) {
+  if (!data.fileId) throw new Error('Dosya kimligi eksik.');
+  try { DriveApp.getFileById(data.fileId).setTrashed(true); } catch (e) { throw new Error('Dosya silinemedi: ' + e.message); }
+  return { ok: true };
+}
+
 function deleteFile(data, user) {
   if (user.role !== 'admin') throw new Error('Dosya silmek icin admin yetkisi gerekli.');
   var company = requireCompany(user, data.company);
@@ -668,6 +722,10 @@ function doPost(e) {
       else if (data.action === 'listFiles') result = listFiles(user, data.company);
       else if (data.action === 'uploadFile') result = uploadFile(data, user);
       else if (data.action === 'deleteFile') result = deleteFile(data, user);
+      else if (data.action === 'nextProjectCode') result = nextProjectCode(data.customer);
+      else if (data.action === 'previewProjectCode') result = nextProjectCodePreview(data.customer);
+      else if (data.action === 'uploadProjectFile') result = uploadProjectFile(data, user);
+      else if (data.action === 'deleteProjectFile') result = deleteProjectFile(data, user);
       else if (data.action === 'listOvertime') result = listOvertime(user, data.company);
       else if (data.action === 'createOvertime') result = createOvertime(data, user);
       else if (data.action === 'updateOvertimeStatus') result = updateOvertimeStatus(data, user);
