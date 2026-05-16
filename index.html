@@ -298,7 +298,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 
 <script>
 const SCRIPT_URL='https://script.google.com/macros/s/AKfycbywgaqp0vIXqPj44IJV2kuomL1jTk_ZnPLiGRTCtrE_hXFBo4rgPmtYT-p3Ne3cbagj/exec';
-const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler'];
+const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik'];
 const SYN_BODY_LIST=['Gaz Rezerv','Sıvı Rezerv','Ekstraktör','Seperatör','Eşanjör','Yağ Kazanı','Ön Isıtıcı','Pompa','Kompresör','Chiller','Booster','Borulama','Vana','Filtre','BPR','Otomasyon','Sensörler'];
 const SYN_PROJE_DURUMLAR=['Taslak','Onay Bekliyor','Mühendislik Sürecinde','Mühendislik Tamamlandı','Satın Alma Sürecinde','Tamamlandı','İptal'];
 const SYN_PURCHASE_STATUS=['Siparişte','Onayda','Teknikte','Post Delivery'];
@@ -341,9 +341,10 @@ const COLS={
   SynSatinalma:['id','company','projeId','kalem','tedarikci','miktar','birim','butce','teklif','gercekMaliyet','paraBirimi','termin','durum','evrakLink','not','kullanici'],
   SynMaliyet:['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
   SynRaporlar:['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
-  Syn2_Projeler:['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme']
+  Syn2_Projeler:['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
+  Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme']
 };
-const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[]};
+const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[]};
 let currentUser=null,currentPage=null,currentCompany='fuwell',syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
 function applyTheme(t){const root=document.documentElement;root.setAttribute('data-theme',t);const ic=t==='light'?'☀':'☾';const lt=document.getElementById('login-theme-icon');if(lt)lt.textContent=ic;const st=document.getElementById('sidebar-theme-icon');if(st)st.textContent=ic;const sl=document.getElementById('sidebar-theme-label');if(sl)sl.textContent=t==='light'?'Aydınlık':'Karanlık';document.querySelectorAll('.theme-toggle').forEach(b=>b.setAttribute('data-mode',t));}
 function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';const next=cur==='light'?'dark':'light';try{localStorage.setItem('arsenTheme',next);}catch(e){}applyTheme(next);}
@@ -1708,10 +1709,163 @@ async function projeSil(id){
   save('Syn2_Projeler').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
 }
 
-// ── Mühendislik (Tab 2) — stub ──
+// ── Mühendislik (Tab 2) — Phase 2a: P&ID + Çizim + revizyon döngüsü ──
+let _muhSelectedProjectCode=null;
+let _muhDraftFiles={pid:[],cizim:[]};
+function muhendislikDurumBadge(d){const map={'Taslak':'badge-gray','Onay Bekliyor':'badge-amber','Onaylandı':'badge-green','Revizyon İstendi':'badge-red'};return `<span class="badge ${map[d]||'badge-gray'}">${esc(d||'Taslak')}</span>`;}
+function muhProjectRow(p){
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===p.projectCode);
+  const mhDurum=mh?.durum||'Taslak';
+  return {p,mh,mhDurum};
+}
+function muhEligibleProjects(){
+  return (C.Syn2_Projeler||[]).filter(p=>['Mühendislik Sürecinde','Mühendislik Tamamlandı'].includes(p.durum));
+}
 function muhendislik(){
   document.getElementById('topbar-actions').innerHTML='';
-  document.getElementById('content').innerHTML=`<div class="card"><div class="empty-state"><div class="empty-icon">⌗</div><div><strong>Mühendislik sekmesi yapım aşamasında.</strong><br>P&amp;ID + çizim yükleme, revizyon döngüsü ve gövde ekipman listesi yakında eklenecek.</div></div></div>`;
+  if(_muhSelectedProjectCode){return muhWorkspace(_muhSelectedProjectCode);}
+  const eligible=muhEligibleProjects().sort((a,b)=>new Date(b.olusturma||0)-new Date(a.olusturma||0));
+  document.getElementById('content').innerHTML=`
+    <div class="alert alert-amber mb-16" style="font-size:13px">Mühendislik sürecindeki projeler aşağıda listeleniyor. Bir projeyi açmak için satıra tıklayın.</div>
+    ${eligible.length?`<div class="table-wrap"><table>
+      <thead><tr><th>Proje Kodu</th><th>Proje Adı</th><th>Müşteri</th><th>Mühendislik Sorumlusu</th><th>Çizim Durumu</th><th>Revizyon</th></tr></thead>
+      <tbody>${eligible.map(p=>{const{mh,mhDurum}=muhProjectRow(p);return `<tr style="cursor:pointer" onclick="_muhSelectedProjectCode='${p.projectCode}';muhendislik()">
+        <td class="text-mono text-sm" style="color:var(--accent)">${esc(p.projectCode)}</td>
+        <td class="td-main">${esc(p.projeAdi)}</td>
+        <td>${esc(p.musteri)}</td>
+        <td>${esc(synSorumluLabel(p.sorumlu))}</td>
+        <td>${muhendislikDurumBadge(mhDurum)}</td>
+        <td class="text-mono text-sm">${mh?.revizyonNumarasi||0}</td>
+      </tr>`;}).join('')}</tbody>
+    </table></div>`:'<div class="empty-state"><div class="empty-icon">⌗</div><div>Mühendislik sürecinde proje yok. Önce Proje Girişi sekmesinden bir proje açın ve sorumlu onaylasın.</div></div>'}`;
+}
+function muhWorkspace(projectCode){
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
+  if(!p){_muhSelectedProjectCode=null;return muhendislik();}
+  let mh=C.Syn2_Muhendislik.find(m=>m.projectCode===projectCode);
+  if(!mh){
+    // Lazy create
+    mh={id:uid(),company:currentCompany,projectCode,durum:'Taslak',pidDosyalar:'[]',cizimDosyalar:'[]',revizyonNumarasi:0,revizyonGecmisi:'[]',sonGonderim:'',sonKararKullanici:'',sonKararTarih:'',satinalmaSorumlu:'',olusturan:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};
+    C.Syn2_Muhendislik.push(mh);
+    save('Syn2_Muhendislik').catch(()=>{});
+  }
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_muhSelectedProjectCode=null;muhendislik()">← Liste</button>`;
+  const pid=synParseFiles(mh.pidDosyalar);
+  const cizim=synParseFiles(mh.cizimDosyalar);
+  const meEng=p.sorumlu===currentUser.username; // engineering sorumlusu = atanan
+  const meOwner=p.olusturan===currentUser.username||isUmbrella(); // Arşen tarafı
+  const durum=mh.durum||'Taslak';
+  const canEdit=meEng&&(durum==='Taslak'||durum==='Revizyon İstendi');
+  const canSubmit=meEng&&durum==='Taslak'&&(pid.length>0||cizim.length>0);
+  const canDecide=meOwner&&durum==='Onay Bekliyor';
+  let revGecmisi=[];try{revGecmisi=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
+  document.getElementById('content').innerHTML=`
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(projectCode)}</div>
+          <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} · ${esc(p.musteri)}</div>
+        </div>
+        <div style="text-align:right">
+          ${muhendislikDurumBadge(durum)}
+          <div class="text-mono text-sm text-muted" style="margin-top:4px">Revizyon: <strong>${mh.revizyonNumarasi||0}</strong></div>
+        </div>
+      </div>
+      ${durum==='Revizyon İstendi'&&revGecmisi.length?`<div class="alert alert-red" style="margin:14px 0 0">⚠ Arşen revizyon talep etti:<br><em>${esc(revGecmisi[revGecmisi.length-1]?.not||'')}</em><br><span class="text-mono text-sm">— ${esc(synSorumluLabel(revGecmisi[revGecmisi.length-1]?.kullanici))} · ${synFmtDate(revGecmisi[revGecmisi.length-1]?.tarih)}</span></div>`:''}
+      ${durum==='Onaylandı'?`<div class="alert alert-green" style="margin:14px 0 0">✓ Çizimler onaylandı. Ekipman listesi sekmesi yakında etkin olacak. (Phase 2b)</div>`:''}
+    </div>
+    <div class="grid-2 gap-16">
+      <div class="card">
+        <div class="card-header"><span class="card-title">P&ID Dosyaları</span><span class="text-muted text-sm">${pid.length} dosya</span></div>
+        ${canEdit?`<input type="file" id="muh-pid-input" multiple onchange="muhDosyaYukle(this,'PID','pid')" style="margin-bottom:10px">`:''}
+        <div id="muh-pid-list" class="text-sm" style="line-height:1.8">${pid.map((f,i)=>synFileChip(f,canEdit,`muhDosyaSil('pid',${i})`)).join('')||'<span class="text-muted">P&amp;ID dosyası yok</span>'}</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Çizim Dosyaları</span><span class="text-muted text-sm">${cizim.length} dosya</span></div>
+        ${canEdit?`<input type="file" id="muh-cizim-input" multiple onchange="muhDosyaYukle(this,'Cizim','cizim')" style="margin-bottom:10px">`:''}
+        <div id="muh-cizim-list" class="text-sm" style="line-height:1.8">${cizim.map((f,i)=>synFileChip(f,canEdit,`muhDosyaSil('cizim',${i})`)).join('')||'<span class="text-muted">Çizim dosyası yok</span>'}</div>
+      </div>
+    </div>
+    ${revGecmisi.length>1?`<div class="card mt-16">
+      <div class="card-header"><span class="card-title">Revizyon Geçmişi</span></div>
+      <div class="text-sm" style="line-height:1.8">${revGecmisi.map((r,i)=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>Tur ${i+1}</strong> · ${esc(r.karar||'')} · ${synFmtDate(r.tarih)}<br><span class="text-muted">${esc(r.kullanici||'')}</span>${r.not?`<br>${esc(r.not)}`:''}</div>`).join('')}</div>
+    </div>`:''}
+    <div class="card mt-16" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      ${canSubmit?`<button class="btn btn-primary" onclick="muhOnayaGonder()">📨 Onaya Gönder (Arşen)</button>`:''}
+      ${canDecide?`<button class="btn btn-success" onclick="muhOnayla()">✓ Onayla</button><button class="btn btn-danger" onclick="muhRevizyonIste()">↺ Revizyon İste</button>`:''}
+      ${!canEdit&&!canDecide?`<span class="text-muted text-sm">${durum==='Onay Bekliyor'?'Arşen kararı bekleniyor.':(durum==='Onaylandı'?'Süreç tamamlandı.':'Düzenleme yetkin yok.')}</span>`:''}
+    </div>`;
+}
+async function muhDosyaYukle(input,subfolder,bucket){
+  const files=Array.from(input.files||[]);if(!files.length)return;
+  if(!_muhSelectedProjectCode){toast('Proje seçili değil.','err');return;}
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh){toast('Mühendislik kaydı bulunamadı.','err');return;}
+  const listEl=document.getElementById('muh-'+bucket+'-list');
+  for(const f of files){
+    listEl.insertAdjacentHTML('beforeend',`<div style="color:var(--text3)">⏳ ${esc(f.name)} yükleniyor...</div>`);
+    try{
+      const b64=await fileToBase64(f);
+      const res=await driveApi('uploadProjectFile',{projectCode:_muhSelectedProjectCode,subfolder,name:f.name,mimeType:f.type||'application/octet-stream',base64:b64});
+      const arr=synParseFiles(bucket==='pid'?mh.pidDosyalar:mh.cizimDosyalar);
+      arr.push(res.file);
+      if(bucket==='pid')mh.pidDosyalar=JSON.stringify(arr);else mh.cizimDosyalar=JSON.stringify(arr);
+      mh.guncelleme=new Date().toISOString();
+    }catch(e){toast('Yükleme hatası ('+f.name+'): '+e.message,'err');}
+  }
+  input.value='';
+  save('Syn2_Muhendislik').then(()=>muhWorkspace(_muhSelectedProjectCode)).catch(e=>toast('Kaydetme hatası: '+e.message,'err'));
+}
+async function muhDosyaSil(bucket,i){
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
+  const arr=synParseFiles(bucket==='pid'?mh.pidDosyalar:mh.cizimDosyalar);
+  const f=arr[i];if(!f)return;
+  if(!confirm('Bu dosya silinsin mi? Drive\'dan da kaldırılır.'))return;
+  try{await driveApi('deleteProjectFile',{fileId:f.id});}catch(e){toast('Drive silme hatası: '+e.message,'err');}
+  arr.splice(i,1);
+  if(bucket==='pid')mh.pidDosyalar=JSON.stringify(arr);else mh.cizimDosyalar=JSON.stringify(arr);
+  mh.guncelleme=new Date().toISOString();
+  muhWorkspace(_muhSelectedProjectCode);
+  save('Syn2_Muhendislik').then(()=>toast('Dosya silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function muhOnayaGonder(){
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
+  mh.durum='Onay Bekliyor';mh.sonGonderim=new Date().toISOString();mh.guncelleme=mh.sonGonderim;
+  muhWorkspace(_muhSelectedProjectCode);
+  save('Syn2_Muhendislik').then(()=>{
+    toast('Çizimler Arşen onayına gönderildi.');
+    notifyApi({recipients:[p.olusturan],baslik:'Mühendislik onayı bekleniyor: '+p.projectCode,mesaj:`${p.projeAdi}\nMühendislik P&ID ve çizim taslaklarını onayınıza sundu.\nLütfen Mühendislik sekmesinden açıp Onayla veya Revizyon İste seçeneklerinden birini kullanın.`,tur:'Mühendislik',sayfa:'analiz',kayitId:mh.id,sendEmail:true}).catch(()=>{});
+  }).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function muhOnayla(){
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
+  if(!confirm('Mühendislik çizimleri onaylanıyor. Sonra ekipman listesi aşamasına geçilecek. Onaylıyor musun?'))return;
+  mh.durum='Onaylandı';mh.sonKararKullanici=currentUser.username;mh.sonKararTarih=new Date().toISOString();mh.guncelleme=mh.sonKararTarih;
+  let hist=[];try{hist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
+  hist.push({karar:'Onaylandı',not:'',kullanici:currentUser.username,tarih:mh.sonKararTarih});
+  mh.revizyonGecmisi=JSON.stringify(hist);
+  p.durum='Mühendislik Tamamlandı';p.guncelleme=mh.sonKararTarih;
+  muhWorkspace(_muhSelectedProjectCode);
+  Promise.all([save('Syn2_Muhendislik'),save('Syn2_Projeler')]).then(()=>{
+    toast('Onaylandı ✓');
+    notifyApi({recipients:[p.sorumlu],baslik:'Çizimler onaylandı: '+p.projectCode,mesaj:`${p.projeAdi}\nArşen tarafından P&ID ve çizimler onaylandı. Ekipman listesi aşamasına geçebilirsiniz.`,tur:'Mühendislik',sayfa:'analiz',kayitId:mh.id,sendEmail:true}).catch(()=>{});
+  }).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function muhRevizyonIste(){
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
+  const not=prompt('Revizyon talebi · neden / hangi değişiklikler istenmeli?');
+  if(not===null||!not.trim()){toast('Revizyon notu zorunlu.','err');return;}
+  mh.durum='Revizyon İstendi';mh.revizyonNumarasi=(parseInt(mh.revizyonNumarasi,10)||0)+1;mh.sonKararKullanici=currentUser.username;mh.sonKararTarih=new Date().toISOString();mh.guncelleme=mh.sonKararTarih;
+  let hist=[];try{hist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
+  hist.push({karar:'Revizyon İstendi',not:not.trim(),kullanici:currentUser.username,tarih:mh.sonKararTarih});
+  mh.revizyonGecmisi=JSON.stringify(hist);
+  muhWorkspace(_muhSelectedProjectCode);
+  save('Syn2_Muhendislik').then(()=>{
+    toast('Revizyon talebi gönderildi.','err');
+    notifyApi({recipients:[p.sorumlu],baslik:'Revizyon istendi: '+p.projectCode,mesaj:`${p.projeAdi}\n${not.trim()}\n\nMühendislik sekmesinden dosyaları güncelleyip tekrar onaya gönderin.`,tur:'Mühendislik',sayfa:'analiz',kayitId:mh.id,sendEmail:true}).catch(()=>{});
+  }).catch(e=>toast('Hata: '+e.message,'err'));
 }
 // ── Satın Alma (Tab 3) — stub ──
 function satinalma(){

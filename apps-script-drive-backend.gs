@@ -26,7 +26,8 @@ var DEFAULT_SHEET_HEADERS = {
   SynSatinalma: ['id','company','projeId','kalem','tedarikci','miktar','birim','butce','teklif','gercekMaliyet','paraBirimi','termin','durum','evrakLink','not','kullanici'],
   SynMaliyet: ['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
   SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
-  Syn2_Projeler: ['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme']
+  Syn2_Projeler: ['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
+  Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme']
 };
 
 function json(result) {
