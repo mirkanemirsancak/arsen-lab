@@ -27,7 +27,8 @@ var DEFAULT_SHEET_HEADERS = {
   SynMaliyet: ['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
   SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler: ['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
-  Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme']
+  Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
+  Syn2_Ekipman: ['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme']
 };
 
 function json(result) {
@@ -312,7 +313,15 @@ function readSheets(names, user, company) {
   var result = {};
   for (var i = 0; i < names.length; i++) {
     var name = String(names[i] || '');
-    if (name) result[name] = readSheet(name, user, company).values;
+    if (!name) continue;
+    try {
+      result[name] = readSheet(name, user, company).values;
+    } catch (perSheetErr) {
+      // Missing sheet (e.g. newly added in a frontend release that hasn't been backend-deployed yet) or
+      // any other per-sheet failure: return empty so the rest of the batch still succeeds. The client
+      // will see [] for this sheet and recover next sync when the sheet is created.
+      result[name] = [];
+    }
   }
   var out = { valuesBySheet: result };
   if (cache) {

@@ -298,7 +298,20 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 
 <script>
 const SCRIPT_URL='https://script.google.com/macros/s/AKfycbywgaqp0vIXqPj44IJV2kuomL1jTk_ZnPLiGRTCtrE_hXFBo4rgPmtYT-p3Ne3cbagj/exec';
-const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik'];
+const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik','Syn2_Ekipman'];
+const SYN_BODY_TEMPLATES={
+  'Eşanjör':['Kondenser Gövde','Kondenser Ayna','Kondenser Boru Sabitleme Perforeleri','Kondenser Flanşlar','Kondenser Kepler','Kondenser İç Basınçlı Borular'],
+  'Ekstraktör':['Ekstraktör Gövde','Ekstraktör Kapak Flanş','Ekstraktör Üst Kapak','Ekstraktör Alt Tapa','Ekstraktör Kavrama','Ekstraktör Ceket'],
+  'Seperatör':['Seperatör Gövde','Seperatör Kapak Flanş','Seperatör Üst Kapak','Seperatör Alt Tapa','Seperatör Ceket'],
+  'Gaz Rezerv':['CO₂ Gaz Tankı Gövde','CO₂ Gaz Tankı Üst Kapak','CO₂ Gaz Tankı Alt Kapak','CO₂ Gaz Tankı Alt Flanş','CO₂ Gaz Tankı Sepantin','CO₂ Gaz Tankı Ayak'],
+  'Sıvı Rezerv':['CO₂ Sıvı Tankı Gövde','CO₂ Sıvı Tankı Üst Kapak','CO₂ Sıvı Tankı Alt Kapak','CO₂ Sıvı Tankı Alt Flanş','CO₂ Sıvı Tankı Sepantin','CO₂ Sıvı Tankı Ayak'],
+  'Kompresör':['Hava Kompresörü','Transkritik CO₂ Kompresörü'],
+  'Pompa':['Hidrolik Pompa'],
+  'Chiller':['Chiller'],
+  'Yağ Kazanı':['Kızgın Yağ Sistemi']
+};
+const SYN_MALZEME_CINSI=['','PASLANMAZ','SİYAH ÇELİK','KARBON ÇELİK','ÖZEL KARBON ÇELİK','DUBLEKS','SÜPERDUBLEKS','BAKIR','ALUMİNYUM','PVC','Diğer'];
+const SYN_MALZEME_KALITESI=['','AISI 316L','AISI 304','ST52','ST37','P355GH','G20MN5','SÜPERDUBLEKS','DUBLEKS','Diğer'];
 const SYN_BODY_LIST=['Gaz Rezerv','Sıvı Rezerv','Ekstraktör','Seperatör','Eşanjör','Yağ Kazanı','Ön Isıtıcı','Pompa','Kompresör','Chiller','Booster','Borulama','Vana','Filtre','BPR','Otomasyon','Sensörler'];
 const SYN_PROJE_DURUMLAR=['Taslak','Onay Bekliyor','Mühendislik Sürecinde','Mühendislik Tamamlandı','Satın Alma Sürecinde','Tamamlandı','İptal'];
 const SYN_PURCHASE_STATUS=['Siparişte','Onayda','Teknikte','Post Delivery'];
@@ -342,9 +355,10 @@ const COLS={
   SynMaliyet:['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
   SynRaporlar:['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler:['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
-  Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme']
+  Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
+  Syn2_Ekipman:['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme']
 };
-const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[]};
+const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[]};
 let currentUser=null,currentPage=null,currentCompany='fuwell',syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
 function applyTheme(t){const root=document.documentElement;root.setAttribute('data-theme',t);const ic=t==='light'?'☀':'☾';const lt=document.getElementById('login-theme-icon');if(lt)lt.textContent=ic;const st=document.getElementById('sidebar-theme-icon');if(st)st.textContent=ic;const sl=document.getElementById('sidebar-theme-label');if(sl)sl.textContent=t==='light'?'Aydınlık':'Karanlık';document.querySelectorAll('.theme-toggle').forEach(b=>b.setAttribute('data-mode',t));}
 function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';const next=cur==='light'?'dark':'light';try{localStorage.setItem('arsenTheme',next);}catch(e){}applyTheme(next);}
@@ -589,7 +603,9 @@ async function doLogin(){
     authToken=login.token;currentUser=login.user;
     const access=companyAccess(currentUser);
     currentCompany=access.includes(currentUser.defaultCompany)?currentUser.defaultCompany:access[0];
-    const ok=await syncAll();if(!ok){loading(false);return;}
+    const ok=await syncAll();
+    // If sync fails (e.g. backend not yet redeployed, sheet missing), let the user in anyway with whatever data we have so they can keep working — they'll see the connection error indicator in the sidebar.
+    if(!ok){toast('Bazı veriler yüklenemedi. Backend güncellemesi gerekebilir; arayüze cache ile giriliyor.','err');}
     loading(false);
     saveSession();
     enterApp();
@@ -1739,41 +1755,58 @@ function muhendislik(){
       </tr>`;}).join('')}</tbody>
     </table></div>`:'<div class="empty-state"><div class="empty-icon">⌗</div><div>Mühendislik sürecinde proje yok. Önce Proje Girişi sekmesinden bir proje açın ve sorumlu onaylasın.</div></div>'}`;
 }
+let _muhActiveTab='cizim';
+let _muhBodyDrafts={}; // { 'projectCode|body': [rows] }
 function muhWorkspace(projectCode){
   const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
   if(!p){_muhSelectedProjectCode=null;return muhendislik();}
   let mh=C.Syn2_Muhendislik.find(m=>m.projectCode===projectCode);
   if(!mh){
-    // Lazy create
     mh={id:uid(),company:currentCompany,projectCode,durum:'Taslak',pidDosyalar:'[]',cizimDosyalar:'[]',revizyonNumarasi:0,revizyonGecmisi:'[]',sonGonderim:'',sonKararKullanici:'',sonKararTarih:'',satinalmaSorumlu:'',olusturan:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};
     C.Syn2_Muhendislik.push(mh);
     save('Syn2_Muhendislik').catch(()=>{});
   }
-  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_muhSelectedProjectCode=null;muhendislik()">← Liste</button>`;
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_muhSelectedProjectCode=null;_muhActiveTab='cizim';muhendislik()">← Liste</button>`;
+  const durum=mh.durum||'Taslak';
+  const cizimOnayli=durum==='Onaylandı';
+  let revGecmisi=[];try{revGecmisi=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
+  // Tab bar
+  const tabs=[{key:'cizim',label:'Çizimler',disabled:false}];
+  SYN_BODY_LIST.forEach(b=>tabs.push({key:'body:'+b,label:b,disabled:!cizimOnayli}));
+  tabs.push({key:'gonder',label:'Satın Almaya Gönder',disabled:!cizimOnayli});
+  const tabBar=`<div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;border-bottom:1px solid var(--border)">${tabs.map(t=>`<button class="filter-btn ${_muhActiveTab===t.key?'active':''}" ${t.disabled?'disabled style="opacity:.4;cursor:not-allowed"':''} onclick="muhSetTab('${t.key}')" title="${t.disabled?'Önce Çizimler onaylanmalı':''}">${esc(t.label)}</button>`).join('')}</div>`;
+  // Header (always)
+  const header=`<div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(projectCode)}</div>
+        <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} · ${esc(p.musteri)}</div>
+      </div>
+      <div style="text-align:right">
+        ${muhendislikDurumBadge(durum)}
+        <div class="text-mono text-sm text-muted" style="margin-top:4px">Revizyon: <strong>${mh.revizyonNumarasi||0}</strong></div>
+      </div>
+    </div>
+    ${durum==='Revizyon İstendi'&&revGecmisi.length?`<div class="alert alert-red" style="margin:14px 0 0">⚠ Arşen revizyon talep etti:<br><em>${esc(revGecmisi[revGecmisi.length-1]?.not||'')}</em><br><span class="text-mono text-sm">— ${esc(synSorumluLabel(revGecmisi[revGecmisi.length-1]?.kullanici))} · ${synFmtDate(revGecmisi[revGecmisi.length-1]?.tarih)}</span></div>`:''}
+    ${cizimOnayli?`<div class="alert alert-green" style="margin:14px 0 0">✓ Çizimler onaylandı. Aşağıdaki sekmelerden ekipman listesini doldurabilirsiniz.</div>`:''}
+  </div>`;
+  let body='';
+  if(_muhActiveTab==='cizim'){body=muhCizimSection(p,mh,revGecmisi);}
+  else if(_muhActiveTab==='gonder'){body=muhGonderSection(p,mh);}
+  else if(_muhActiveTab.startsWith('body:')){body=muhBodySection(p,mh,_muhActiveTab.slice(5));}
+  document.getElementById('content').innerHTML=header+tabBar+body;
+}
+function muhSetTab(k){_muhActiveTab=k;muhWorkspace(_muhSelectedProjectCode);}
+function muhCizimSection(p,mh,revGecmisi){
   const pid=synParseFiles(mh.pidDosyalar);
   const cizim=synParseFiles(mh.cizimDosyalar);
-  const meEng=p.sorumlu===currentUser.username; // engineering sorumlusu = atanan
-  const meOwner=p.olusturan===currentUser.username||isUmbrella(); // Arşen tarafı
+  const meEng=p.sorumlu===currentUser.username;
+  const meOwner=p.olusturan===currentUser.username||isUmbrella();
   const durum=mh.durum||'Taslak';
   const canEdit=meEng&&(durum==='Taslak'||durum==='Revizyon İstendi');
-  const canSubmit=meEng&&durum==='Taslak'&&(pid.length>0||cizim.length>0);
+  const canSubmit=meEng&&(durum==='Taslak'||durum==='Revizyon İstendi')&&(pid.length>0||cizim.length>0);
   const canDecide=meOwner&&durum==='Onay Bekliyor';
-  let revGecmisi=[];try{revGecmisi=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
-  document.getElementById('content').innerHTML=`
-    <div class="card mb-16">
-      <div class="card-header">
-        <div>
-          <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(projectCode)}</div>
-          <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} · ${esc(p.musteri)}</div>
-        </div>
-        <div style="text-align:right">
-          ${muhendislikDurumBadge(durum)}
-          <div class="text-mono text-sm text-muted" style="margin-top:4px">Revizyon: <strong>${mh.revizyonNumarasi||0}</strong></div>
-        </div>
-      </div>
-      ${durum==='Revizyon İstendi'&&revGecmisi.length?`<div class="alert alert-red" style="margin:14px 0 0">⚠ Arşen revizyon talep etti:<br><em>${esc(revGecmisi[revGecmisi.length-1]?.not||'')}</em><br><span class="text-mono text-sm">— ${esc(synSorumluLabel(revGecmisi[revGecmisi.length-1]?.kullanici))} · ${synFmtDate(revGecmisi[revGecmisi.length-1]?.tarih)}</span></div>`:''}
-      ${durum==='Onaylandı'?`<div class="alert alert-green" style="margin:14px 0 0">✓ Çizimler onaylandı. Ekipman listesi sekmesi yakında etkin olacak. (Phase 2b)</div>`:''}
-    </div>
+  return `
     <div class="grid-2 gap-16">
       <div class="card">
         <div class="card-header"><span class="card-title">P&ID Dosyaları</span><span class="text-muted text-sm">${pid.length} dosya</span></div>
@@ -1793,8 +1826,140 @@ function muhWorkspace(projectCode){
     <div class="card mt-16" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       ${canSubmit?`<button class="btn btn-primary" onclick="muhOnayaGonder()">📨 Onaya Gönder (Arşen)</button>`:''}
       ${canDecide?`<button class="btn btn-success" onclick="muhOnayla()">✓ Onayla</button><button class="btn btn-danger" onclick="muhRevizyonIste()">↺ Revizyon İste</button>`:''}
-      ${!canEdit&&!canDecide?`<span class="text-muted text-sm">${durum==='Onay Bekliyor'?'Arşen kararı bekleniyor.':(durum==='Onaylandı'?'Süreç tamamlandı.':'Düzenleme yetkin yok.')}</span>`:''}
+      ${!canEdit&&!canDecide?`<span class="text-muted text-sm">${durum==='Onay Bekliyor'?'Arşen kararı bekleniyor.':(durum==='Onaylandı'?'Çizimler onaylandı, ekipman sekmelerine geçebilirsiniz.':'Düzenleme yetkin yok.')}</span>`:''}
     </div>`;
+}
+function muhBodyDraftKey(projectCode,body){return projectCode+'|'+body;}
+function muhBodyRows(projectCode,body){
+  const k=muhBodyDraftKey(projectCode,body);
+  if(_muhBodyDrafts[k])return _muhBodyDrafts[k];
+  // load from C; if none, seed from template
+  const existing=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode&&r.body===body).sort((a,b)=>(parseInt(a.siraNo,10)||0)-(parseInt(b.siraNo,10)||0));
+  if(existing.length){_muhBodyDrafts[k]=existing.map(r=>({...r}));return _muhBodyDrafts[k];}
+  const tpl=SYN_BODY_TEMPLATES[body]||[];
+  _muhBodyDrafts[k]=tpl.map((altParca,i)=>({id:'',altParca,adet:'',olcu:'',malzemeCinsi:'',malzemeKalitesi:'',amac:'',not:'',siraNo:i+1,_new:true}));
+  return _muhBodyDrafts[k];
+}
+function muhBodySection(p,mh,body){
+  const cizimOnayli=mh.durum==='Onaylandı';
+  if(!cizimOnayli)return `<div class="card"><div class="empty-state">Önce çizimler onaylanmalı.</div></div>`;
+  const meEng=p.sorumlu===currentUser.username||isUmbrella();
+  const rows=muhBodyRows(p.projectCode,body);
+  const opts=(arr,sel)=>arr.map(v=>`<option value="${esc(v)}" ${(sel||'')===v?'selected':''}>${esc(v||'—')}</option>`).join('');
+  const tbl=rows.length?`<div class="table-wrap"><table style="font-size:12px">
+    <thead><tr>
+      <th style="min-width:160px">Alt Parça</th>
+      <th style="min-width:60px">Adet</th>
+      <th style="min-width:180px">Ölçü / Kapasite</th>
+      <th style="min-width:140px">Malzeme Cinsi</th>
+      <th style="min-width:140px">Malzeme Kalitesi</th>
+      <th style="min-width:160px">Amaç / Not</th>
+      ${meEng?'<th></th>':''}
+    </tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr>
+      <td><input type="text" value="${esc(r.altParca||'')}" oninput="muhRowEdit(${i},'altParca',this.value)" ${meEng?'':'readonly'} style="width:100%;background:transparent;border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text)"></td>
+      <td><input type="number" value="${esc(r.adet||'')}" oninput="muhRowEdit(${i},'adet',this.value)" ${meEng?'':'readonly'} style="width:100%;background:transparent;border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text);text-align:right"></td>
+      <td><input type="text" value="${esc(r.olcu||'')}" oninput="muhRowEdit(${i},'olcu',this.value)" ${meEng?'':'readonly'} style="width:100%;background:transparent;border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text)"></td>
+      <td>${meEng?`<select onchange="muhRowEdit(${i},'malzemeCinsi',this.value)" style="width:100%;background:var(--bg3);border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text)">${opts(SYN_MALZEME_CINSI,r.malzemeCinsi)}</select>`:esc(r.malzemeCinsi||'—')}</td>
+      <td>${meEng?`<select onchange="muhRowEdit(${i},'malzemeKalitesi',this.value)" style="width:100%;background:var(--bg3);border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text)">${opts(SYN_MALZEME_KALITESI,r.malzemeKalitesi)}</select>`:esc(r.malzemeKalitesi||'—')}</td>
+      <td><input type="text" value="${esc(r.amac||r.not||'')}" oninput="muhRowEdit(${i},'amac',this.value)" ${meEng?'':'readonly'} style="width:100%;background:transparent;border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text)"></td>
+      ${meEng?`<td><button class="btn btn-ghost btn-sm" onclick="muhRowSil(${i})" title="Satırı kaldır" style="color:var(--red)">×</button></td>`:''}
+    </tr>`).join('')}</tbody>
+  </table></div>`:`<div class="empty-state">Bu gövde için kayıt yok. ${meEng?'+ Yeni Satır ile ekleyebilirsiniz.':''}</div>`;
+  return `<div class="card">
+    <div class="card-header">
+      <span class="card-title">${esc(body)} · alt parçalar</span>
+      <div class="flex gap-8">
+        ${meEng?`<button class="btn btn-ghost btn-sm" onclick="muhRowEkle()">+ Yeni Satır</button>`:''}
+        ${meEng?`<button class="btn btn-primary btn-sm" onclick="muhBodyKaydet()">Kaydet</button>`:''}
+      </div>
+    </div>
+    ${tbl}
+  </div>`;
+}
+function muhRowEdit(i,field,val){
+  const k=muhBodyDraftKey(_muhSelectedProjectCode,_muhActiveTab.slice(5));
+  if(!_muhBodyDrafts[k])return;
+  _muhBodyDrafts[k][i][field]=val;
+}
+function muhRowEkle(){
+  const body=_muhActiveTab.slice(5);
+  const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
+  if(!_muhBodyDrafts[k])_muhBodyDrafts[k]=[];
+  _muhBodyDrafts[k].push({id:'',altParca:'',adet:'',olcu:'',malzemeCinsi:'',malzemeKalitesi:'',amac:'',not:'',siraNo:_muhBodyDrafts[k].length+1,_new:true});
+  muhWorkspace(_muhSelectedProjectCode);
+}
+function muhRowSil(i){
+  const body=_muhActiveTab.slice(5);
+  const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
+  if(!_muhBodyDrafts[k])return;
+  if(!confirm('Bu satır silinsin mi?'))return;
+  _muhBodyDrafts[k].splice(i,1);
+  muhWorkspace(_muhSelectedProjectCode);
+}
+async function muhBodyKaydet(){
+  const body=_muhActiveTab.slice(5);
+  const projectCode=_muhSelectedProjectCode;
+  const k=muhBodyDraftKey(projectCode,body);
+  const draft=_muhBodyDrafts[k]||[];
+  // Drop empty rows (no altParca text and no other content)
+  const meaningful=draft.filter(r=>(r.altParca||'').trim()||(r.adet||'').toString().trim()||(r.olcu||'').trim()||(r.amac||'').trim());
+  // Remove old rows for this body from C, then push new ones with ids and timestamps
+  C.Syn2_Ekipman=(C.Syn2_Ekipman||[]).filter(r=>!(r.projectCode===projectCode&&r.body===body));
+  const now=new Date().toISOString();
+  meaningful.forEach((r,i)=>{
+    C.Syn2_Ekipman.push({
+      id:r.id||uid(),company:currentCompany,projectCode,body,
+      altParca:r.altParca||'',adet:r.adet||'',olcu:r.olcu||'',
+      malzemeCinsi:r.malzemeCinsi||'',malzemeKalitesi:r.malzemeKalitesi||'',
+      amac:r.amac||'',not:r.not||'',siraNo:i+1,
+      kullanici:currentUser.username,
+      olusturma:r._new?now:(r.olusturma||now),
+      guncelleme:now
+    });
+  });
+  // Refresh the draft cache from C so the table shows persisted IDs
+  delete _muhBodyDrafts[k];
+  muhWorkspace(projectCode);
+  save('Syn2_Ekipman').then(()=>toast(body+' kaydedildi ✓ ('+meaningful.length+' satır)')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+function muhGonderSection(p,mh){
+  const meEng=p.sorumlu===currentUser.username||isUmbrella();
+  // count alt-parça per body
+  const byBody={};(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode).forEach(r=>{byBody[r.body]=(byBody[r.body]||0)+1;});
+  const total=Object.values(byBody).reduce((a,b)=>a+b,0);
+  const yiyecekliUsers=synUsersAll();
+  const bodyList=SYN_BODY_LIST.map(b=>`<tr><td class="td-main">${esc(b)}</td><td class="text-mono" style="text-align:right">${byBody[b]||0}</td></tr>`).join('');
+  return `<div class="card">
+    <div class="card-header"><span class="card-title">Özet</span><span class="text-muted text-sm">Toplam alt-parça: <strong>${total}</strong></span></div>
+    <div class="table-wrap"><table style="font-size:13px">
+      <thead><tr><th>Gövde</th><th style="text-align:right">Alt-Parça</th></tr></thead>
+      <tbody>${bodyList}</tbody>
+    </table></div>
+  </div>
+  <div class="card mt-16">
+    <div class="card-header"><span class="card-title">Satın Almaya Gönder</span></div>
+    ${meEng?`
+      <div class="form-group"><label>Satın Alma Sorumlusu *</label><select id="muh-sa-sorumlu"><option value="">Kullanıcı seçin</option>${yiyecekliUsers.map(u=>`<option value="${u.username}" ${(mh.satinalmaSorumlu||'')===u.username?'selected':''}>${esc(u.ad||u.username)} (${esc(u.username)})</option>`).join('')}</select></div>
+      <div class="text-sm text-muted mb-16">Gönder butonuna basıldığında seçilen kullanıcıya bildirim atılır ve proje durumu <strong>Satın Alma Sürecinde</strong>'ye geçer. Bu işlemden sonra ekipman listesi düzenlemesi kilitlenir.</div>
+      <button class="btn btn-primary" ${total===0?'disabled style="opacity:.5"':''} onclick="muhSatinalmayaGonder()">📨 Satın Almaya Gönder</button>
+      ${total===0?'<div class="text-muted text-sm mt-8">En az bir gövde için alt-parça eklenmeli.</div>':''}
+    `:`<div class="text-muted text-sm">Sadece mühendislik sorumlusu veya Arşen yetkilileri gönderebilir.</div>`}
+  </div>`;
+}
+async function muhSatinalmayaGonder(){
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
+  const sa=document.getElementById('muh-sa-sorumlu').value;
+  if(!sa){toast('Satın alma sorumlusu seçilmeli.','err');return;}
+  if(!confirm('Ekipman listesi satın alma sürecine gönderilsin mi? Bu işlemden sonra liste kilitlenir.'))return;
+  mh.satinalmaSorumlu=sa;mh.guncelleme=new Date().toISOString();
+  p.durum='Satın Alma Sürecinde';p.guncelleme=mh.guncelleme;
+  muhWorkspace(_muhSelectedProjectCode);
+  Promise.all([save('Syn2_Muhendislik'),save('Syn2_Projeler')]).then(()=>{
+    toast('Satın almaya gönderildi.');
+    notifyApi({recipients:[sa],baslik:'Satın alma süreci: '+p.projectCode,mesaj:`${p.projeAdi}\nMühendislik tamamlandı, satın alma listesi sizin onayınıza hazır.\nLütfen Satın Alma sekmesinden açın.`,tur:'Satın Alma',sayfa:'ekipman',kayitId:mh.id,sendEmail:true}).catch(()=>{});
+  }).catch(e=>toast('Hata: '+e.message,'err'));
 }
 async function muhDosyaYukle(input,subfolder,bucket){
   const files=Array.from(input.files||[]);if(!files.length)return;
