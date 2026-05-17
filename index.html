@@ -174,6 +174,27 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 [data-theme="light"] .sidebar-logo,[data-theme="light"] .login-logo img{filter:none;}
 [data-theme="light"] .file-icon{background:var(--accent-soft);}
 [data-theme="light"] thead tr{background:var(--bg3);}
+/* Gantt timetable */
+.gantt-wrap{border:1px solid var(--border);border-radius:8px;background:var(--bg2);}
+.gantt-scroll{overflow-x:auto;}
+.gantt-header,.gantt-row{display:flex;}
+.gantt-row-label{flex:0 0 220px;position:sticky;left:0;z-index:2;background:var(--bg2);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 12px;font-size:12px;display:flex;flex-direction:column;justify-content:center;}
+.gantt-header .gantt-row-label{background:var(--bg3);}
+.gantt-header-cells{flex:1 0 auto;display:flex;flex-direction:column;}
+.gantt-months,.gantt-weeks{display:flex;}
+.gantt-month-cell{flex:0 0 auto;text-align:center;font-size:11px;font-family:var(--mono);color:var(--text2);padding:6px 0;border-right:1px solid var(--border);background:var(--bg3);text-transform:uppercase;letter-spacing:1px;}
+.gantt-week-cell{flex:0 0 var(--gw,30px);text-align:center;font-size:10px;font-family:var(--mono);color:var(--text3);padding:4px 0;border-right:1px solid var(--border);background:var(--bg3);border-bottom:1px solid var(--border);}
+.gantt-timeline{flex:1 0 auto;position:relative;height:48px;border-bottom:1px solid var(--border);background:repeating-linear-gradient(to right,transparent 0,transparent calc(var(--gw,30px) - 1px),var(--border) calc(var(--gw,30px) - 1px),var(--border) var(--gw,30px));}
+.gantt-today-line{position:absolute;top:0;bottom:0;width:1px;background:var(--red);pointer-events:none;z-index:1;}
+.gantt-today-line::before{content:'BUGÜN';position:absolute;top:-14px;left:-22px;font-size:9px;color:var(--red);font-family:var(--mono);background:var(--bg2);padding:0 4px;border-radius:3px;}
+.gantt-bar{position:absolute;top:50%;transform:translateY(-50%);height:16px;border-radius:8px;font-size:10px;font-family:var(--mono);color:#fff;padding:0 6px;display:flex;align-items:center;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid rgba(255,255,255,0.18);box-shadow:0 1px 3px rgba(0,0,0,.18);}
+.gantt-bar.ongoing{background-image:repeating-linear-gradient(45deg,transparent 0,transparent 4px,rgba(255,255,255,0.18) 4px,rgba(255,255,255,0.18) 8px);}
+.gantt-bar.proje{background:#5aa6ff;}
+.gantt-bar.muh{background:#f5a623;color:#2a1700;}
+.gantt-bar.sa{background:#3ecf8e;color:#0a2a1e;}
+.gantt-bar.done{background:#16a571;}
+.gantt-legend{display:inline-flex;align-items:center;gap:14px;font-size:11px;color:var(--text2);}
+.gantt-legend-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
 @media (max-width:900px){
   .hamburger{display:inline-flex;}
@@ -2242,10 +2263,123 @@ async function saTeklifDurum(id,durum){
   t.durum=durum;t.guncelleme=new Date().toISOString();
   save('Syn2_Teklif').then(()=>toast('Durum güncellendi.')).catch(e=>toast('Hata: '+e.message,'err'));
 }
-// ── Timetable / Gantt (Tab 4) — stub ──
+// ── Timetable / Gantt (Tab 4) ──
+let _ganttYear=null;
+const _ganttCellW=30; // px per week
+function ganttWeekOfYear(d){const date=new Date(d);if(isNaN(date))return null;const y=date.getFullYear();const start=new Date(y,0,1);const days=Math.floor((date-start)/86400000);const week=Math.floor(days/7)+1;return{y,week,days};}
+function ganttDateToCol(d,year){
+  const w=ganttWeekOfYear(d);if(!w)return null;
+  if(w.y<year)return 0;
+  if(w.y>year)return 55;
+  return Math.max(1,Math.min(54,w.week));
+}
+function ganttFmt(d){if(!d)return '—';const x=new Date(d);if(isNaN(x))return '—';return x.toLocaleDateString('tr-TR');}
+function ganttMonthSpans(year){
+  // For each month in `year`, count how many of the 54 weeks fall in it (based on week start = year-01-01 + (n-1)*7 days)
+  const months=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const out=months.map(name=>({name,weeks:0}));
+  const start=new Date(year,0,1);
+  for(let i=0;i<54;i++){
+    const d=new Date(start.getTime()+i*7*86400000);
+    if(d.getFullYear()===year)out[d.getMonth()].weeks++;
+  }
+  return out.filter(m=>m.weeks>0);
+}
+function ganttProjectStages(p){
+  // Returns array of {label, klass, start, end, ongoing}
+  const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===p.projectCode);
+  const stages=[];
+  const now=new Date().toISOString();
+  // Stage 1 — Proje Girişi (creation to engineering kick-off)
+  const projeStart=p.olusturma||p.guncelleme;
+  const projeEnd=mh?.olusturma||(p.durum==='İptal'?p.guncelleme:null)||now;
+  if(projeStart){stages.push({label:'Proje',klass:'proje',start:projeStart,end:projeEnd,ongoing:!mh});}
+  // Stage 2 — Mühendislik
+  if(mh){
+    const muhStart=mh.olusturma;
+    const muhEnd=mh.durum==='Onaylandı'?mh.sonKararTarih:now;
+    stages.push({label:'Mühendislik',klass:'muh',start:muhStart,end:muhEnd,ongoing:mh.durum!=='Onaylandı'});
+  }
+  // Stage 3 — Satın Alma
+  if(p.durum==='Satın Alma Sürecinde'||p.durum==='Tamamlandı'){
+    const saStart=mh?.sonKararTarih||mh?.guncelleme||p.guncelleme;
+    const teklif=(C.Syn2_Teklif||[]).filter(t=>t.projectCode===p.projectCode);
+    const lastOnay=teklif.filter(t=>t.onayTarihi).map(t=>t.onayTarihi).sort().pop();
+    const saEnd=p.durum==='Tamamlandı'?(lastOnay||p.guncelleme):now;
+    stages.push({label:'Satın Alma',klass:p.durum==='Tamamlandı'?'done':'sa',start:saStart,end:saEnd,ongoing:p.durum!=='Tamamlandı'});
+  }
+  return stages;
+}
+function ganttBarHtml(stage,year){
+  const c1=ganttDateToCol(stage.start,year);
+  const c2=ganttDateToCol(stage.end,year);
+  if(c1===null||c2===null)return '';
+  if(c1>54||c2<1)return ''; // entirely outside this year
+  const startCol=Math.max(1,c1);
+  const endCol=Math.max(startCol,Math.min(54,c2));
+  const left=(startCol-1)*_ganttCellW;
+  const width=Math.max(_ganttCellW*0.5,(endCol-startCol+1)*_ganttCellW-2);
+  const tip=`${stage.label}: ${ganttFmt(stage.start)} → ${ganttFmt(stage.end)}${stage.ongoing?' (sürüyor)':''}`;
+  return `<div class="gantt-bar ${stage.klass}${stage.ongoing?' ongoing':''}" style="left:${left}px;width:${width}px" title="${esc(tip)}">${esc(stage.label)}</div>`;
+}
+function ganttTodayLine(year){
+  const w=ganttWeekOfYear(new Date());
+  if(w.y!==year)return '';
+  const left=(w.week-0.5)*_ganttCellW;
+  return `<div class="gantt-today-line" style="left:${left}px"></div>`;
+}
+function ganttProjectInYear(p,year){
+  const stages=ganttProjectStages(p);
+  return stages.some(s=>{const c1=ganttDateToCol(s.start,year),c2=ganttDateToCol(s.end,year);return c1!==null&&c2!==null&&c1<=54&&c2>=1;});
+}
 function gantt(){
-  document.getElementById('topbar-actions').innerHTML='';
-  document.getElementById('content').innerHTML=`<div class="card"><div class="empty-state"><div class="empty-icon">▦</div><div><strong>Gantt timetable yapım aşamasında.</strong><br>54 haftalık yıl görünümü, ay etiketleri ve aşama bar'ları yakında eklenecek.</div></div></div>`;
+  const year=_ganttYear||new Date().getFullYear();_ganttYear=year;
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year-1};gantt()">← ${year-1}</button><strong style="padding:0 12px;font-family:var(--mono);color:var(--accent)">${year}</strong><button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year+1};gantt()">${year+1} →</button>`;
+  const projects=(C.Syn2_Projeler||[]).filter(p=>ganttProjectInYear(p,year)).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
+  const months=ganttMonthSpans(year);
+  const totalW=54*_ganttCellW;
+  const monthRow=months.map(m=>`<div class="gantt-month-cell" style="flex-basis:${m.weeks*_ganttCellW}px">${m.name}</div>`).join('');
+  const weekRow=Array.from({length:54},(_,i)=>`<div class="gantt-week-cell">${i+1}</div>`).join('');
+  const todayLine=ganttTodayLine(year);
+  const rows=projects.map(p=>{
+    const stages=ganttProjectStages(p);
+    return `<div class="gantt-row">
+      <div class="gantt-row-label">
+        <div class="text-mono" style="color:var(--accent);font-weight:600;font-size:11px">${esc(p.projectCode)}</div>
+        <div style="font-size:11px;color:var(--text)">${esc(p.projeAdi||'')}</div>
+        <div style="font-size:10px;color:var(--text3)">${esc(p.musteri||'')}</div>
+      </div>
+      <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px" onclick="projeDetay('${p.id}')">
+        ${todayLine}
+        ${stages.map(s=>ganttBarHtml(s,year)).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('content').innerHTML=`
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Proje Zaman Çizelgesi · ${year}</span>
+        <span class="gantt-legend">
+          <span><span class="gantt-legend-dot" style="background:#5aa6ff"></span>Proje</span>
+          <span><span class="gantt-legend-dot" style="background:#f5a623"></span>Mühendislik</span>
+          <span><span class="gantt-legend-dot" style="background:#3ecf8e"></span>Satın Alma</span>
+          <span><span class="gantt-legend-dot" style="background:#16a571"></span>Tamamlandı</span>
+          <span style="color:var(--red)">— Bugün</span>
+        </span>
+      </div>
+      ${projects.length?`<div class="gantt-wrap"><div class="gantt-scroll">
+        <div class="gantt-header">
+          <div class="gantt-row-label">Proje</div>
+          <div class="gantt-header-cells" style="width:${totalW}px;--gw:${_ganttCellW}px">
+            <div class="gantt-months">${monthRow}</div>
+            <div class="gantt-weeks">${weekRow}</div>
+          </div>
+        </div>
+        ${rows}
+      </div></div>
+      <div class="text-sm text-muted mt-16">Bir proje çubuğuna tıklayınca detay açılır. Yıl başlangıcı her zaman 1 Ocak; haftalar bu tarihten itibaren 7'şer günlük parçalardır.</div>
+      `:'<div class="empty-state"><div class="empty-icon">▦</div><div>'+year+' yılında aktif proje yok. Bir önceki/sonraki yıla geçebilir veya yeni proje açabilirsiniz.</div></div>'}
+    </div>`;
 }
 
 // ── ÇIKTI ──
