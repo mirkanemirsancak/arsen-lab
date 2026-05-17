@@ -28,7 +28,8 @@ var DEFAULT_SHEET_HEADERS = {
   SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler: ['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
   Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
-  Syn2_Ekipman: ['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme']
+  Syn2_Ekipman: ['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme'],
+  Syn2_Teklif: ['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme']
 };
 
 function json(result) {
@@ -590,6 +591,16 @@ function deleteProjectFile(data, user) {
   try { DriveApp.getFileById(data.fileId).setTrashed(true); } catch (e) { throw new Error('Dosya silinemedi: ' + e.message); }
   return { ok: true };
 }
+function deleteProjectFolder(data, user) {
+  if (!data.projectCode) throw new Error('Proje kodu eksik.');
+  if (user.role !== 'admin') throw new Error('Klasor silmek icin admin yetkisi gerekli.');
+  try {
+    var root = rootFolder();
+    var ex = root.getFoldersByName(data.projectCode);
+    if (ex.hasNext()) ex.next().setTrashed(true);
+  } catch (e) { throw new Error('Klasor silinemedi: ' + e.message); }
+  return { ok: true };
+}
 
 function deleteFile(data, user) {
   if (user.role !== 'admin') throw new Error('Dosya silmek icin admin yetkisi gerekli.');
@@ -735,6 +746,7 @@ function doPost(e) {
       else if (data.action === 'previewProjectCode') result = nextProjectCodePreview(data.customer);
       else if (data.action === 'uploadProjectFile') result = uploadProjectFile(data, user);
       else if (data.action === 'deleteProjectFile') result = deleteProjectFile(data, user);
+      else if (data.action === 'deleteProjectFolder') result = deleteProjectFolder(data, user);
       else if (data.action === 'listOvertime') result = listOvertime(user, data.company);
       else if (data.action === 'createOvertime') result = createOvertime(data, user);
       else if (data.action === 'updateOvertimeStatus') result = updateOvertimeStatus(data, user);

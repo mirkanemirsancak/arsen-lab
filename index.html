@@ -298,7 +298,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 
 <script>
 const SCRIPT_URL='https://script.google.com/macros/s/AKfycbywgaqp0vIXqPj44IJV2kuomL1jTk_ZnPLiGRTCtrE_hXFBo4rgPmtYT-p3Ne3cbagj/exec';
-const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik','Syn2_Ekipman'];
+const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik','Syn2_Ekipman','Syn2_Teklif'];
 const SYN_BODY_TEMPLATES={
   'Eşanjör':['Kondenser Gövde','Kondenser Ayna','Kondenser Boru Sabitleme Perforeleri','Kondenser Flanşlar','Kondenser Kepler','Kondenser İç Basınçlı Borular'],
   'Ekstraktör':['Ekstraktör Gövde','Ekstraktör Kapak Flanş','Ekstraktör Üst Kapak','Ekstraktör Alt Tapa','Ekstraktör Kavrama','Ekstraktör Ceket'],
@@ -356,9 +356,10 @@ const COLS={
   SynRaporlar:['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler:['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
   Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
-  Syn2_Ekipman:['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme']
+  Syn2_Ekipman:['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme'],
+  Syn2_Teklif:['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme']
 };
-const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[]};
+const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[],Syn2_Teklif:[]};
 let currentUser=null,currentPage=null,currentCompany='fuwell',syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
 function applyTheme(t){const root=document.documentElement;root.setAttribute('data-theme',t);const ic=t==='light'?'☀':'☾';const lt=document.getElementById('login-theme-icon');if(lt)lt.textContent=ic;const st=document.getElementById('sidebar-theme-icon');if(st)st.textContent=ic;const sl=document.getElementById('sidebar-theme-label');if(sl)sl.textContent=t==='light'?'Aydınlık':'Karanlık';document.querySelectorAll('.theme-toggle').forEach(b=>b.setAttribute('data-mode',t));}
 function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';const next=cur==='light'?'dark':'light';try{localStorage.setItem('arsenTheme',next);}catch(e){}applyTheme(next);}
@@ -1719,10 +1720,25 @@ async function projeReddet(id){
 }
 async function projeSil(id){
   if(!canDelete()){toast('Admin yetkisi gerekli.','err');return;}
-  if(!confirm('Bu proje kaydı silinsin mi? Drive dosyaları kalır.'))return;
+  const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
+  const pc=p.projectCode||'';
+  const mhCount=(C.Syn2_Muhendislik||[]).filter(r=>r.projectCode===pc).length;
+  const ekCount=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===pc).length;
+  const tkCount=(C.Syn2_Teklif||[]).filter(r=>r.projectCode===pc).length;
+  if(!confirm(`Bu proje TÜMÜYLE silinsin mi?\n\n• Proje kaydı (${pc})\n• Mühendislik kaydı (${mhCount})\n• Ekipman alt-parça (${ekCount})\n• Satın alma teklif (${tkCount})\n• Drive klasörü ve tüm dosyalar\n\nGERİ ALINAMAZ.`))return;
+  // Cascade in memory
   C.Syn2_Projeler=C.Syn2_Projeler.filter(x=>x.id!==id);
+  if(pc){
+    C.Syn2_Muhendislik=(C.Syn2_Muhendislik||[]).filter(r=>r.projectCode!==pc);
+    C.Syn2_Ekipman=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode!==pc);
+    C.Syn2_Teklif=(C.Syn2_Teklif||[]).filter(r=>r.projectCode!==pc);
+  }
   renderProjeListesi();
-  save('Syn2_Projeler').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+  // Save all sheets in parallel, then trash the Drive folder
+  Promise.all([save('Syn2_Projeler'),save('Syn2_Muhendislik'),save('Syn2_Ekipman'),save('Syn2_Teklif')])
+    .then(()=>pc?driveApi('deleteProjectFolder',{projectCode:pc}).catch(e=>toast('Klasör silinemedi: '+e.message,'err')):null)
+    .then(()=>toast(`Proje "${pc}" tamamen silindi.`,'err'))
+    .catch(e=>toast('Silme hatası: '+e.message,'err'));
 }
 
 // ── Mühendislik (Tab 2) — Phase 2a: P&ID + Çizim + revizyon döngüsü ──
@@ -2032,10 +2048,199 @@ async function muhRevizyonIste(){
     notifyApi({recipients:[p.sorumlu],baslik:'Revizyon istendi: '+p.projectCode,mesaj:`${p.projeAdi}\n${not.trim()}\n\nMühendislik sekmesinden dosyaları güncelleyip tekrar onaya gönderin.`,tur:'Mühendislik',sayfa:'analiz',kayitId:mh.id,sendEmail:true}).catch(()=>{});
   }).catch(e=>toast('Hata: '+e.message,'err'));
 }
-// ── Satın Alma (Tab 3) — stub ──
+// ── Satın Alma (Tab 3) ──
+let _saSelectedProjectCode=null;
+const SYN_CURRENCIES=['EUR','TRY','USD'];
+function saFmtMoney(v,cur){const n=parseFloat(v)||0;return n?n.toLocaleString('tr-TR',{minimumFractionDigits:0,maximumFractionDigits:2})+' '+(cur||''):'—';}
+function saThresholdFor(cur){return SYN_APPROVAL_THRESHOLDS[cur]||Infinity;}
+function saWinningTeklifler(projectCode){return (C.Syn2_Teklif||[]).filter(t=>t.projectCode===projectCode&&(t.kazanan==='true'||t.kazanan===true));}
+function saSupplierTotals(projectCode,supplier,currency,excludeId){
+  return saWinningTeklifler(projectCode).filter(t=>t.tedarikci===supplier&&t.paraBirimi===currency&&t.id!==excludeId).reduce((a,t)=>a+(parseFloat(t.fiyat)||0),0);
+}
+function saProductTotals(projectCode,ekipmanId,currency,excludeId){
+  return saWinningTeklifler(projectCode).filter(t=>t.ekipmanId===ekipmanId&&t.paraBirimi===currency&&t.id!==excludeId).reduce((a,t)=>a+(parseFloat(t.fiyat)||0),0);
+}
+function saStatusBadge(d){const m={'Siparişte':'badge-blue','Onayda':'badge-amber','Teknikte':'badge-purple','Post Delivery':'badge-green'};return `<span class="badge ${m[d]||'badge-gray'}">${esc(d||'—')}</span>`;}
+function saApprovalBadge(d){const m={'doğrudan':'badge-green','bekliyor':'badge-amber','onaylandı':'badge-green','reddedildi':'badge-red'};return d?`<span class="badge ${m[d]||'badge-gray'}">${esc(d)}</span>`:'';}
 function satinalma(){
   document.getElementById('topbar-actions').innerHTML='';
-  document.getElementById('content').innerHTML=`<div class="card"><div class="empty-state"><div class="empty-icon">⊞</div><div><strong>Satın Alma sekmesi yapım aşamasında.</strong><br>Çoklu teklif tablosu, kazanan seçimi ve Rıdvan onay eşiği yakında eklenecek.</div></div></div>`;
+  if(_saSelectedProjectCode){return saWorkspace(_saSelectedProjectCode);}
+  const list=(C.Syn2_Projeler||[]).filter(p=>['Satın Alma Sürecinde','Tamamlandı'].includes(p.durum)).sort((a,b)=>new Date(b.olusturma||0)-new Date(a.olusturma||0));
+  document.getElementById('content').innerHTML=`
+    <div class="alert alert-amber mb-16" style="font-size:13px">Satın alma sürecindeki projeler. Bir projeyi açmak için satıra tıklayın.</div>
+    ${list.length?`<div class="table-wrap"><table>
+      <thead><tr><th>Proje Kodu</th><th>Proje Adı</th><th>Müşteri</th><th>Satın Alma Sorumlusu</th><th>Ekipman</th><th>Teklif</th><th>Durum</th></tr></thead>
+      <tbody>${list.map(p=>{
+        const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===p.projectCode);
+        const ekCount=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode).length;
+        const tkCount=(C.Syn2_Teklif||[]).filter(r=>r.projectCode===p.projectCode).length;
+        return `<tr style="cursor:pointer" onclick="_saSelectedProjectCode='${p.projectCode}';satinalma()">
+          <td class="text-mono text-sm" style="color:var(--accent)">${esc(p.projectCode)}</td>
+          <td class="td-main">${esc(p.projeAdi)}</td>
+          <td>${esc(p.musteri)}</td>
+          <td>${esc(synSorumluLabel(mh?.satinalmaSorumlu))}</td>
+          <td class="text-mono text-sm">${ekCount}</td>
+          <td class="text-mono text-sm">${tkCount}</td>
+          <td>${synProjectStatusBadge(p.durum)}</td>
+        </tr>`;}).join('')}</tbody>
+    </table></div>`:'<div class="empty-state"><div class="empty-icon">⊞</div><div>Satın alma sürecinde proje yok. Mühendislik sekmesinden bir proje "Satın Almaya Gönder" tuşuyla buraya iletilebilir.</div></div>'}`;
+}
+function saWorkspace(projectCode){
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);if(!p){_saSelectedProjectCode=null;return satinalma();}
+  const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===projectCode);
+  const meSA=mh?.satinalmaSorumlu===currentUser.username;
+  const meOwner=p.olusturan===currentUser.username||isUmbrella();
+  const ekipman=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode).sort((a,b)=>{const ba=SYN_BODY_LIST.indexOf(a.body),bb=SYN_BODY_LIST.indexOf(b.body);if(ba!==bb)return ba-bb;return (parseInt(a.siraNo,10)||0)-(parseInt(b.siraNo,10)||0);});
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_saSelectedProjectCode=null;satinalma()">← Liste</button>`;
+  // Approval queue summary at top
+  const bekleyen=(C.Syn2_Teklif||[]).filter(t=>t.projectCode===projectCode&&t.onayDurumu==='bekliyor');
+  // Group ekipman by body
+  const byBody={};SYN_BODY_LIST.forEach(b=>byBody[b]=[]);ekipman.forEach(e=>{if(!byBody[e.body])byBody[e.body]=[];byBody[e.body].push(e);});
+  const bodyBlocks=SYN_BODY_LIST.filter(b=>byBody[b].length).map(b=>`
+    <div class="card mb-16">
+      <div class="card-header"><span class="card-title">${esc(b)} <span class="text-muted text-sm">(${byBody[b].length} kalem)</span></span></div>
+      ${byBody[b].map(e=>saEkipmanCard(e,meSA,meOwner,projectCode)).join('')}
+    </div>`).join('');
+  document.getElementById('content').innerHTML=`
+    <div class="card mb-16">
+      <div class="card-header">
+        <div>
+          <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(projectCode)}</div>
+          <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} · ${esc(p.musteri)}</div>
+        </div>
+        <div style="text-align:right">${synProjectStatusBadge(p.durum)}<div class="text-mono text-sm text-muted" style="margin-top:4px">Satın Alma: ${esc(synSorumluLabel(mh?.satinalmaSorumlu))}</div></div>
+      </div>
+      ${bekleyen.length?`<div class="alert alert-amber" style="margin:14px 0 0">⚠ Arşen onayı bekleyen ${bekleyen.length} teklif var. Eşik aşımı nedeniyle Rıdvan/Arşen kararı bekleniyor.</div>`:''}
+      ${!meSA&&!meOwner?'<div class="alert alert-amber" style="margin:14px 0 0;font-size:12px">Sadece atanan satın alma sorumlusu veya Arşen yetkilileri teklif girebilir.</div>':''}
+    </div>
+    ${bodyBlocks||'<div class="empty-state">Bu projede ekipman kalemi yok.</div>'}`;
+}
+function saEkipmanCard(e,meSA,meOwner,projectCode){
+  const teklifler=(C.Syn2_Teklif||[]).filter(t=>t.ekipmanId===e.id).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
+  const kazananVar=teklifler.some(t=>t.kazanan==='true'||t.kazanan===true);
+  return `<div style="padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:rgba(var(--tint),0.02)">
+    <div class="flex justify-between items-center" style="flex-wrap:wrap;gap:8px">
+      <div>
+        <strong>${esc(e.altParca||'—')}</strong>
+        <span class="text-muted text-sm">· ${esc(e.adet||'?')} adet · ${esc(e.olcu||'-')} · ${esc(e.malzemeCinsi||'')} ${esc(e.malzemeKalitesi||'')}</span>
+      </div>
+      ${meSA?`<button class="btn btn-ghost btn-sm" onclick="saTeklifEkle('${e.id}','${projectCode}')">+ Teklif</button>`:''}
+    </div>
+    ${teklifler.length?`<div class="table-wrap" style="margin-top:8px"><table style="font-size:12px">
+      <thead><tr><th>Tedarikçi</th><th style="text-align:right">Fiyat</th><th>Termin</th><th>Ödeme</th><th>Teslimat</th><th>Onay</th><th>Durum</th><th>Kazanan</th>${meSA||meOwner?'<th></th>':''}</tr></thead>
+      <tbody>${teklifler.map(t=>{const isWinner=t.kazanan==='true'||t.kazanan===true;return `<tr ${isWinner?'style="background:rgba(62,207,142,0.08)"':''}>
+        <td>${esc(t.tedarikci||'—')}</td>
+        <td class="text-mono" style="text-align:right">${saFmtMoney(t.fiyat,t.paraBirimi)}</td>
+        <td class="text-mono text-sm">${synFmtDate(t.termin)}</td>
+        <td class="text-sm">${esc(t.odeme||'—')}</td>
+        <td class="text-sm">${esc(t.teslimat||'—')}</td>
+        <td>${isWinner?saApprovalBadge(t.onayDurumu):''}</td>
+        <td>${isWinner&&t.onayDurumu!=='bekliyor'&&t.onayDurumu!=='reddedildi'?(meSA?`<select onchange="saTeklifDurum('${t.id}',this.value)" style="background:var(--bg3);border:1px solid var(--border);padding:4px 6px;border-radius:5px;color:var(--text);font-size:11px"><option value="">—</option>${SYN_PURCHASE_STATUS.map(s=>`<option value="${s}" ${t.durum===s?'selected':''}>${s}</option>`).join('')}</select>`:saStatusBadge(t.durum)):''}</td>
+        <td>${isWinner?'<span class="badge badge-green">✓ Kazanan</span>':(meSA&&!kazananVar?`<button class="btn btn-success btn-sm" onclick="saKazanan('${t.id}')">Kazanan</button>`:'')}</td>
+        ${meSA||meOwner?`<td>${meSA&&!isWinner?`<button class="btn btn-ghost btn-sm" onclick="saTeklifSil('${t.id}')" style="color:var(--red)">×</button>`:''}${meOwner&&isWinner&&t.onayDurumu==='bekliyor'?`<button class="btn btn-success btn-sm" onclick="saKararVer('${t.id}','onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="saKararVer('${t.id}','reddedildi')">Reddet</button>`:''}</td>`:''}
+      </tr>`;}).join('')}</tbody>
+    </table></div>`:'<div class="text-muted text-sm" style="margin-top:8px">Henüz teklif yok.</div>'}
+  </div>`;
+}
+function saTeklifEkle(ekipmanId,projectCode){
+  showModal('Yeni Teklif',`
+    <div class="form-row"><div class="form-group"><label>Tedarikçi *</label><input type="text" id="tk-tedarikci" placeholder="Firma adı"></div>
+    <div class="form-group"><label>Fiyat *</label><input type="number" id="tk-fiyat" step="any" placeholder="0.00"></div></div>
+    <div class="form-row"><div class="form-group"><label>Para Birimi</label><select id="tk-para">${SYN_CURRENCIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+    <div class="form-group"><label>Termin</label><input type="date" id="tk-termin"></div></div>
+    <div class="form-row"><div class="form-group"><label>Ödeme Şekli</label><input type="text" id="tk-odeme" placeholder="Örn: 30 gün vadeli"></div>
+    <div class="form-group"><label>Teslimat Şekli</label><input type="text" id="tk-teslimat" placeholder="Örn: EXW, CIF"></div></div>`,
+    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="saTeklifKaydet('${ekipmanId}','${projectCode}')">Kaydet</button>`);
+}
+async function saTeklifKaydet(ekipmanId,projectCode){
+  const tedarikci=document.getElementById('tk-tedarikci').value.trim();
+  const fiyat=parseFloat(document.getElementById('tk-fiyat').value);
+  if(!tedarikci||!isFinite(fiyat)||fiyat<=0){toast('Tedarikçi ve fiyat zorunlu.','err');return;}
+  const row={
+    id:uid(),company:currentCompany,projectCode,ekipmanId,
+    tedarikci,fiyat:String(fiyat),paraBirimi:document.getElementById('tk-para').value,
+    termin:document.getElementById('tk-termin').value,
+    odeme:document.getElementById('tk-odeme').value,
+    teslimat:document.getElementById('tk-teslimat').value,
+    kazanan:'false',kazanmaSebebi:'',onayDurumu:'',onayKullanici:'',onayTarihi:'',onayNot:'',durum:'',
+    kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()
+  };
+  C.Syn2_Teklif.push(row);
+  closeModalDirect();saWorkspace(_saSelectedProjectCode);
+  save('Syn2_Teklif').then(()=>toast('Teklif eklendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function saTeklifSil(id){
+  const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
+  if(!confirm(`${t.tedarikci} teklifi silinsin mi?`))return;
+  C.Syn2_Teklif=C.Syn2_Teklif.filter(x=>x.id!==id);
+  saWorkspace(_saSelectedProjectCode);
+  save('Syn2_Teklif').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+function saKazanan(id){
+  const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
+  const ekipman=C.Syn2_Ekipman.find(e=>e.id===t.ekipmanId);
+  // Compute cumulative totals if this becomes a winner (include this teklif)
+  const projectCode=t.projectCode,cur=t.paraBirimi,fiyat=parseFloat(t.fiyat)||0;
+  const supplierTotal=saSupplierTotals(projectCode,t.tedarikci,cur,id)+fiyat;
+  const productTotal=saProductTotals(projectCode,t.ekipmanId,cur,id)+fiyat;
+  const threshold=saThresholdFor(cur);
+  const supplierOver=supplierTotal>threshold;
+  const productOver=productTotal>threshold;
+  const willNeedApproval=supplierOver||productOver;
+  const warning=willNeedApproval?`
+    <div class="alert alert-amber" style="font-size:12px">
+      ⚠ Eşik aşılıyor (${cur} ${threshold.toLocaleString('tr-TR')})<br>
+      ${supplierOver?`• ${esc(t.tedarikci)} toplamı: <strong>${supplierTotal.toLocaleString('tr-TR')} ${cur}</strong><br>`:''}
+      ${productOver?`• Aynı ürün toplamı (${esc(ekipman?.altParca||'')}): <strong>${productTotal.toLocaleString('tr-TR')} ${cur}</strong><br>`:''}
+      Bu teklif Arşen onayına gidecek.
+    </div>`:`<div class="alert alert-green" style="font-size:12px">✓ Eşik altında, doğrudan geçer.</div>`;
+  showModal('Kazanan Olarak İşaretle',`
+    <div class="text-sm mb-16">${esc(t.tedarikci)} · ${saFmtMoney(t.fiyat,t.paraBirimi)} · ${esc(ekipman?.altParca||'')}</div>
+    ${warning}
+    <div class="form-group"><label>Kazanma Sebebi *</label><textarea id="kz-sebep" style="min-height:100px" placeholder="Neden bu teklif seçildi? (zorunlu)"></textarea></div>`,
+    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-success" onclick="saKazananKaydet('${id}')">Kazanan Olarak İşaretle</button>`);
+}
+async function saKazananKaydet(id){
+  const sebep=document.getElementById('kz-sebep').value.trim();
+  if(!sebep){toast('Kazanma sebebi zorunlu.','err');return;}
+  const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
+  const cur=t.paraBirimi,fiyat=parseFloat(t.fiyat)||0;
+  const supplierTotal=saSupplierTotals(t.projectCode,t.tedarikci,cur,id)+fiyat;
+  const productTotal=saProductTotals(t.projectCode,t.ekipmanId,cur,id)+fiyat;
+  const threshold=saThresholdFor(cur);
+  const needsApproval=supplierTotal>threshold||productTotal>threshold;
+  t.kazanan='true';t.kazanmaSebebi=sebep;t.onayDurumu=needsApproval?'bekliyor':'doğrudan';t.guncelleme=new Date().toISOString();
+  if(!needsApproval){t.durum=t.durum||'Onayda';}
+  closeModalDirect();saWorkspace(_saSelectedProjectCode);
+  save('Syn2_Teklif').then(()=>{
+    toast(needsApproval?'Kazanan işaretlendi · Arşen onayına gönderildi':'Kazanan işaretlendi ✓');
+    if(needsApproval){
+      const p=C.Syn2_Projeler.find(x=>x.projectCode===t.projectCode);
+      if(p){const ek=C.Syn2_Ekipman.find(e=>e.id===t.ekipmanId);
+        notifyApi({recipients:[p.olusturan],baslik:'Satın alma onayı bekleniyor: '+t.projectCode,mesaj:`${p.projeAdi}\n${ek?.altParca||''} için kazanan teklif:\nTedarikçi: ${t.tedarikci}\nFiyat: ${saFmtMoney(t.fiyat,cur)}\nSebep: ${sebep}\n\nEşik aşıldı, kararınız bekleniyor.`,tur:'Satın Alma',sayfa:'ekipman',kayitId:t.id,sendEmail:true}).catch(()=>{});}
+    }
+  }).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function saKararVer(id,karar){
+  const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
+  const not=karar==='reddedildi'?prompt('Reddetme sebebi:'):prompt('Onay notu (opsiyonel):');
+  if(karar==='reddedildi'&&(not===null||!not.trim())){toast('Reddetme sebebi zorunlu.','err');return;}
+  t.onayDurumu=karar;t.onayKullanici=currentUser.username;t.onayTarihi=new Date().toISOString();t.onayNot=(not||'').trim();t.guncelleme=t.onayTarihi;
+  if(karar==='reddedildi'){t.kazanan='false';t.durum='';}
+  saWorkspace(_saSelectedProjectCode);
+  save('Syn2_Teklif').then(()=>{
+    toast(karar==='onaylandı'?'Onaylandı ✓':'Reddedildi.','err');
+    const p=C.Syn2_Projeler.find(x=>x.projectCode===t.projectCode);
+    const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===t.projectCode);
+    if(p&&mh?.satinalmaSorumlu){
+      notifyApi({recipients:[mh.satinalmaSorumlu],baslik:`Satın alma ${karar}: `+t.projectCode,mesaj:`${p.projeAdi}\n${t.tedarikci} · ${saFmtMoney(t.fiyat,t.paraBirimi)}\n${karar==='onaylandı'?'Arşen onayladı, satın almaya devam edebilirsiniz.':'Arşen reddetti, başka teklif seçmelisiniz.'}\n${not?'Not: '+not:''}`,tur:'Satın Alma',sayfa:'ekipman',kayitId:t.id,sendEmail:true}).catch(()=>{});
+    }
+  }).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function saTeklifDurum(id,durum){
+  const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
+  t.durum=durum;t.guncelleme=new Date().toISOString();
+  save('Syn2_Teklif').then(()=>toast('Durum güncellendi.')).catch(e=>toast('Hata: '+e.message,'err'));
 }
 // ── Timetable / Gantt (Tab 4) — stub ──
 function gantt(){
