@@ -663,7 +663,7 @@ function renderCompanySelector(){
 function updateCompanyUI(){
   const syn=currentCompany==='syntegra';
   const labels={
-    'nav-stok-label':syn?'Proje Girişi':'Stok Takibi',
+    'nav-stok-label':syn?'Projeler':'Stok Takibi',
     'nav-analiz-label':syn?'Mühendislik':'Analiz Sonuçları',
     'nav-ekipman-label':syn?'Satın Alma':'Ekipman Takibi',
     'nav-metod-label':syn?'Timetable':'Metodlar ve İzlekler',
@@ -671,6 +671,11 @@ function updateCompanyUI(){
     'nav-gunluk-label':syn?'Üretim Log':'Günlük Log'
   };
   Object.entries(labels).forEach(([id,text])=>{const el=document.getElementById(id);if(el)el.textContent=text;});
+  // Syntegra: collapse Mühendislik / Satın Alma into the unified Projeler workspace (hide their separate nav items)
+  const navMuh=document.getElementById('nav-analiz-label')?.closest('.nav-item');
+  const navSA=document.getElementById('nav-ekipman-label')?.closest('.nav-item');
+  if(navMuh)navMuh.style.display=syn?'none':'';
+  if(navSA)navSA.style.display=syn?'none':'';
   const badge=document.getElementById('company-badge');
   if(badge){
     const cfg=COMPANIES[currentCompany];
@@ -723,7 +728,7 @@ function showPage(page,silent=false){
   const titles={dashboard:'Dashboard',genel:'Arşen Genel Bakış',stok:syn?'Proje Girişi':'Stok Takibi',analiz:syn?'Mühendislik':'Analiz Sonuçları',ekipman:syn?'Satın Alma':'Ekipman Takibi',metod:syn?'Timetable':'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:syn?'Görevler':'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:syn?'Üretim Log':'Günlük Log',rapor:syn?'Proje Raporları':'Raporlama',admin:'Kullanıcı Yönetimi',audit:'Düzenleme Geçmişi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
-  if(syn&&({stok:proje,analiz:muhendislik,ekipman:satinalma,metod:gantt})[page])return ({stok:proje,analiz:muhendislik,ekipman:satinalma,metod:gantt})[page]();
+  if(syn&&({stok:projeYonetim,analiz:muhendislik,ekipman:satinalma,metod:gantt})[page])return ({stok:projeYonetim,analiz:muhendislik,ekipman:satinalma,metod:gantt})[page]();
   ({dashboard,genel:genelBakis,stok,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin,audit:auditLog})[page]?.();
 }
 function updateBadges(){
@@ -1541,6 +1546,55 @@ function synProjeKod(){return document.getElementById('pj-kod')?.value||'';}
 
 // ── Proje Girişi (Tab 1) ──
 let _projeListFilter='hepsi';
+// ── Unified Project Workspace ──
+let _wsProject=null;
+let _wsTab='proje';
+function projeYonetim(){
+  if(_wsProject){return projeWorkspace();}
+  return proje();
+}
+function projeWorkspace(){
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===_wsProject);
+  if(!p){_wsProject=null;_wsTab='proje';return projeYonetim();}
+  // sync legacy selectors so nested logic still works
+  _muhSelectedProjectCode=_wsProject;_saSelectedProjectCode=_wsProject;
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_wsProject=null;_wsTab='proje';projeYonetim()">← Liste</button>${(p.olusturan===currentUser.username||isUmbrella()||canDelete())?`<button class="btn btn-amber btn-sm" onclick="projeDetayEdit('${p.id}')">✎ Düzenle</button>`:''}`;
+  const tabs=[{k:'proje',l:'Proje'},{k:'muh',l:'Mühendislik'},{k:'sa',l:'Satın Alma'},{k:'gantt',l:'Zaman Çizelgesi'}];
+  const head=`<div class="card mb-16">
+    <div class="card-header" style="flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(p.projectCode)}</div>
+        <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} <span class="text-muted" style="font-weight:400">· ${esc(p.musteri)}</span></div>
+        <div class="text-sm text-muted" style="margin-top:4px">Sorumlu: ${esc(synSorumluLabel(p.sorumlu))} · Termin: ${synFmtDate(p.termin)}</div>
+      </div>
+      <div style="text-align:right">${synProjectStatusBadge(p.durum)}</div>
+    </div>
+  </div>`;
+  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:6px;overflow-x:auto">${tabs.map(t=>`<button class="filter-btn ${_wsTab===t.k?'active':''}" onclick="_wsTab='${t.k}';projeWorkspace()">${esc(t.l)}</button>`).join('')}</div>`;
+  let body='';
+  if(_wsTab==='proje')body=projeBilgiBody(p);
+  else if(_wsTab==='muh')body=muhWorkspaceHtml(p.projectCode);
+  else if(_wsTab==='sa')body=saWorkspaceHtml(p.projectCode);
+  else if(_wsTab==='gantt')body=projectGanttHtml(p);
+  document.getElementById('content').innerHTML=head+tabBar+body;
+}
+function projeBilgiBody(p){
+  const sart=synParseFiles(p.sartnameDosyalar),tas=synParseFiles(p.tasarimDosyalar);
+  const fileList=(arr,label)=>arr.length?arr.map(f=>`<div style="margin:4px 0"><a href="${esc(f.url)}" target="_blank">📎 ${esc(f.name)}</a> · <a href="${esc(f.downloadUrl||f.url)}" target="_blank" class="text-mono text-sm">indir ↓</a></div>`).join(''):`<span class="text-muted text-sm">${label} dosyası yok</span>`;
+  return `<div class="grid-2 gap-16">
+    <div class="card"><div class="card-header"><span class="card-title">Şartname Dosyaları</span><span class="text-muted text-sm">${sart.length} dosya</span></div>${fileList(sart,'Şartname')}</div>
+    <div class="card"><div class="card-header"><span class="card-title">Tasarım Dosyaları</span><span class="text-muted text-sm">${tas.length} dosya</span></div>${fileList(tas,'Tasarım')}</div>
+  </div>
+  ${p.aciklama?`<div class="card mt-16"><div class="card-header"><span class="card-title">Açıklama</span></div><div style="white-space:pre-wrap">${esc(p.aciklama)}</div></div>`:''}
+  <div class="card mt-16"><div class="card-header"><span class="card-title">Zaman Bilgisi</span></div>
+    <div class="grid-4">
+      <div class="stat-card"><div class="stat-label">Oluşturma</div><div class="stat-value" style="font-size:14px">${synFmtDate(p.olusturma)}</div></div>
+      <div class="stat-card"><div class="stat-label">Başlangıç</div><div class="stat-value" style="font-size:14px">${synFmtDate(p.baslangic)}</div></div>
+      <div class="stat-card"><div class="stat-label">Termin</div><div class="stat-value" style="font-size:14px">${synFmtDate(p.termin)}</div></div>
+      <div class="stat-card"><div class="stat-label">Son Güncelleme</div><div class="stat-value" style="font-size:14px">${synFmtDate(p.guncelleme)}</div></div>
+    </div>
+  </div>`;
+}
 function proje(){
   const umb=isUmbrella();
   const acts=`${umb?'<button class="btn btn-primary btn-sm" onclick="projeYeni()">+ Yeni Proje</button>':''}`;
@@ -1565,16 +1619,15 @@ function renderProjeListesi(){
         const sart=synParseFiles(p.sartnameDosyalar).length,tas=synParseFiles(p.tasarimDosyalar).length;
         const meSorumlu=p.sorumlu===currentUser.username;
         const canApprove=meSorumlu&&p.durum==='Onay Bekliyor';
-        return `<tr>
-          <td class="text-mono text-sm">${esc(p.projectCode||'—')}</td>
+        return `<tr style="cursor:pointer" onclick="event.target.closest('button')||(_wsProject='${p.projectCode}',_wsTab='proje',projeYonetim())">
+          <td class="text-mono text-sm" style="color:var(--accent)">${esc(p.projectCode||'—')}</td>
           <td class="td-main">${esc(p.projeAdi||'—')}</td>
           <td>${esc(p.musteri||'—')}</td>
           <td>${esc(synSorumluLabel(p.sorumlu))}</td>
           <td class="text-mono text-sm">${synFmtDate(p.termin)}</td>
           <td>${synProjectStatusBadge(p.durum)}</td>
           <td class="text-mono text-sm">${sart} şart · ${tas} tas</td>
-          <td style="white-space:nowrap">
-            <button class="btn btn-ghost btn-sm" onclick="projeDetay('${p.id}')">Detay</button>
+          <td style="white-space:nowrap" onclick="event.stopPropagation()">
             ${canApprove?`<button class="btn btn-success btn-sm" onclick="projeOnayla('${p.id}')">Onayla</button><button class="btn btn-danger btn-sm" onclick="projeReddet('${p.id}')">Reddet</button>`:''}
             ${canDelete()?`<button class="btn btn-danger btn-sm" onclick="projeSil('${p.id}')">Sil</button>`:''}
           </td>
@@ -1662,6 +1715,8 @@ async function projeKaydet(){
   const sorumlu=document.getElementById('pj-sorumlu').value;
   if(!projeAdi||!musteri){toast('Müşteri ve proje adı zorunlu.','err');return;}
   if(!sorumlu){toast('Sorumlu seçilmeli.','err');return;}
+  if((_projeDraftFiles.sartname||[]).length===0){toast('En az bir şartname dosyası yüklenmeli.','err');return;}
+  if((_projeDraftFiles.tasarim||[]).length===0){toast('En az bir tasarım dosyası yüklenmeli.','err');return;}
   // Allocate code if not allocated by uploads
   if(!_projeDraftCode){
     try{const r=await driveApi('nextProjectCode',{customer:musteri});_projeDraftCode=r.code;}
@@ -1690,12 +1745,38 @@ async function projeKaydet(){
     notifyApi({recipients:[sorumlu],baslik:'Yeni proje atandı: '+row.projectCode,mesaj:`${projeAdi}\nMüşteri: ${musteri}\nTermin: ${synFmtDate(row.termin)||'belirsiz'}\n\nLütfen Proje Girişi sekmesinden onaylayın.`,tur:'Proje',sayfa:'stok',kayitId:row.id,sendEmail:true}).catch(e=>toast('Bildirim gönderilemedi: '+e.message,'err'));
   }).catch(e=>toast('Kaydetme hatası: '+e.message,'err'));
 }
-function projeDetay(id){
+function projeDetay(id){projeDetayRender(id,false);}
+function projeDetayEdit(id){projeDetayRender(id,true);}
+function projeDetayRender(id,editMode){
   const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
   const sart=synParseFiles(p.sartnameDosyalar),tas=synParseFiles(p.tasarimDosyalar);
   const meSorumlu=p.sorumlu===currentUser.username;
+  const meOwner=p.olusturan===currentUser.username||isUmbrella();
+  const canEditAll=meOwner||canDelete();
+  const users=synUsersAll().map(u=>`<option value="${u.username}" ${(p.sorumlu||'')===u.username?'selected':''}>${esc(u.ad||u.username)}</option>`).join('');
   const fileList=(arr,label)=>arr.length?arr.map(f=>`<div style="margin:4px 0"><a href="${esc(f.url)}" target="_blank">📎 ${esc(f.name)}</a> · <a href="${esc(f.downloadUrl||f.url)}" target="_blank" class="text-mono text-sm">indir ↓</a></div>`).join(''):`<span class="text-muted text-sm">${label} dosyası yok</span>`;
-  const body=`
+  const body=editMode?`
+    <div class="grid-2 gap-12">
+      <div class="stat-card"><div class="stat-label">Proje Kodu</div><div class="stat-value stat-blue" style="font-size:20px">${esc(p.projectCode)}</div></div>
+      <div class="stat-card"><div class="stat-label">Durum</div><div style="margin-top:6px">${synProjectStatusBadge(p.durum)}</div></div>
+    </div>
+    <div class="form-row mt-16">
+      <div class="form-group"><label>Proje Adı *</label><input type="text" id="pjd-ad" value="${esc(p.projeAdi||'')}"></div>
+      <div class="form-group"><label>Müşteri *</label><input type="text" id="pjd-musteri" value="${esc(p.musteri||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Sorumlu *</label><select id="pjd-sorumlu">${users}</select></div>
+      <div class="form-group"><label>Termin</label><input type="date" id="pjd-termin" value="${esc(p.termin||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Başlangıç</label><input type="date" id="pjd-bas" value="${esc(p.baslangic||'')}"></div>
+      <div class="form-group"><label>&nbsp;</label><div></div></div>
+    </div>
+    <div class="form-group"><label>Açıklama</label><textarea id="pjd-aciklama" style="min-height:80px">${esc(p.aciklama||'')}</textarea></div>
+    <div class="alert alert-amber" style="font-size:12px">Dosya eklemek/kaldırmak için projenin Mühendislik klasörünü kullanabilirsiniz. Proje koduna bağlı klasör değişmez.</div>
+    <div class="form-group mt-16"><label>Mevcut Şartname Dosyaları</label>${fileList(sart,'Şartname')}</div>
+    <div class="form-group"><label>Mevcut Tasarım Dosyaları</label>${fileList(tas,'Tasarım')}</div>
+  `:`
     <div class="grid-2 gap-12">
       <div class="stat-card"><div class="stat-label">Proje Kodu</div><div class="stat-value stat-blue" style="font-size:20px">${esc(p.projectCode)}</div></div>
       <div class="stat-card"><div class="stat-label">Durum</div><div style="margin-top:6px">${synProjectStatusBadge(p.durum)}</div></div>
@@ -1712,11 +1793,37 @@ function projeDetay(id){
     <div class="form-group mt-16"><label>Şartname Dosyaları</label>${fileList(sart,'Şartname')}</div>
     <div class="form-group"><label>Tasarım Dosyaları</label>${fileList(tas,'Tasarım')}</div>
     <div class="text-sm text-muted mt-16">Oluşturan: ${esc(synSorumluLabel(p.olusturan))} · ${synFmtDate(p.olusturma)}</div>`;
-  const footer=`
+  const footer=editMode?`
+    <button class="btn btn-ghost" onclick="projeDetay('${id}')">İptal</button>
+    <button class="btn btn-primary" onclick="projeDetayKaydet('${id}')">Kaydet</button>
+  `:`
     <button class="btn btn-ghost" onclick="closeModalDirect()">Kapat</button>
+    ${canEditAll?`<button class="btn btn-amber" onclick="projeDetayEdit('${id}')">✎ Düzenle</button>`:''}
     ${meSorumlu&&p.durum==='Onay Bekliyor'?`<button class="btn btn-danger" onclick="closeModalDirect();projeReddet('${id}')">Reddet</button><button class="btn btn-success" onclick="closeModalDirect();projeOnayla('${id}')">Onayla</button>`:''}
     ${canDelete()?`<button class="btn btn-danger" onclick="closeModalDirect();projeSil('${id}')">Sil</button>`:''}`;
   showModal(p.projectCode+' · '+p.projeAdi,body,footer);
+}
+async function projeDetayKaydet(id){
+  const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
+  const meOwner=p.olusturan===currentUser.username||isUmbrella();
+  if(!meOwner&&!canDelete()){toast('Düzenleme yetkin yok.','err');return;}
+  const ad=document.getElementById('pjd-ad').value.trim();
+  const mus=document.getElementById('pjd-musteri').value.trim();
+  const sor=document.getElementById('pjd-sorumlu').value;
+  if(!ad||!mus||!sor){toast('Zorunlu alanları doldurun.','err');return;}
+  const oldSorumlu=p.sorumlu;
+  p.projeAdi=ad;p.musteri=mus;p.sorumlu=sor;
+  p.termin=document.getElementById('pjd-termin').value;
+  p.baslangic=document.getElementById('pjd-bas').value;
+  p.aciklama=document.getElementById('pjd-aciklama').value;
+  p.guncelleme=new Date().toISOString();
+  closeModalDirect();
+  if(typeof renderProjeListesi==='function')renderProjeListesi();
+  if(typeof _wsProject!=='undefined'&&_wsProject===p.projectCode&&typeof projeWorkspace==='function')projeWorkspace();
+  save('Syn2_Projeler').then(()=>{
+    toast('Proje güncellendi ✓');
+    if(sor&&sor!==oldSorumlu){notifyApi({recipients:[sor],baslik:'Size yeni bir proje atandı: '+p.projectCode,mesaj:`${p.projeAdi}\nMüşteri: ${p.musteri}`,tur:'Proje',sayfa:'stok',kayitId:p.id,sendEmail:true}).catch(()=>{});}
+  }).catch(e=>toast('Kaydetme hatası: '+e.message,'err'));
 }
 async function projeOnayla(id){
   const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
@@ -1795,45 +1902,51 @@ function muhendislik(){
 let _muhActiveTab='cizim';
 let _muhBodyDrafts={}; // { 'projectCode|body': [rows] }
 function muhWorkspace(projectCode){
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_muhSelectedProjectCode=null;_muhActiveTab='cizim';muhendislik()">← Liste</button>`;
+  document.getElementById('content').innerHTML=muhWorkspaceHtml(projectCode,/*withHeader*/true);
+}
+function muhWorkspaceHtml(projectCode,withHeader){
   const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
-  if(!p){_muhSelectedProjectCode=null;return muhendislik();}
+  if(!p)return '<div class="empty-state">Proje bulunamadı.</div>';
   let mh=C.Syn2_Muhendislik.find(m=>m.projectCode===projectCode);
   if(!mh){
     mh={id:uid(),company:currentCompany,projectCode,durum:'Taslak',pidDosyalar:'[]',cizimDosyalar:'[]',revizyonNumarasi:0,revizyonGecmisi:'[]',sonGonderim:'',sonKararKullanici:'',sonKararTarih:'',satinalmaSorumlu:'',olusturan:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};
     C.Syn2_Muhendislik.push(mh);
     save('Syn2_Muhendislik').catch(()=>{});
   }
-  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_muhSelectedProjectCode=null;_muhActiveTab='cizim';muhendislik()">← Liste</button>`;
   const durum=mh.durum||'Taslak';
   const cizimOnayli=durum==='Onaylandı';
   let revGecmisi=[];try{revGecmisi=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
-  // Tab bar
   const tabs=[{key:'cizim',label:'Çizimler',disabled:false}];
   SYN_BODY_LIST.forEach(b=>tabs.push({key:'body:'+b,label:b,disabled:!cizimOnayli}));
   tabs.push({key:'gonder',label:'Satın Almaya Gönder',disabled:!cizimOnayli});
   const tabBar=`<div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;border-bottom:1px solid var(--border)">${tabs.map(t=>`<button class="filter-btn ${_muhActiveTab===t.key?'active':''}" ${t.disabled?'disabled style="opacity:.4;cursor:not-allowed"':''} onclick="muhSetTab('${t.key}')" title="${t.disabled?'Önce Çizimler onaylanmalı':''}">${esc(t.label)}</button>`).join('')}</div>`;
-  // Header (always)
-  const header=`<div class="card mb-16">
+  const header=withHeader?`<div class="card mb-16">
     <div class="card-header">
       <div>
         <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(projectCode)}</div>
         <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} · ${esc(p.musteri)}</div>
       </div>
-      <div style="text-align:right">
-        ${muhendislikDurumBadge(durum)}
-        <div class="text-mono text-sm text-muted" style="margin-top:4px">Revizyon: <strong>${mh.revizyonNumarasi||0}</strong></div>
-      </div>
+      <div style="text-align:right">${muhendislikDurumBadge(durum)}<div class="text-mono text-sm text-muted" style="margin-top:4px">Revizyon: <strong>${mh.revizyonNumarasi||0}</strong></div></div>
     </div>
     ${durum==='Revizyon İstendi'&&revGecmisi.length?`<div class="alert alert-red" style="margin:14px 0 0">⚠ Arşen revizyon talep etti:<br><em>${esc(revGecmisi[revGecmisi.length-1]?.not||'')}</em><br><span class="text-mono text-sm">— ${esc(synSorumluLabel(revGecmisi[revGecmisi.length-1]?.kullanici))} · ${synFmtDate(revGecmisi[revGecmisi.length-1]?.tarih)}</span></div>`:''}
     ${cizimOnayli?`<div class="alert alert-green" style="margin:14px 0 0">✓ Çizimler onaylandı. Aşağıdaki sekmelerden ekipman listesini doldurabilirsiniz.</div>`:''}
-  </div>`;
+  </div>`:`
+    <div class="flex items-center justify-between mb-16" style="gap:10px;flex-wrap:wrap">
+      ${muhendislikDurumBadge(durum)}<span class="text-mono text-sm text-muted">Revizyon: <strong>${mh.revizyonNumarasi||0}</strong></span>
+    </div>
+    ${durum==='Revizyon İstendi'&&revGecmisi.length?`<div class="alert alert-red mb-16">⚠ Arşen revizyon talep etti: <em>${esc(revGecmisi[revGecmisi.length-1]?.not||'')}</em></div>`:''}
+    ${cizimOnayli?`<div class="alert alert-green mb-16">✓ Çizimler onaylandı. Body sekmelerinden ekipman listesini doldurabilirsiniz.</div>`:''}`;
   let body='';
   if(_muhActiveTab==='cizim'){body=muhCizimSection(p,mh,revGecmisi);}
   else if(_muhActiveTab==='gonder'){body=muhGonderSection(p,mh);}
   else if(_muhActiveTab.startsWith('body:')){body=muhBodySection(p,mh,_muhActiveTab.slice(5));}
-  document.getElementById('content').innerHTML=header+tabBar+body;
+  return header+tabBar+body;
 }
-function muhSetTab(k){_muhActiveTab=k;muhWorkspace(_muhSelectedProjectCode);}
+function muhSetTab(k){
+  _muhActiveTab=k;
+  if(_wsProject)projeWorkspace();else muhWorkspace(_muhSelectedProjectCode);
+}
 function muhCizimSection(p,mh,revGecmisi){
   const pid=synParseFiles(mh.pidDosyalar);
   const cizim=synParseFiles(mh.cizimDosyalar);
@@ -2107,34 +2220,39 @@ function satinalma(){
     </table></div>`:'<div class="empty-state"><div class="empty-icon">⊞</div><div>Satın alma sürecinde proje yok. Mühendislik sekmesinden bir proje "Satın Almaya Gönder" tuşuyla buraya iletilebilir.</div></div>'}`;
 }
 function saWorkspace(projectCode){
-  const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);if(!p){_saSelectedProjectCode=null;return satinalma();}
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_saSelectedProjectCode=null;satinalma()">← Liste</button>`;
+  document.getElementById('content').innerHTML=saWorkspaceHtml(projectCode,/*withHeader*/true);
+}
+function saWorkspaceHtml(projectCode,withHeader){
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);if(!p)return '<div class="empty-state">Proje bulunamadı.</div>';
   const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===projectCode);
   const meSA=mh?.satinalmaSorumlu===currentUser.username;
   const meOwner=p.olusturan===currentUser.username||isUmbrella();
   const ekipman=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode).sort((a,b)=>{const ba=SYN_BODY_LIST.indexOf(a.body),bb=SYN_BODY_LIST.indexOf(b.body);if(ba!==bb)return ba-bb;return (parseInt(a.siraNo,10)||0)-(parseInt(b.siraNo,10)||0);});
-  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_saSelectedProjectCode=null;satinalma()">← Liste</button>`;
-  // Approval queue summary at top
   const bekleyen=(C.Syn2_Teklif||[]).filter(t=>t.projectCode===projectCode&&t.onayDurumu==='bekliyor');
-  // Group ekipman by body
   const byBody={};SYN_BODY_LIST.forEach(b=>byBody[b]=[]);ekipman.forEach(e=>{if(!byBody[e.body])byBody[e.body]=[];byBody[e.body].push(e);});
   const bodyBlocks=SYN_BODY_LIST.filter(b=>byBody[b].length).map(b=>`
     <div class="card mb-16">
       <div class="card-header"><span class="card-title">${esc(b)} <span class="text-muted text-sm">(${byBody[b].length} kalem)</span></span></div>
       ${byBody[b].map(e=>saEkipmanCard(e,meSA,meOwner,projectCode)).join('')}
     </div>`).join('');
-  document.getElementById('content').innerHTML=`
-    <div class="card mb-16">
-      <div class="card-header">
-        <div>
-          <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(projectCode)}</div>
-          <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} · ${esc(p.musteri)}</div>
-        </div>
-        <div style="text-align:right">${synProjectStatusBadge(p.durum)}<div class="text-mono text-sm text-muted" style="margin-top:4px">Satın Alma: ${esc(synSorumluLabel(mh?.satinalmaSorumlu))}</div></div>
+  const header=withHeader?`<div class="card mb-16">
+    <div class="card-header">
+      <div>
+        <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(projectCode)}</div>
+        <div class="card-title" style="margin-top:4px">${esc(p.projeAdi)} · ${esc(p.musteri)}</div>
       </div>
-      ${bekleyen.length?`<div class="alert alert-amber" style="margin:14px 0 0">⚠ Arşen onayı bekleyen ${bekleyen.length} teklif var. Eşik aşımı nedeniyle Rıdvan/Arşen kararı bekleniyor.</div>`:''}
-      ${!meSA&&!meOwner?'<div class="alert alert-amber" style="margin:14px 0 0;font-size:12px">Sadece atanan satın alma sorumlusu veya Arşen yetkilileri teklif girebilir.</div>':''}
+      <div style="text-align:right">${synProjectStatusBadge(p.durum)}<div class="text-mono text-sm text-muted" style="margin-top:4px">Satın Alma: ${esc(synSorumluLabel(mh?.satinalmaSorumlu))}</div></div>
     </div>
-    ${bodyBlocks||'<div class="empty-state">Bu projede ekipman kalemi yok.</div>'}`;
+    ${bekleyen.length?`<div class="alert alert-amber" style="margin:14px 0 0">⚠ Arşen onayı bekleyen ${bekleyen.length} teklif var.</div>`:''}
+    ${!meSA&&!meOwner?'<div class="alert alert-amber" style="margin:14px 0 0;font-size:12px">Sadece atanan satın alma sorumlusu veya Arşen yetkilileri teklif girebilir.</div>':''}
+  </div>`:`
+    <div class="flex items-center justify-between mb-16" style="gap:10px;flex-wrap:wrap">
+      <span class="text-mono text-sm text-muted">Satın Alma Sorumlusu: <strong>${esc(synSorumluLabel(mh?.satinalmaSorumlu))}</strong></span>
+      ${bekleyen.length?`<span class="badge badge-amber">${bekleyen.length} teklif Arşen onayında</span>`:''}
+    </div>
+    ${!meSA&&!meOwner?'<div class="alert alert-amber mb-16" style="font-size:12px">Sadece atanan satın alma sorumlusu veya Arşen yetkilileri teklif girebilir.</div>':''}`;
+  return header+(bodyBlocks||'<div class="empty-state">Bu projede ekipman kalemi yok.</div>');
 }
 function saEkipmanCard(e,meSA,meOwner,projectCode){
   const teklifler=(C.Syn2_Teklif||[]).filter(t=>t.ekipmanId===e.id).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
@@ -2310,17 +2428,94 @@ function ganttProjectStages(p){
   }
   return stages;
 }
+function projectGanttHtml(p){
+  // Per-project Gantt: project span at top, engineering revision history rows, per-body completion (using ekipman timestamps), per-teklif rows
+  const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===p.projectCode);
+  const ekipman=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode);
+  const teklifler=(C.Syn2_Teklif||[]).filter(t=>t.projectCode===p.projectCode);
+  const year=_ganttYear||new Date().getFullYear();
+  // Collect rows
+  const rows=[];
+  const now=new Date().toISOString();
+  // Project span
+  const projeStart=p.olusturma||p.guncelleme;
+  const projeEnd=p.durum==='Tamamlandı'||p.durum==='İptal'?p.guncelleme:now;
+  rows.push({label:'PROJE',sub:p.projectCode,stages:[{label:'Proje',klass:'proje',start:projeStart,end:projeEnd,ongoing:p.durum!=='Tamamlandı'&&p.durum!=='İptal'}]});
+  // Mühendislik overall
+  if(mh){
+    const muhStart=mh.olusturma;
+    const muhEnd=mh.durum==='Onaylandı'?mh.sonKararTarih:now;
+    rows.push({label:'MÜHENDİSLİK',sub:'P&ID + Çizim',stages:[{label:'Çizim',klass:'muh',start:muhStart,end:muhEnd,ongoing:mh.durum!=='Onaylandı'}]});
+    // Revision history rows (each round its own segment)
+    let revHist=[];try{revHist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
+    if(revHist.length){
+      const revStages=[];let prev=mh.olusturma;
+      revHist.forEach((r,i)=>{revStages.push({label:'Tur '+(i+1)+' ('+r.karar+')',klass:r.karar==='Onaylandı'?'done':'muh',start:prev,end:r.tarih,ongoing:false});prev=r.tarih;});
+      rows.push({label:'REVİZYON',sub:`${revHist.length} tur`,stages:revStages});
+    }
+  }
+  // Bodies — span from first ekipman row creation to last update
+  const bodyGroups={};ekipman.forEach(e=>{(bodyGroups[e.body]||(bodyGroups[e.body]=[])).push(e);});
+  Object.keys(bodyGroups).sort((a,b)=>SYN_BODY_LIST.indexOf(a)-SYN_BODY_LIST.indexOf(b)).forEach(b=>{
+    const items=bodyGroups[b];
+    const starts=items.map(i=>i.olusturma).filter(Boolean).sort();
+    const ends=items.map(i=>i.guncelleme||i.olusturma).filter(Boolean).sort();
+    if(starts.length)rows.push({label:b.toUpperCase(),sub:items.length+' alt-parça',stages:[{label:b,klass:'sa',start:starts[0],end:ends[ends.length-1],ongoing:false}]});
+  });
+  // Teklif winners — each as a separate row showing tedarikçi
+  teklifler.filter(t=>t.kazanan==='true'||t.kazanan===true).forEach(t=>{
+    const ek=ekipman.find(e=>e.id===t.ekipmanId);
+    const tEnd=t.onayTarihi||t.guncelleme||now;
+    rows.push({label:'TEKLİF',sub:`${ek?.altParca||'?'} · ${t.tedarikci||''} · ${saFmtMoney(t.fiyat,t.paraBirimi)}`,stages:[{label:t.tedarikci||'?',klass:t.onayDurumu==='reddedildi'?'proje':(t.onayDurumu==='onaylandı'||t.onayDurumu==='doğrudan'?'done':'muh'),start:t.olusturma,end:tEnd,ongoing:t.onayDurumu==='bekliyor'}]});
+  });
+  const months=ganttMonthSpans(year);
+  const totalW=54*_ganttCellW;
+  const monthRow=months.map(m=>`<div class="gantt-month-cell" style="flex-basis:${m.weeks*_ganttCellW}px">${m.name}</div>`).join('');
+  const weekRow=Array.from({length:54},(_,i)=>`<div class="gantt-week-cell">${i+1}</div>`).join('');
+  const todayLine=ganttTodayLine(year);
+  const bodyRows=rows.map(r=>`<div class="gantt-row">
+    <div class="gantt-row-label">
+      <div class="text-mono" style="color:var(--accent);font-weight:600;font-size:11px">${esc(r.label)}</div>
+      <div style="font-size:10px;color:var(--text3)">${esc(r.sub||'')}</div>
+    </div>
+    <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">
+      ${todayLine}
+      ${r.stages.map(s=>ganttBarHtml(s,year)).join('')}
+    </div>
+  </div>`).join('');
+  return `<div class="flex justify-between items-center mb-16" style="flex-wrap:wrap;gap:10px">
+      <span class="card-title">Bu Projenin Zaman Çizelgesi · ${year}</span>
+      <div class="flex gap-8">
+        <button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year-1};projeWorkspace()">← ${year-1}</button>
+        <button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year+1};projeWorkspace()">${year+1} →</button>
+      </div>
+    </div>
+    ${rows.length>1?`<div class="gantt-wrap"><div class="gantt-scroll">
+      <div class="gantt-header">
+        <div class="gantt-row-label" style="background:var(--bg3)">Aşama</div>
+        <div class="gantt-header-cells" style="width:${totalW}px;--gw:${_ganttCellW}px">
+          <div class="gantt-months">${monthRow}</div>
+          <div class="gantt-weeks">${weekRow}</div>
+        </div>
+      </div>
+      ${bodyRows}
+    </div></div>
+    <div class="text-sm text-muted mt-16">Çubukların üzerinde başlangıç/bitiş tarihleri görünür. Daha dar çubuklarda tooltipi için fareyi üzerinde tutun.</div>`:'<div class="empty-state">Bu projede henüz zaman çizelgesi oluşacak veri yok.</div>'}`;
+}
 function ganttBarHtml(stage,year){
   const c1=ganttDateToCol(stage.start,year);
   const c2=ganttDateToCol(stage.end,year);
   if(c1===null||c2===null)return '';
-  if(c1>54||c2<1)return ''; // entirely outside this year
+  if(c1>54||c2<1)return '';
   const startCol=Math.max(1,c1);
   const endCol=Math.max(startCol,Math.min(54,c2));
   const left=(startCol-1)*_ganttCellW;
   const width=Math.max(_ganttCellW*0.5,(endCol-startCol+1)*_ganttCellW-2);
-  const tip=`${stage.label}: ${ganttFmt(stage.start)} → ${ganttFmt(stage.end)}${stage.ongoing?' (sürüyor)':''}`;
-  return `<div class="gantt-bar ${stage.klass}${stage.ongoing?' ongoing':''}" style="left:${left}px;width:${width}px" title="${esc(tip)}">${esc(stage.label)}</div>`;
+  const tip=`${stage.label}\n${ganttFmt(stage.start)} → ${ganttFmt(stage.end)}${stage.ongoing?' (sürüyor)':''}`;
+  // Date label visible on bar if wide enough
+  const dateLabel=width>=140?`${ganttFmt(stage.start)} → ${ganttFmt(stage.end)}`:(width>=70?ganttFmt(stage.start):'');
+  const text=dateLabel?`${esc(stage.label)} · ${esc(dateLabel)}`:esc(stage.label);
+  return `<div class="gantt-bar ${stage.klass}${stage.ongoing?' ongoing':''}" style="left:${left}px;width:${width}px" title="${esc(tip)}">${text}</div>`;
 }
 function ganttTodayLine(year){
   const w=ganttWeekOfYear(new Date());
