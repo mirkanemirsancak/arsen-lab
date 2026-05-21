@@ -28,7 +28,7 @@ var DEFAULT_SHEET_HEADERS = {
   SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler: ['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
   Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
-  Syn2_Ekipman: ['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme'],
+  Syn2_Ekipman: ['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','termin','uretimTermin','siraNo','kullanici','olusturma','guncelleme'],
   Syn2_Teklif: ['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme']
 };
 
