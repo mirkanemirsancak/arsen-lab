@@ -377,7 +377,7 @@ const COLS={
   SynRaporlar:['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler:['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
   Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
-  Syn2_Ekipman:['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','siraNo','kullanici','olusturma','guncelleme'],
+  Syn2_Ekipman:['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','termin','uretimTermin','siraNo','kullanici','olusturma','guncelleme'],
   Syn2_Teklif:['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme']
 };
 const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[],Syn2_Teklif:[]};
@@ -499,6 +499,7 @@ function setSS(s){const e=document.getElementById('sync-status');if(!e)return;e.
 // ── SESSION PERSISTENCE ──
 const SS_AUTH_KEY='arsenSession_v1',SS_CACHE_KEY='arsenCacheMulti_v2',SS_CACHE_LEGACY_KEY='arsenCache_v1';
 function saveSession(){if(!authToken||!currentUser)return;try{localStorage.setItem(SS_AUTH_KEY,JSON.stringify({token:authToken,user:currentUser,company:currentCompany,t:Date.now()}));}catch(e){}}
+function loadSession(){try{const raw=localStorage.getItem(SS_AUTH_KEY);return raw?JSON.parse(raw):null;}catch(e){return null;}}
 function _readCacheBlob(){try{const raw=localStorage.getItem(SS_CACHE_KEY);return raw?JSON.parse(raw):{};}catch(e){return {};}}
 function saveCache(company=currentCompany){try{const blob=_readCacheBlob();blob[company]={t:Date.now(),sheets:{}};SHEETS.forEach(s=>{blob[company].sheets[s]=C[s]||[];});localStorage.setItem(SS_CACHE_KEY,JSON.stringify(blob));}catch(e){}}
 function loadCache(company=currentCompany){
@@ -625,33 +626,46 @@ async function doLogin(){
     authToken=login.token;currentUser=login.user;
     const access=companyAccess(currentUser);
     currentCompany=access.includes(currentUser.defaultCompany)?currentUser.defaultCompany:access[0];
-    const ok=await syncAll();
-    // If sync fails (e.g. backend not yet redeployed, sheet missing), let the user in anyway with whatever data we have so they can keep working — they'll see the connection error indicator in the sidebar.
-    if(!ok){toast('Bazı veriler yüklenemedi. Backend güncellemesi gerekebilir; arayüze cache ile giriliyor.','err');}
-    loading(false);
+    // Save session and enter the app IMMEDIATELY — sync runs in the background so the user
+    // doesn't stare at "Bağlanıyor..." while we fetch 21 sheets. If they refresh during this
+    // window, the saved session keeps them logged in.
     saveSession();
+    loading(false);
     enterApp();
-    initNotifications();
     showPage('dashboard');
-    ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});
-    refreshMesaiBadge().catch(()=>{});
+    setSS('loading');
+    syncAll().then(ok=>{
+      if(!ok)toast('Bazı veriler yüklenemedi, arka planda yeniden deneniyor.','err');
+      if(ok&&currentPage)showPage(currentPage,true);
+      initNotifications();
+      ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});
+      refreshMesaiBadge().catch(()=>{});
+      prefetchOtherCompanies();
+    }).catch(()=>{});
     startAutoSync();
-    prefetchOtherCompanies();
   }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
 async function bootstrapSession(){
-  const sess=loadSession();if(!sess||!sess.token||!sess.user)return false;
-  authToken=sess.token;currentUser=sess.user;currentCompany=sess.company||'fuwell';
-  const cache=loadCache();
-  if(cache&&cache.sheets&&cache.company===currentCompany){SHEETS.forEach(s=>{if(cache.sheets[s])C[s]=cache.sheets[s];});}
-  enterApp();
-  showPage('dashboard');
-  setSS('loading');
-  syncAll().then(ok=>{
-    if(ok){if(currentPage)showPage(currentPage,true);initNotifications();ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});refreshMesaiBadge().catch(()=>{});prefetchOtherCompanies();}
-  }).catch(()=>{});
-  startAutoSync();
-  return true;
+  try{
+    const sess=loadSession();if(!sess||!sess.token||!sess.user)return false;
+    authToken=sess.token;currentUser=sess.user;currentCompany=sess.company||'fuwell';
+    const cache=loadCache(currentCompany);
+    // multi-cache shape: blob[company] = {t, sheets:{}}; restore if sheets present
+    if(cache&&cache.sheets){SHEETS.forEach(s=>{if(cache.sheets[s])C[s]=cache.sheets[s];});}
+    enterApp();
+    showPage('dashboard');
+    setSS('loading');
+    syncAll().then(ok=>{
+      if(ok){if(currentPage)showPage(currentPage,true);initNotifications();ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});refreshMesaiBadge().catch(()=>{});prefetchOtherCompanies();}
+    }).catch(()=>{});
+    startAutoSync();
+    return true;
+  }catch(e){
+    // If anything in bootstrap fails (corrupt cache, missing user field, etc.) wipe the session and fall back to login cleanly instead of leaving the user stuck.
+    try{clearSession();}catch(_){}
+    authToken=null;currentUser=null;
+    return false;
+  }
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-pass')===document.activeElement)doLogin();});
 function doLogout(){clearSession();currentUser=null;authToken=null;currentCompany='fuwell';notifReady=false;knownNotifIds.clear();clearInterval(syncTimer);document.getElementById('app').classList.remove('visible');document.getElementById('login-screen').style.display='flex';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';}
@@ -1558,7 +1572,10 @@ function projeWorkspace(){
   if(!p){_wsProject=null;_wsTab='proje';return projeYonetim();}
   // sync legacy selectors so nested logic still works
   _muhSelectedProjectCode=_wsProject;_saSelectedProjectCode=_wsProject;
-  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_wsProject=null;_wsTab='proje';projeYonetim()">← Liste</button>${(p.olusturan===currentUser.username||isUmbrella()||canDelete())?`<button class="btn btn-amber btn-sm" onclick="projeDetayEdit('${p.id}')">✎ Düzenle</button>`:''}`;
+  // After Syntegra accepts the project (status >= Mühendislik Sürecinde), Arşen owner can only watch; admin keeps full edit rights. Before approval, owner/umbrella can still edit project info.
+  const earlyStage=['Taslak','Onay Bekliyor'].includes(p.durum);
+  const canEdit=canDelete()||(earlyStage&&(p.olusturan===currentUser.username||isUmbrella()));
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_wsProject=null;_wsTab='proje';projeYonetim()">← Liste</button>${canEdit?`<button class="btn btn-amber btn-sm" onclick="projeDetayEdit('${p.id}')">✎ Düzenle</button>`:''}`;
   const tabs=[{k:'proje',l:'Proje'},{k:'muh',l:'Mühendislik'},{k:'sa',l:'Satın Alma'},{k:'gantt',l:'Zaman Çizelgesi'}];
   const head=`<div class="card mb-16">
     <div class="card-header" style="flex-wrap:wrap;gap:10px">
@@ -1908,6 +1925,10 @@ function muhWorkspace(projectCode){
 function muhWorkspaceHtml(projectCode,withHeader){
   const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
   if(!p)return '<div class="empty-state">Proje bulunamadı.</div>';
+  // Mühendislik aşaması kilidi: sorumlu projeyi onaylamadan açılamaz.
+  if(['Taslak','Onay Bekliyor','İptal'].includes(p.durum)){
+    return `<div class="card"><div class="empty-state"><div class="empty-icon">🔒</div><div style="margin-top:8px"><strong>Mühendislik aşaması henüz açılmadı.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">${p.durum==='Onay Bekliyor'?'Atanan sorumlu (<strong>'+esc(synSorumluLabel(p.sorumlu))+'</strong>) projeyi onayladığında mühendislik süreci başlar. Şu an Proje sekmesinden Onayla / Reddet işlemleri yapılabilir.':p.durum==='Taslak'?'Proje henüz onaya gönderilmedi.':'Proje iptal edildi, mühendislik aşaması kullanılamaz.'}</div></div></div>`;
+  }
   let mh=C.Syn2_Muhendislik.find(m=>m.projectCode===projectCode);
   if(!mh){
     mh={id:uid(),company:currentCompany,projectCode,durum:'Taslak',pidDosyalar:'[]',cizimDosyalar:'[]',revizyonNumarasi:0,revizyonGecmisi:'[]',sonGonderim:'',sonKararKullanici:'',sonKararTarih:'',satinalmaSorumlu:'',olusturan:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};
@@ -2075,11 +2096,23 @@ async function muhBodyKaydet(){
 }
 function muhGonderSection(p,mh){
   const meEng=p.sorumlu===currentUser.username||isUmbrella();
-  // count alt-parça per body
-  const byBody={};(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode).forEach(r=>{byBody[r.body]=(byBody[r.body]||0)+1;});
+  // Count alt-parça per body — prefer drafts when present, fall back to persisted rows.
+  // This keeps the total live with edits the user hasn't yet 'Kaydet'-clicked.
+  const byBody={};const draftBodies=[];
+  SYN_BODY_LIST.forEach(b=>{
+    const k=muhBodyDraftKey(p.projectCode,b);
+    if(_muhBodyDrafts[k]){
+      const meaningful=_muhBodyDrafts[k].filter(r=>(r.altParca||'').trim()).length;
+      byBody[b]=meaningful;
+      if(_muhBodyDrafts[k].some(r=>r._new))draftBodies.push(b);
+    }else{
+      byBody[b]=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode&&r.body===b).length;
+    }
+  });
   const total=Object.values(byBody).reduce((a,b)=>a+b,0);
   const yiyecekliUsers=synUsersAll();
-  const bodyList=SYN_BODY_LIST.map(b=>`<tr><td class="td-main">${esc(b)}</td><td class="text-mono" style="text-align:right">${byBody[b]||0}</td></tr>`).join('');
+  const bodyList=SYN_BODY_LIST.map(b=>`<tr><td class="td-main">${esc(b)}${draftBodies.includes(b)?' <span class="badge badge-amber" style="margin-left:6px">kaydedilmemiş</span>':''}</td><td class="text-mono" style="text-align:right">${byBody[b]||0}</td></tr>`).join('');
+  const draftWarn=draftBodies.length?`<div class="alert alert-amber" style="font-size:12px">⚠ ${draftBodies.length} gövdede henüz kaydedilmemiş satır var (${draftBodies.join(', ')}). Önce ilgili sekmede <strong>Kaydet</strong>'e basın, sonra göndermeyi tekrar deneyin.</div>`:'';
   return `<div class="card">
     <div class="card-header"><span class="card-title">Özet</span><span class="text-muted text-sm">Toplam alt-parça: <strong>${total}</strong></span></div>
     <div class="table-wrap"><table style="font-size:13px">
@@ -2087,12 +2120,13 @@ function muhGonderSection(p,mh){
       <tbody>${bodyList}</tbody>
     </table></div>
   </div>
+  ${draftWarn}
   <div class="card mt-16">
     <div class="card-header"><span class="card-title">Satın Almaya Gönder</span></div>
     ${meEng?`
       <div class="form-group"><label>Satın Alma Sorumlusu *</label><select id="muh-sa-sorumlu"><option value="">Kullanıcı seçin</option>${yiyecekliUsers.map(u=>`<option value="${u.username}" ${(mh.satinalmaSorumlu||'')===u.username?'selected':''}>${esc(u.ad||u.username)} (${esc(u.username)})</option>`).join('')}</select></div>
       <div class="text-sm text-muted mb-16">Gönder butonuna basıldığında seçilen kullanıcıya bildirim atılır ve proje durumu <strong>Satın Alma Sürecinde</strong>'ye geçer. Bu işlemden sonra ekipman listesi düzenlemesi kilitlenir.</div>
-      <button class="btn btn-primary" ${total===0?'disabled style="opacity:.5"':''} onclick="muhSatinalmayaGonder()">📨 Satın Almaya Gönder</button>
+      <button class="btn btn-primary" ${(total===0||draftBodies.length>0)?'disabled style="opacity:.5"':''} onclick="muhSatinalmayaGonder()">📨 Satın Almaya Gönder</button>
       ${total===0?'<div class="text-muted text-sm mt-8">En az bir gövde için alt-parça eklenmeli.</div>':''}
     `:`<div class="text-muted text-sm">Sadece mühendislik sorumlusu veya Arşen yetkilileri gönderebilir.</div>`}
   </div>`;
@@ -2184,6 +2218,8 @@ async function muhRevizyonIste(){
 }
 // ── Satın Alma (Tab 3) ──
 let _saSelectedProjectCode=null;
+let _saOpenBodies={};
+function saToggleBody(key){_saOpenBodies[key]=!_saOpenBodies[key];if(_wsProject)projeWorkspace();else saWorkspace(_saSelectedProjectCode);}
 const SYN_CURRENCIES=['EUR','TRY','USD'];
 function saFmtMoney(v,cur){const n=parseFloat(v)||0;return n?n.toLocaleString('tr-TR',{minimumFractionDigits:0,maximumFractionDigits:2})+' '+(cur||''):'—';}
 function saThresholdFor(cur){return SYN_APPROVAL_THRESHOLDS[cur]||Infinity;}
@@ -2231,11 +2267,18 @@ function saWorkspaceHtml(projectCode,withHeader){
   const ekipman=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode).sort((a,b)=>{const ba=SYN_BODY_LIST.indexOf(a.body),bb=SYN_BODY_LIST.indexOf(b.body);if(ba!==bb)return ba-bb;return (parseInt(a.siraNo,10)||0)-(parseInt(b.siraNo,10)||0);});
   const bekleyen=(C.Syn2_Teklif||[]).filter(t=>t.projectCode===projectCode&&t.onayDurumu==='bekliyor');
   const byBody={};SYN_BODY_LIST.forEach(b=>byBody[b]=[]);ekipman.forEach(e=>{if(!byBody[e.body])byBody[e.body]=[];byBody[e.body].push(e);});
-  const bodyBlocks=SYN_BODY_LIST.filter(b=>byBody[b].length).map(b=>`
-    <div class="card mb-16">
-      <div class="card-header"><span class="card-title">${esc(b)} <span class="text-muted text-sm">(${byBody[b].length} kalem)</span></span></div>
-      ${byBody[b].map(e=>saEkipmanCard(e,meSA,meOwner,projectCode)).join('')}
-    </div>`).join('');
+  // Collapsible bodies: click header to expand/collapse.
+  const bodyBlocks=SYN_BODY_LIST.filter(b=>byBody[b].length).map(b=>{
+    const key=projectCode+'|'+b;
+    const open=!!_saOpenBodies[key];
+    const totalTeklif=byBody[b].reduce((s,e)=>s+(C.Syn2_Teklif||[]).filter(t=>t.ekipmanId===e.id).length,0);
+    return `<div class="card mb-16">
+      <button class="card-header" style="width:100%;background:transparent;border:0;cursor:pointer;text-align:left;padding:14px 20px" onclick="saToggleBody(${JSON.stringify(key).replace(/"/g,'&quot;')})">
+        <span class="card-title">${open?'▼':'▶'} ${esc(b)} <span class="text-muted text-sm">(${byBody[b].length} kalem · ${totalTeklif} teklif)</span></span>
+      </button>
+      ${open?byBody[b].map(e=>saEkipmanCard(e,meSA,meOwner,projectCode)).join(''):''}
+    </div>`;
+  }).join('');
   const header=withHeader?`<div class="card mb-16">
     <div class="card-header">
       <div>
