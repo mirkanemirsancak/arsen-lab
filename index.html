@@ -193,6 +193,12 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .gantt-bar.muh{background:#f5a623;color:#2a1700;}
 .gantt-bar.sa{background:#3ecf8e;color:#0a2a1e;}
 .gantt-bar.done{background:#16a571;}
+.gantt-bar.uretim{background:#9b59b6;}
+.gantt-bar.editable{cursor:pointer;}
+.gantt-bar.editable:hover{filter:brightness(1.1);box-shadow:0 0 0 2px rgba(255,255,255,0.4);}
+.gantt-empty-cell{position:absolute;top:50%;transform:translateY(-50%);height:16px;left:2px;display:flex;align-items:center;}
+.gantt-set-btn{font-size:10px;font-family:var(--mono);color:var(--text3);border:1px dashed var(--border2);background:transparent;border-radius:6px;padding:2px 8px;cursor:pointer;white-space:nowrap;}
+.gantt-set-btn:hover{color:var(--accent);border-color:var(--accent);}
 .gantt-legend{display:inline-flex;align-items:center;gap:14px;font-size:11px;color:var(--text2);}
 .gantt-legend-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
@@ -319,7 +325,8 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 
 <script>
 const SCRIPT_URL='https://script.google.com/macros/s/AKfycbywgaqp0vIXqPj44IJV2kuomL1jTk_ZnPLiGRTCtrE_hXFBo4rgPmtYT-p3Ne3cbagj/exec';
-const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik','Syn2_Ekipman','Syn2_Teklif'];
+const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik','Syn2_Ekipman','Syn2_Teklif','Syn2_Gantt'];
+const SYN_GANTT_TYPES={muhendislik:{label:'Mühendislik',renk:'#f5a623',klass:'muh'},satinalma:{label:'Satın Alma',renk:'#5aa6ff',klass:'proje'},uretim:{label:'Üretim / İmalat',renk:'#9b59b6',klass:'uretim'},test:{label:'Test + Montaj + Sevkiyat',renk:'#3ecf8e',klass:'done'},ozel:{label:'Özel Aşama',renk:'#1abc9c',klass:'sa'}};
 const SYN_BODY_TEMPLATES={
   'Eşanjör':['Kondenser Gövde','Kondenser Ayna','Kondenser Boru Sabitleme Perforeleri','Kondenser Flanşlar','Kondenser Kepler','Kondenser İç Basınçlı Borular'],
   'Ekstraktör':['Ekstraktör Gövde','Ekstraktör Kapak Flanş','Ekstraktör Üst Kapak','Ekstraktör Alt Tapa','Ekstraktör Kavrama','Ekstraktör Ceket'],
@@ -378,9 +385,10 @@ const COLS={
   Syn2_Projeler:['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
   Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
   Syn2_Ekipman:['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','termin','uretimTermin','siraNo','kullanici','olusturma','guncelleme'],
-  Syn2_Teklif:['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme']
+  Syn2_Teklif:['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme'],
+  Syn2_Gantt:['id','company','projectCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme']
 };
-const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[],Syn2_Teklif:[]};
+const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[],Syn2_Teklif:[],Syn2_Gantt:[]};
 let currentUser=null,currentPage=null,currentCompany='fuwell',syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
 function applyTheme(t){const root=document.documentElement;root.setAttribute('data-theme',t);const ic=t==='light'?'☀':'☾';const lt=document.getElementById('login-theme-icon');if(lt)lt.textContent=ic;const st=document.getElementById('sidebar-theme-icon');if(st)st.textContent=ic;const sl=document.getElementById('sidebar-theme-label');if(sl)sl.textContent=t==='light'?'Aydınlık':'Karanlık';document.querySelectorAll('.theme-toggle').forEach(b=>b.setAttribute('data-mode',t));}
 function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';const next=cur==='light'?'dark':'light';try{localStorage.setItem('arsenTheme',next);}catch(e){}applyTheme(next);}
@@ -2471,69 +2479,98 @@ function ganttProjectStages(p){
   }
   return stages;
 }
-function projectGanttHtml(p){
-  // Per-project Gantt: project span at top, engineering revision history rows, per-body completion (using ekipman timestamps), per-teklif rows
+// ── Interactive per-project Gantt (Zaman Çizelgesi) ──
+function ganttCanEdit(p){
   const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===p.projectCode);
-  const ekipman=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode);
-  const teklifler=(C.Syn2_Teklif||[]).filter(t=>t.projectCode===p.projectCode);
-  const year=_ganttYear||new Date().getFullYear();
-  // Collect rows
-  const rows=[];
-  const now=new Date().toISOString();
-  // Project span
-  const projeStart=p.olusturma||p.guncelleme;
-  const projeEnd=p.durum==='Tamamlandı'||p.durum==='İptal'?p.guncelleme:now;
-  rows.push({label:'PROJE',sub:p.projectCode,stages:[{label:'Proje',klass:'proje',start:projeStart,end:projeEnd,ongoing:p.durum!=='Tamamlandı'&&p.durum!=='İptal'}]});
-  // Mühendislik overall
-  if(mh){
-    const muhStart=mh.olusturma;
-    const muhEnd=mh.durum==='Onaylandı'?mh.sonKararTarih:now;
-    rows.push({label:'MÜHENDİSLİK',sub:'P&ID + Çizim',stages:[{label:'Çizim',klass:'muh',start:muhStart,end:muhEnd,ongoing:mh.durum!=='Onaylandı'}]});
-    // Revision history rows (each round its own segment)
-    let revHist=[];try{revHist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
-    if(revHist.length){
-      const revStages=[];let prev=mh.olusturma;
-      revHist.forEach((r,i)=>{revStages.push({label:'Tur '+(i+1)+' ('+r.karar+')',klass:r.karar==='Onaylandı'?'done':'muh',start:prev,end:r.tarih,ongoing:false});prev=r.tarih;});
-      rows.push({label:'REVİZYON',sub:`${revHist.length} tur`,stages:revStages});
-    }
+  return isUmbrella()||canDelete()||p.sorumlu===currentUser.username||mh?.satinalmaSorumlu===currentUser.username;
+}
+function ganttFindEntry(projectCode,tip,body){return (C.Syn2_Gantt||[]).find(g=>g.projectCode===projectCode&&g.tip===tip&&(g.body||'')===(body||''));}
+function ganttApprovalDate(p){
+  const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===p.projectCode);
+  // Project approval = when it left "Onay Bekliyor". Use mh creation as the closest signal, else project update.
+  return (mh&&mh.olusturma)||p.guncelleme||p.olusturma;
+}
+function ganttEnsureSeed(p){
+  if(['Taslak','Onay Bekliyor','İptal'].includes(p.durum))return; // not started yet
+  let changed=false;
+  // Mühendislik 4-week block, seeded once
+  if(!ganttFindEntry(p.projectCode,'muhendislik','')){
+    const start=(ganttApprovalDate(p)||new Date().toISOString()).slice(0,10);
+    const end=new Date(new Date(start).getTime()+28*86400000).toISOString().slice(0,10);
+    C.Syn2_Gantt.push({id:uid(),company:currentCompany,projectCode:p.projectCode,tip:'muhendislik',body:'',baslik:'Mühendislik (4 hafta)',baslangic:start,bitis:end,kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()});
+    changed=true;
   }
-  // Bodies — span from first ekipman row creation to last update
-  const bodyGroups={};ekipman.forEach(e=>{(bodyGroups[e.body]||(bodyGroups[e.body]=[])).push(e);});
-  Object.keys(bodyGroups).sort((a,b)=>SYN_BODY_LIST.indexOf(a)-SYN_BODY_LIST.indexOf(b)).forEach(b=>{
-    const items=bodyGroups[b];
-    const starts=items.map(i=>i.olusturma).filter(Boolean).sort();
-    const ends=items.map(i=>i.guncelleme||i.olusturma).filter(Boolean).sort();
-    if(starts.length)rows.push({label:b.toUpperCase(),sub:items.length+' alt-parça',stages:[{label:b,klass:'sa',start:starts[0],end:ends[ends.length-1],ongoing:false}]});
+  if(changed)save('Syn2_Gantt').catch(()=>{});
+}
+function ganttBodiesWithEquipment(projectCode){
+  const set=new Set((C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode).map(r=>r.body));
+  return SYN_BODY_LIST.filter(b=>set.has(b));
+}
+function ganttAutoTestBlock(p){
+  // Last deadline among satinalma/uretim/muhendislik bitis → project termin
+  const entries=(C.Syn2_Gantt||[]).filter(g=>g.projectCode===p.projectCode&&g.tip!=='test'&&g.bitis);
+  const lastEnd=entries.map(g=>g.bitis).sort().pop();
+  return {start:lastEnd||'',end:p.termin||''};
+}
+function projectGanttHtml(p){
+  ganttEnsureSeed(p);
+  const year=_ganttYear||new Date().getFullYear();
+  const canEdit=ganttCanEdit(p);
+  const now=new Date().toISOString();
+  const bodies=ganttBodiesWithEquipment(p.projectCode);
+  const rows=[];
+  // 1) PROJE — derived, read-only
+  const projeStart=ganttApprovalDate(p)||p.olusturma;
+  const projeEnd=p.termin||(p.durum==='Tamamlandı'?p.guncelleme:now);
+  rows.push({label:'PROJE',sub:p.projectCode,readonly:true,stages:[{label:'Onay → Termin',klass:'proje',start:projeStart,end:projeEnd,ongoing:!p.termin}]});
+  // 2) MÜHENDİSLİK — editable
+  rows.push(ganttEditableRow(p,'muhendislik','','MÜHENDİSLİK','4 haftalık plan',canEdit));
+  // 3) SATIN ALMA per body
+  bodies.forEach(b=>rows.push(ganttEditableRow(p,'satinalma',b,'SATIN ALMA · '+b,'satın alma termini',canEdit)));
+  // 4) ÜRETİM per body
+  bodies.forEach(b=>rows.push(ganttEditableRow(p,'uretim',b,'ÜRETİM · '+b,'imalat termini',canEdit)));
+  // 5) custom (ozel) entries
+  (C.Syn2_Gantt||[]).filter(g=>g.projectCode===p.projectCode&&g.tip==='ozel').forEach(g=>{
+    rows.push({label:(g.baslik||'ÖZEL').toUpperCase(),sub:'özel aşama',tip:'ozel',body:g.baslik,stages:g.baslangic&&g.bitis?[{label:g.baslik,klass:'sa',start:g.baslangic,end:g.bitis,ongoing:false,edit:()=>0,id:g.id}]:[],editKey:{tip:'ozel',body:g.baslik,baslik:g.baslik,id:g.id},canEdit});
   });
-  // Teklif winners — each as a separate row showing tedarikçi
-  teklifler.filter(t=>t.kazanan==='true'||t.kazanan===true).forEach(t=>{
-    const ek=ekipman.find(e=>e.id===t.ekipmanId);
-    const tEnd=t.onayTarihi||t.guncelleme||now;
-    rows.push({label:'TEKLİF',sub:`${ek?.altParca||'?'} · ${t.tedarikci||''} · ${saFmtMoney(t.fiyat,t.paraBirimi)}`,stages:[{label:t.tedarikci||'?',klass:t.onayDurumu==='reddedildi'?'proje':(t.onayDurumu==='onaylandı'||t.onayDurumu==='doğrudan'?'done':'muh'),start:t.olusturma,end:tEnd,ongoing:t.onayDurumu==='bekliyor'}]});
-  });
+  // 6) TEST + MONTAJ + SEVKİYAT — editable, auto-seeded suggestion
+  const testEntry=ganttFindEntry(p.projectCode,'test','');
+  const auto=ganttAutoTestBlock(p);
+  rows.push(ganttEditableRow(p,'test','','TEST + MONTAJ + SEVKİYAT','son teslim bloğu',canEdit,auto));
+  // Render
   const months=ganttMonthSpans(year);
   const totalW=54*_ganttCellW;
   const monthRow=months.map(m=>`<div class="gantt-month-cell" style="flex-basis:${m.weeks*_ganttCellW}px">${m.name}</div>`).join('');
   const weekRow=Array.from({length:54},(_,i)=>`<div class="gantt-week-cell">${i+1}</div>`).join('');
   const todayLine=ganttTodayLine(year);
-  const bodyRows=rows.map(r=>`<div class="gantt-row">
-    <div class="gantt-row-label">
-      <div class="text-mono" style="color:var(--accent);font-weight:600;font-size:11px">${esc(r.label)}</div>
-      <div style="font-size:10px;color:var(--text3)">${esc(r.sub||'')}</div>
-    </div>
-    <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">
-      ${todayLine}
-      ${r.stages.map(s=>ganttBarHtml(s,year)).join('')}
-    </div>
-  </div>`).join('');
+  const bodyRows=rows.map(r=>{
+    let cells='';
+    if(r.stages&&r.stages.length){cells=r.stages.map(s=>ganttBarHtml(s,year,r.editKey&&canEdit?r.editKey:null)).join('');}
+    else if(r.editKey&&canEdit){cells=`<div class="gantt-empty-cell"><button class="gantt-set-btn" onclick='ganttEditStage(${JSON.stringify(p.projectCode)},${JSON.stringify(r.editKey.tip)},${JSON.stringify(r.editKey.body||"")},${JSON.stringify(r.editKey.baslik)})'>+ termin gir</button></div>`;}
+    return `<div class="gantt-row">
+      <div class="gantt-row-label">
+        <div class="text-mono" style="color:var(--accent);font-weight:600;font-size:11px">${esc(r.label)}</div>
+        <div style="font-size:10px;color:var(--text3)">${esc(r.sub||'')}</div>
+      </div>
+      <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">${todayLine}${cells}</div>
+    </div>`;
+  }).join('');
   return `<div class="flex justify-between items-center mb-16" style="flex-wrap:wrap;gap:10px">
-      <span class="card-title">Bu Projenin Zaman Çizelgesi · ${year}</span>
+      <span class="card-title">Zaman Çizelgesi · ${year}</span>
       <div class="flex gap-8">
         <button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year-1};projeWorkspace()">← ${year-1}</button>
         <button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year+1};projeWorkspace()">${year+1} →</button>
+        ${canEdit?`<button class="btn btn-primary btn-sm" onclick='ganttEditStage(${JSON.stringify(p.projectCode)},"ozel","","Özel Aşama")'>+ Aşama</button>`:''}
       </div>
     </div>
-    ${rows.length>1?`<div class="gantt-wrap"><div class="gantt-scroll">
+    <div class="gantt-legend mb-16">
+      <span><span class="gantt-legend-dot" style="background:#f5a623"></span>Mühendislik</span>
+      <span><span class="gantt-legend-dot" style="background:#5aa6ff"></span>Satın Alma</span>
+      <span><span class="gantt-legend-dot" style="background:#9b59b6"></span>Üretim/İmalat</span>
+      <span><span class="gantt-legend-dot" style="background:#3ecf8e"></span>Test+Montaj+Sevkiyat</span>
+      <span style="color:var(--red)">— Bugün</span>
+    </div>
+    <div class="gantt-wrap"><div class="gantt-scroll">
       <div class="gantt-header">
         <div class="gantt-row-label" style="background:var(--bg3)">Aşama</div>
         <div class="gantt-header-cells" style="width:${totalW}px;--gw:${_ganttCellW}px">
@@ -2543,9 +2580,56 @@ function projectGanttHtml(p){
       </div>
       ${bodyRows}
     </div></div>
-    <div class="text-sm text-muted mt-16">Çubukların üzerinde başlangıç/bitiş tarihleri görünür. Daha dar çubuklarda tooltipi için fareyi üzerinde tutun.</div>`:'<div class="empty-state">Bu projede henüz zaman çizelgesi oluşacak veri yok.</div>'}`;
+    <div class="text-sm text-muted mt-16">${canEdit?'Bir çubuğa ya da "+ termin gir" düğmesine tıklayarak başlangıç/bitiş tarihlerini ayarlayın. Test+Montaj+Sevkiyat bloğu son terminden proje terminine kadar otomatik önerilir.':'Termin düzenleme yetkin yok; yalnızca görüntülüyorsun.'}</div>`;
 }
-function ganttBarHtml(stage,year){
+function ganttEditableRow(p,tip,body,label,sub,canEdit,autoSuggest){
+  const e=ganttFindEntry(p.projectCode,tip,body);
+  const cfg=SYN_GANTT_TYPES[tip]||SYN_GANTT_TYPES.ozel;
+  const baslik=label;
+  if(e&&e.baslangic&&e.bitis){
+    return {label,sub,stages:[{label:cfg.label,klass:cfg.klass,start:e.baslangic,end:e.bitis,ongoing:false}],editKey:{tip,body,baslik,id:e.id},canEdit};
+  }
+  // No saved dates yet → show empty row (with "termin gir" if editable). For test, show auto-suggested faded hint via sub text.
+  const subText=(tip==='test'&&autoSuggest&&autoSuggest.end)?`öneri: ${ganttFmt(autoSuggest.start)} → ${ganttFmt(autoSuggest.end)}`:sub;
+  return {label,sub:subText,stages:[],editKey:{tip,body,baslik},canEdit};
+}
+function ganttEditStage(projectCode,tip,body,baslik){
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
+  if(p&&!ganttCanEdit(p)){toast('Termin düzenleme yetkin yok.','err');return;}
+  const e=ganttFindEntry(projectCode,tip,body);
+  let bas=e?.baslangic||'',bit=e?.bitis||'';
+  // Auto-suggest for test block
+  if(!e&&tip==='test'&&p){const auto=ganttAutoTestBlock(p);bas=auto.start?auto.start.slice(0,10):'';bit=auto.end?auto.end.slice(0,10):'';}
+  const isOzel=tip==='ozel';
+  showModal((SYN_GANTT_TYPES[tip]?.label||baslik)+(body?' · '+body:'')+' · Termin',`
+    ${isOzel?`<div class="form-group"><label>Aşama Adı *</label><input type="text" id="gt-baslik" value="${esc(e?.baslik||(baslik==='Özel Aşama'?'':baslik))}" placeholder="Örn: Saha Keşfi"></div>`:''}
+    <div class="form-row">
+      <div class="form-group"><label>Başlangıç</label><input type="date" id="gt-bas" value="${esc(bas)}"></div>
+      <div class="form-group"><label>Bitiş (termin)</label><input type="date" id="gt-bit" value="${esc(bit)}"></div>
+    </div>
+    <div class="text-sm text-muted">${tip==='muhendislik'?'Mühendislik bloğu varsayılan 4 hafta gelir; gerekirse değiştirin.':tip==='test'?'Son terminden proje terminine kadar otomatik önerilir.':''}</div>`,
+    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button>${e?`<button class="btn btn-danger" onclick="ganttDeleteStage('${e.id}')">Sil</button>`:''}<button class="btn btn-primary" onclick='ganttSaveStage(${JSON.stringify(projectCode)},${JSON.stringify(tip)},${JSON.stringify(body||"")})'>Kaydet</button>`);
+}
+function ganttSaveStage(projectCode,tip,body){
+  const bas=document.getElementById('gt-bas').value;
+  const bit=document.getElementById('gt-bit').value;
+  if(!bas||!bit){toast('Başlangıç ve bitiş tarihi zorunlu.','err');return;}
+  if(bit<bas){toast('Bitiş, başlangıçtan önce olamaz.','err');return;}
+  let baslik=SYN_GANTT_TYPES[tip]?.label||tip;
+  if(tip==='ozel'){baslik=(document.getElementById('gt-baslik')?.value||'').trim();if(!baslik){toast('Aşama adı zorunlu.','err');return;}}
+  else if(body)baslik=baslik+' · '+body;
+  let e=ganttFindEntry(projectCode,tip,tip==='ozel'?baslik:body);
+  if(e){e.baslangic=bas;e.bitis=bit;e.baslik=baslik;e.guncelleme=new Date().toISOString();}
+  else{e={id:uid(),company:currentCompany,projectCode,tip,body:tip==='ozel'?baslik:(body||''),baslik,baslangic:bas,bitis:bit,kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};C.Syn2_Gantt.push(e);}
+  closeModalDirect();projeWorkspace();
+  save('Syn2_Gantt').then(()=>toast('Termin kaydedildi ✓')).catch(err=>toast('Hata: '+err.message,'err'));
+}
+function ganttDeleteStage(id){
+  C.Syn2_Gantt=(C.Syn2_Gantt||[]).filter(g=>g.id!==id);
+  closeModalDirect();projeWorkspace();
+  save('Syn2_Gantt').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+function ganttBarHtml(stage,year,editKey){
   const c1=ganttDateToCol(stage.start,year);
   const c2=ganttDateToCol(stage.end,year);
   if(c1===null||c2===null)return '';
@@ -2554,11 +2638,11 @@ function ganttBarHtml(stage,year){
   const endCol=Math.max(startCol,Math.min(54,c2));
   const left=(startCol-1)*_ganttCellW;
   const width=Math.max(_ganttCellW*0.5,(endCol-startCol+1)*_ganttCellW-2);
-  const tip=`${stage.label}\n${ganttFmt(stage.start)} → ${ganttFmt(stage.end)}${stage.ongoing?' (sürüyor)':''}`;
-  // Date label visible on bar if wide enough
+  const tip=`${stage.label}\n${ganttFmt(stage.start)} → ${ganttFmt(stage.end)}${stage.ongoing?' (sürüyor)':''}${editKey?'\n(düzenlemek için tıkla)':''}`;
   const dateLabel=width>=140?`${ganttFmt(stage.start)} → ${ganttFmt(stage.end)}`:(width>=70?ganttFmt(stage.start):'');
   const text=dateLabel?`${esc(stage.label)} · ${esc(dateLabel)}`:esc(stage.label);
-  return `<div class="gantt-bar ${stage.klass}${stage.ongoing?' ongoing':''}" style="left:${left}px;width:${width}px" title="${esc(tip)}">${text}</div>`;
+  const onclick=editKey?` onclick='ganttEditStage(${JSON.stringify(_wsProject)},${JSON.stringify(editKey.tip)},${JSON.stringify(editKey.body||"")},${JSON.stringify(editKey.baslik)})'`:'';
+  return `<div class="gantt-bar ${stage.klass}${stage.ongoing?' ongoing':''}${editKey?' editable':''}" style="left:${left}px;width:${width}px" title="${esc(tip)}"${onclick}>${text}</div>`;
 }
 function ganttTodayLine(year){
   const w=ganttWeekOfYear(new Date());
