@@ -14,7 +14,31 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>(function(){try{var s=localStorage.getItem('arsenTheme');if(!s){s=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',s);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
-<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
+<script>
+if('serviceWorker' in navigator){
+  var _swReloaded=false;
+  // Auto-reload once the new service worker takes control, so updates land without reinstalling.
+  navigator.serviceWorker.addEventListener('controllerchange',function(){
+    if(_swReloaded)return;_swReloaded=true;location.reload();
+  });
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      // Activate a waiting worker immediately.
+      function promote(w){if(w)w.postMessage&&w.postMessage('SKIP_WAITING');}
+      if(reg.waiting)promote(reg.waiting);
+      reg.addEventListener('updatefound',function(){
+        var nw=reg.installing;
+        if(nw)nw.addEventListener('statechange',function(){if(nw.state==='installed'&&navigator.serviceWorker.controller)promote(nw);});
+      });
+      // Check for a new version on launch, when the tab regains focus, and periodically.
+      var check=function(){reg.update().catch(function(){});};
+      check();
+      document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')check();});
+      setInterval(check,60000);
+    }).catch(function(){});
+  });
+}
+</script>
 <style>
 :root,[data-theme="dark"]{--bg:#0A0D12;--bg2:#11161D;--bg3:#161c25;--bg-hover:#1c2330;--border:rgba(180,210,230,0.10);--border2:rgba(180,210,230,0.22);--text:#E7EEF5;--text2:#8A98A8;--text3:#5B6776;--accent:#28B4CC;--accent2:#147588;--accent-soft:rgba(40,180,204,0.14);--green:#3DD27E;--amber:#F0B23A;--red:#F26458;--purple:#9b59b6;--teal:#28B4CC;--overlay:rgba(6,8,12,0.80);--modal-backdrop:rgba(0,0,0,0.7);--tint:180,210,230;--shadow-sm:0 1px 2px rgba(0,0,0,.32);--shadow-md:0 20px 50px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.30);--ring:rgba(40,180,204,0.34);--radius:5px;--mono:'JetBrains Mono',ui-monospace,monospace;--sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color-scheme:dark;}
 [data-theme="light"]{--bg:#F4F6FB;--bg2:#FFFFFF;--bg3:#F8FAFC;--bg-hover:#eef2f7;--border:rgba(15,25,40,0.10);--border2:rgba(15,25,40,0.18);--text:#0E1116;--text2:#5A6473;--text3:#94A0B0;--accent:#1FA2B8;--accent2:#147588;--accent-soft:rgba(31,162,184,0.12);--green:#1E9F5F;--amber:#D89412;--red:#D24A3E;--purple:#7a3aa5;--teal:#1FA2B8;--overlay:rgba(244,246,251,0.82);--modal-backdrop:rgba(20,28,50,0.45);--tint:15,25,40;--shadow-sm:0 1px 2px rgba(20,30,55,.06),0 1px 3px rgba(20,30,55,.04);--shadow-md:0 14px 34px rgba(20,30,55,.10),0 4px 12px rgba(20,30,55,.06);--ring:rgba(31,162,184,0.24);--radius:5px;--mono:'JetBrains Mono',ui-monospace,monospace;--sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color-scheme:light;}
@@ -45,6 +69,16 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 #loading-overlay{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(2px);z-index:9998;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
 #loading-overlay.show{display:flex;}.spinner{width:32px;height:32px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}.loading-text{font-size:13px;color:var(--text2);font-family:var(--mono);}
+#splash{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;background:var(--bg);}
+#splash::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 38%,var(--accent-soft) 0%,transparent 60%);pointer-events:none;}
+#splash.show{display:flex;}
+#splash .splash-logo{width:250px;max-width:72vw;height:auto;border-radius:16px;background:#fff;padding:16px 20px;box-shadow:var(--shadow-md);opacity:0;transform:translateY(26px) scale(.94);animation:splashIn .75s cubic-bezier(.2,.85,.25,1) forwards;position:relative;}
+@keyframes splashIn{60%{opacity:1;}to{opacity:1;transform:translateY(0) scale(1);}}
+#splash .splash-bar{margin-top:28px;width:190px;max-width:60vw;height:3px;border-radius:3px;background:var(--border2);overflow:hidden;position:relative;}
+#splash .splash-bar::after{content:'';position:absolute;left:-45%;top:0;height:100%;width:45%;border-radius:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:splashSlide 1.05s linear infinite;}
+@keyframes splashSlide{to{left:115%;}}
+#splash .splash-text{margin-top:15px;font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;opacity:0;animation:splashFade .5s ease .35s forwards;}
+@keyframes splashFade{to{opacity:1;}}
 #app{display:none;height:100vh;overflow:hidden;}#app.visible{display:flex;}
 .sidebar{width:240px;min-width:240px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto;transition:transform .28s ease;}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99;}
@@ -290,6 +324,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 </div>
 
 <div id="loading-overlay"><div class="spinner"></div><div class="loading-text" id="loading-text">Yükleniyor...</div></div>
+<div id="splash"><img class="splash-logo" src="assets/arsen-process-mark.png?v=6" alt="Arşen Process"><div class="splash-bar"></div><div class="splash-text" id="splash-text">Bağlanıyor</div></div>
 
 <div id="app">
   <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -307,15 +342,15 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('ekipman')"><span class="nav-icon">⚙</span> <span id="nav-ekipman-label">Ekipman Takibi</span> <span class="nav-badge" id="ekip-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> <span id="nav-metod-label">Metodlar ve İzlekler</span></div>
       <div class="nav-item" onclick="showPage('sfe')"><span class="nav-icon">◇</span> Süperkritik CO₂</div>
+      <div class="nav-item" onclick="showPage('gunluk')"><span class="nav-icon">✎</span> <span id="nav-gunluk-label">Günlük Log</span></div>
       <div class="nav-section">Ekip</div>
       <div class="nav-item" style="display:none" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> <span id="nav-takvim-label">Görev Takvimi</span></div>
       <div class="nav-item" onclick="showPage('mesai')"><span class="nav-icon">◷</span> Ekstra Mesai <span class="nav-badge" id="mesai-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('iletisim')"><span class="nav-icon">☏</span> İletişimde Olunan Kişiler</div>
       <div class="nav-item" onclick="showPage('dosyalar')"><span class="nav-icon">▣</span> Dosya Depolama</div>
-      <div class="nav-item" onclick="showPage('gunluk')"><span class="nav-icon">✎</span> <span id="nav-gunluk-label">Günlük Log</span></div>
-      <div class="nav-item" onclick="showPage('rapor')"><span class="nav-icon">▤</span> Raporlama</div>
       <div class="nav-section" id="admin-nav-section">Yönetim</div>
+      <div class="nav-item" onclick="showPage('rapor')"><span class="nav-icon">▤</span> Raporlama</div>
       <div class="nav-item" id="admin-nav-item" onclick="showPage('admin')"><span class="nav-icon">◎</span> Kullanıcılar</div>
       <div class="nav-item" id="nav-audit" onclick="showPage('audit')" style="display:none"><span class="nav-icon">⌥</span> Düzenleme Geçmişi</div>
     </nav>
@@ -565,6 +600,7 @@ function promptDialog(label,def='',title='Bilgi Gir'){
   });
 }
 function loading(show,text='İşleniyor...'){document.getElementById('loading-text').textContent=text;document.getElementById('loading-overlay').classList.toggle('show',show);}
+function splash(show,text='Bağlanıyor'){const el=document.getElementById('splash');if(!el)return;if(show){const t=document.getElementById('splash-text');if(t)t.textContent=text;const logo=el.querySelector('.splash-logo');if(logo){logo.style.animation='none';void logo.offsetWidth;logo.style.animation='';}el.classList.add('show');}else{el.classList.remove('show');}}
 function setSS(s){const e=document.getElementById('sync-status');if(!e)return;e.innerHTML=s==='ok'?'<span class="sync-ok">● Bağlı</span>':s==='loading'?'<span class="sync-loading">↺ Senkronize...</span>':'<span class="sync-err">● Bağlantı hatası</span>';}
 // ── SESSION PERSISTENCE ──
 const SS_AUTH_KEY='arsenSession_v1',SS_CACHE_KEY='arsenCacheMulti_v2',SS_CACHE_LEGACY_KEY='arsenCache_v1';
@@ -693,27 +729,25 @@ function enterApp(){
   document.getElementById('sidebar-role').textContent=isArsenAdmin()?'Arşen Admin':isAdmin()?(kurumLabel()+' Admin'):'Kullanıcı';
   renderCompanySelector();
   updateCompanyUI();
-  // User management (Kullanıcılar) is Arşen-admin only.
-  const showUserMgmt=isArsenAdmin();
-  document.getElementById('admin-nav-section').style.display=showUserMgmt?'':'none';
-  document.getElementById('admin-nav-item').style.display=showUserMgmt?'':'none';
+  // Yönetim bölümü herkese görünür (Raporlama burada); yalnız Kullanıcılar Arşen-admin'e özel.
+  document.getElementById('admin-nav-section').style.display='';
+  document.getElementById('admin-nav-item').style.display=isArsenAdmin()?'':'none';
 }
 function startAutoSync(){if(syncTimer)clearInterval(syncTimer);syncTimer=setInterval(()=>syncAll().then(ok=>{if(ok&&currentPage&&!document.getElementById('modal-overlay').classList.contains('open'))showPage(currentPage,true);}),90000);}
 async function doLogin(){
   const u=document.getElementById('login-user').value.trim();const p=document.getElementById('login-pass').value;if(!u||!p)return;
-  loading(true,'Bağlanıyor...');
+  splash(true,'Bağlanıyor');
   try{
     const login=await driveApi('login',{username:u,passwordHash:hash(p)});
     authToken=login.token;currentUser=login.user;
     const access=companyAccess(currentUser);
     currentCompany=access.includes(currentUser.defaultCompany)?currentUser.defaultCompany:access[0];
     // Save session and enter the app IMMEDIATELY — sync runs in the background so the user
-    // doesn't stare at "Bağlanıyor..." while we fetch 21 sheets. If they refresh during this
-    // window, the saved session keeps them logged in.
+    // lands on a cool branded splash instead of a blank wait while we fetch sheets.
     saveSession();
-    loading(false);
     enterApp();
     showPage('dashboard');
+    setTimeout(()=>splash(false),650);
     setSS('loading');
     syncAll().then(ok=>{
       if(!ok)toast('Bazı veriler yüklenemedi, arka planda yeniden deneniyor.','err');
@@ -724,17 +758,19 @@ async function doLogin(){
       prefetchOtherCompanies();
     }).catch(()=>{});
     startAutoSync();
-  }catch(e){authToken=null;currentUser=null;loading(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
+  }catch(e){authToken=null;currentUser=null;splash(false);document.getElementById('login-err').style.display='block';toast('Giriş hatası: '+e.message,'err');}
 }
 async function bootstrapSession(){
   try{
     const sess=loadSession();if(!sess||!sess.token||!sess.user)return false;
+    splash(true,'Bağlanıyor');
     authToken=sess.token;currentUser=sess.user;currentCompany=sess.company||'fuwell';
     const cache=loadCache(currentCompany);
     // multi-cache shape: blob[company] = {t, sheets:{}}; restore if sheets present
     if(cache&&cache.sheets){SHEETS.forEach(s=>{if(cache.sheets[s])C[s]=cache.sheets[s];});}
     enterApp();
     showPage('dashboard');
+    setTimeout(()=>splash(false),650);
     setSS('loading');
     syncAll().then(ok=>{
       if(ok){if(currentPage)showPage(currentPage,true);initNotifications();ensureScheduleOnline().then(()=>{if(currentPage==='dashboard'||currentPage==='takvim')showPage(currentPage,true);}).catch(()=>{});refreshMesaiBadge().catch(()=>{});prefetchOtherCompanies();}
@@ -744,6 +780,7 @@ async function bootstrapSession(){
   }catch(e){
     // If anything in bootstrap fails (corrupt cache, missing user field, etc.) wipe the session and fall back to login cleanly instead of leaving the user stuck.
     try{clearSession();}catch(_){}
+    splash(false);
     authToken=null;currentUser=null;
     return false;
   }
@@ -778,9 +815,10 @@ function updateCompanyUI(){
     badge.textContent=cfg?.short||currentCompany;
     badge.classList.add('show');
   }
-  // Umbrella-only nav items
+  // Arşen Genel Bakış: yalnız Arşen admin. Düzenleme Geçmişi: tüm Arşen (umbrella).
   const umb=isUmbrella();
-  ['nav-genel','nav-audit'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=umb?'':'none';});
+  const ng=document.getElementById('nav-genel');if(ng)ng.style.display=isArsenAdmin()?'':'none';
+  const na=document.getElementById('nav-audit');if(na)na.style.display=umb?'':'none';
   const ums=document.getElementById('umbrella-nav-section');if(ums)ums.style.display=umb?'':'none';
   // Sub-firm users: hide the company selector altogether (defense-in-depth on top of access check)
   const sel=document.getElementById('company-select');if(sel&&!umb)sel.style.display='none';
@@ -812,12 +850,13 @@ async function switchCompany(key){
 // ── NAV ──
 function showPage(page,silent=false){
   // Umbrella-only pages
-  if((page==='genel'||page==='audit')&&!isUmbrella()){toast('Bu sayfa yalnızca Arşen Proses yetkililerine açıktır.','err');page='dashboard';}
+  if(page==='genel'&&!isArsenAdmin()){toast('Arşen Genel Bakış yalnızca Arşen admin tarafından görüntülenir.','err');page='dashboard';}
+  if(page==='audit'&&!isUmbrella()){toast('Bu sayfa yalnızca Arşen Proses yetkililerine açıktır.','err');page='dashboard';}
   if(page==='admin'&&!isArsenAdmin()){toast('Kullanıcı yönetimi yalnızca Arşen admin tarafından yapılır.','err');page='dashboard';}
   currentPage=page;
   closeSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','genel','stok','analiz','ekipman','metod','sfe','bildirim','takvim','mesai','iletisim','dosyalar','gunluk','rapor','admin','audit'];
+  const map=['dashboard','genel','stok','analiz','ekipman','metod','sfe','gunluk','bildirim','takvim','mesai','iletisim','dosyalar','rapor','admin','audit'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
   const syn=currentCompany==='syntegra';
@@ -1197,15 +1236,40 @@ async function bildirimHepsiniOku(){myNotifications().forEach(n=>n.okundu='true'
 async function bildirimAc(id,page){await bildirimOku(id);showPage(page);}
 
 // ── DASHBOARD ──
+// Main goals set by the Arşen admin — shown prominently on every user's dashboard.
+function dashboardGoalsBox(){
+  const goals=scheduleGoals();
+  if(!goals.length)return '';
+  return `<div class="card mb-16" style="border-left:3px solid var(--accent);background:var(--accent-soft)">
+    <div class="card-header"><span class="card-title">🎯 Ana Hedefler — önceliğimiz</span><span class="text-sm text-muted">Arşen yönetimi tarafından belirlendi</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px">${goals.map(g=>`<div style="display:flex;gap:10px;align-items:flex-start"><span style="width:9px;height:9px;border-radius:50%;background:${esc(g.color||'#4f9cf9')};margin-top:5px;flex:0 0 auto"></span><div style="min-width:0"><strong>${esc(g.title)}</strong> <span class="badge badge-gray" style="font-size:9px">${esc(g.scope||'Haftalık')}</span>${g.note?`<div class="text-sm text-muted" style="margin-top:2px">${esc(g.note)}</div>`:''}</div></div>`).join('')}</div>
+  </div>`;
+}
+// Active warnings rendered as cards (boxes) instead of full-width bars.
+function dashboardWarningBoxes(){
+  const bugun=new Date();
+  const kritik=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0));
+  const yaklasan=C.Ekipman.filter(e=>{if(!e.kalibrasyonTarihi)return false;const d=(new Date(e.kalibrasyonTarihi)-bugun)/86400000;return d<=30&&d>=0;});
+  const gecmis=C.Ekipman.filter(e=>e.kalibrasyonTarihi&&new Date(e.kalibrasyonTarihi)<bugun);
+  const temizlik=C.Temizlik.filter(t=>t.sonrakiTarih&&new Date(t.sonrakiTarih)<bugun&&t.durum!=='Tamamlandı');
+  const box=(color,icon,title,body,onclick)=>`<div class="card" style="border-left:3px solid ${color}${onclick?';cursor:pointer':''}" ${onclick?`onclick="${onclick}"`:''}><div class="card-header"><span class="card-title">${icon} ${title}</span>${onclick?`<span class="text-mono text-sm" style="opacity:.7">→</span>`:''}</div><div style="font-size:13px;color:var(--text2);line-height:1.55">${body}</div></div>`;
+  const cards=[];
+  if(kritik.length)cards.push(box('#e74c3c','⚠',`Kritik Stok (${kritik.length})`,`<strong>${kritik.map(k=>esc(k.ad)).join(', ')}</strong>`,"showPage('stok')"));
+  if(gecmis.length)cards.push(box('#e74c3c','⚠',`Süresi Geçmiş Kalibrasyon (${gecmis.length})`,`${gecmis.map(e=>esc(e.ad)).join(', ')}<div class="text-sm" style="margin-top:6px;opacity:.8">listele & ata</div>`,"kalibUyariListesi('gecmis')"));
+  if(yaklasan.length)cards.push(box('#f5a623','⚡',`Kalibrasyon Yaklaşıyor (${yaklasan.length})`,`${yaklasan.map(e=>esc(e.ad)).join(', ')}<div class="text-sm" style="margin-top:6px;opacity:.8">listele & ata</div>`,"kalibUyariListesi('yaklasan')"));
+  if(temizlik.length)cards.push(box('#f5a623','🧹',`Temizlik Zamanı Geçmiş (${temizlik.length})`,`<strong>${temizlik.map(t=>esc(t.gorev)).join(', ')}</strong>`));
+  if(isArsenAdmin()&&mesaiPendingCount>0)cards.push(box('#f5a623','◷',`Mesai Onayı Bekliyor (${mesaiPendingCount})`,`<button class="btn btn-amber btn-sm" onclick="event.stopPropagation();showPage('mesai')">İncele</button>`));
+  if(!cards.length)cards.push(box('#3ecf8e','✓','Aktif Uyarı Yok','Stok, kalibrasyon ve temizlikte bekleyen bir uyarı bulunmuyor.'));
+  return `<div class="grid-2 gap-16 mb-16">${cards.join('')}</div>`;
+}
 function dashboard(){
   if(currentCompany==='syntegra')return synDashboard();
   const bugun=new Date();const bs=today();
   const kritik=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0));
   const yaklasan=C.Ekipman.filter(e=>{if(!e.kalibrasyonTarihi)return false;const d=(new Date(e.kalibrasyonTarihi)-bugun)/86400000;return d<=30&&d>=0;});
   const gecmis=C.Ekipman.filter(e=>e.kalibrasyonTarihi&&new Date(e.kalibrasyonTarihi)<bugun);
-  const son=[...C.StokHareketleri.map(h=>({ad:h.stokAd,lab:h.tip,tarih:h.tarih,kullanici:h.kullanici,_t:'Stok '+h.tip,_r:h.tip==='Girdi'?'badge-green':'badge-purple'})),...C.Analiz.map(a=>({...a,_t:'Analiz',_r:'badge-blue'}))].sort((a,b)=>new Date(b.tarih||0)-new Date(a.tarih||0)).slice(0,8);
-  const temizlikGecmis=C.Temizlik.filter(t=>t.sonrakiTarih&&new Date(t.sonrakiTarih)<bugun&&t.durum!=='Tamamlandı');
   document.getElementById('content').innerHTML=`
+    ${dashboardGoalsBox()}
     <div class="alert alert-blue mb-16"><strong>${esc(companyLabel())}</strong> alanındasınız. Bu ekranda görünen kayıtlar seçili operasyon alanına aittir.</div>
     <div class="mb-24 grid-4">
       <div class="stat-card"><div class="stat-label">Toplam Stok</div><div class="stat-value stat-blue">${C.Stok.length}</div><div class="stat-sub">kayıtlı malzeme</div></div>
@@ -1213,21 +1277,7 @@ function dashboard(){
       <div class="stat-card"><div class="stat-label">Kalibrasyon</div><div class="stat-value ${gecmis.length>0?'stat-red':yaklasan.length>0?'stat-amber':'stat-green'}">${gecmis.length+yaklasan.length}</div><div class="stat-sub">${gecmis.length} geçmiş · ${yaklasan.length} yaklaşan</div></div>
       <div class="stat-card"><div class="stat-label">Bugün</div><div class="stat-value stat-blue">${[...C.StokHareketleri,...C.Analiz].filter(x=>x.tarih&&x.tarih.startsWith(bs)).length}</div><div class="stat-sub">stok hareketi ve analiz</div></div>
     </div>
-    ${kritik.length>0?`<div class="alert alert-red mb-16">⚠ Kritik stok: <strong>${kritik.map(k=>k.ad).join(', ')}</strong></div>`:''}
-    ${gecmis.length>0?`<div class="alert alert-red mb-16" style="cursor:pointer" onclick="kalibUyariListesi('gecmis')">⚠ Süresi geçmiş kalibrasyon (${gecmis.length}): <strong>${gecmis.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
-    ${yaklasan.length>0?`<div class="alert alert-amber mb-16" style="cursor:pointer" onclick="kalibUyariListesi('yaklasan')">⚡ Kalibrasyon yaklaşıyor (${yaklasan.length}): <strong>${yaklasan.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
-    ${temizlikGecmis.length>0?`<div class="alert alert-amber mb-16">🧹 Temizlik zamanı geçmiş: <strong>${temizlikGecmis.map(t=>t.gorev).join(', ')}</strong></div>`:''}
-    ${isArsenAdmin()&&mesaiPendingCount>0?`<div class="alert alert-amber mb-16">◷ Onay bekleyen ekstra mesai kaydı: <strong>${mesaiPendingCount}</strong> <button class="btn btn-amber btn-sm" style="margin-left:10px" onclick="showPage('mesai')">İncele</button></div>`:''}
-    <div class="grid-2 gap-16">
-      <div class="card"><div class="card-header"><span class="card-title">Son Aktiviteler</span></div>
-        ${son.length===0?`<div class="empty-state"><div class="empty-icon">◈</div><div>Henüz kayıt yok</div></div>`:
-        `<div class="table-wrap"><table><thead><tr><th>Tür</th><th>Ad</th><th>Lab</th><th>Tarih</th><th>Kullanıcı</th></tr></thead><tbody>${son.map(r=>`<tr><td><span class="badge ${r._r}">${r._t}</span></td><td class="td-main">${r.ad||r.numune||'—'}</td><td>${r.lab||'—'}</td><td class="text-mono" style="font-size:11px">${fmt(r.tarih)}</td><td>${r.kullanici||'—'}</td></tr>`).join('')}</tbody></table></div>`}
-      </div>
-      <div class="card"><div class="card-header"><span class="card-title">Stok Özeti</span></div>
-        ${C.Stok.length===0?`<div class="empty-state"><div class="empty-icon">◉</div><div>Stok yok</div></div>`:
-        `<div style="display:flex;flex-direction:column;gap:10px;">${C.Stok.slice(0,8).map(s=>{const pct=s.maksimum>0?Math.min(100,Math.round(s.miktar/s.maksimum*100)):50;const renk=s.miktar<=(s.kritikSeviye||0)?'#e74c3c':s.miktar<=(s.kritikSeviye||0)*2?'#f5a623':'#3ecf8e';return`<div><div class="flex justify-between" style="font-size:12px;margin-bottom:4px"><span>${s.ad}${s.lab?` <span style="color:var(--text3);font-size:10px">[${s.lab}]</span>`:''}</span><span class="text-mono" style="color:${renk}">${s.miktar} ${s.birim||''}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${renk}"></div></div></div>`;}).join('')}</div>`}
-      </div>
-    </div>
+    ${dashboardWarningBoxes()}
     <div class="card mt-16">${scheduleHTML(true)}</div>
     <div id="team-schedule-overview" class="mt-16"></div>`;
   renderTeamScheduleOverview();
@@ -3550,6 +3600,7 @@ function synDashboard(){
   const total=C.SynProjeler.length,active=C.SynProjeler.filter(p=>!['Kapandı','İptal','Tamamlandı'].includes(p.durum)).length,risk=C.SynProjeler.filter(p=>['Riskli','Gecikti'].includes(p.durum)).length;
   const planned=C.SynMaliyet.reduce((s,r)=>s+(parseFloat(r.planlanan)||0),0),actual=C.SynMaliyet.reduce((s,r)=>s+(parseFloat(r.gerceklesen)||0),0);
   document.getElementById('content').innerHTML=`
+    ${dashboardGoalsBox()}
     <div class="alert alert-blue mb-16"><strong>Syntegra imalat alanı</strong> proje, mühendislik, satın alma, maliyet ve müşteri raporlama süreci için yapılandırıldı.</div>
     <div class="mb-24 grid-4">
       <div class="stat-card"><div class="stat-label">Proje</div><div class="stat-value stat-blue">${total}</div><div class="stat-sub">${active} aktif</div></div>
