@@ -714,6 +714,51 @@ function updateOvertimeStatus(data, user) {
   return { ok: true };
 }
 
+// ── DAILY LOG REMINDER (time-driven trigger) ───────────────────────────────
+// Reminds every active user (in-app + email) to enter their daily log.
+// Runs weekdays only, from 1 June onward. Users who already logged today are skipped.
+function dailyLogReminder() {
+  var tz = Session.getScriptTimeZone() || 'Europe/Istanbul';
+  var now = new Date();
+  var day = now.getDay();              // 0=Sun … 6=Sat
+  if (day === 0 || day === 6) return;  // weekdays only
+  var startDate = new Date(now.getFullYear(), 5, 1); // 1 June (month index 5)
+  if (now < startDate) return;
+  var today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  var loggedToday = {};
+  try {
+    var logs = rowsFromSheet('GunlukLog').rows;
+    for (var j = 0; j < logs.length; j++) {
+      if (String(logs[j].tarih || '').slice(0, 10) === today) loggedToday[logs[j].kullanici] = true;
+    }
+  } catch (e) {}
+  var users = activeUsers(), sent = 0;
+  var sys = { ad: 'Sistem', username: 'system' };
+  for (var i = 0; i < users.length; i++) {
+    var u = users[i];
+    if (loggedToday[u.username]) continue; // already logged today
+    appendNotification(u, {
+      company: normalizeCompany(u.defaultCompany || 'fuwell'),
+      baslik: 'Günlük log hatırlatması',
+      mesaj: 'Bugünün günlük logunu girmeyi unutma. Günlük Log sayfasından bugün yaptığın çalışmaları kaydet.',
+      tur: 'Hatırlatma',
+      sayfa: 'gunluk',
+      sendEmail: true
+    }, sys);
+    sent++;
+  }
+  return { ok: true, sent: sent, date: today };
+}
+// Run this ONCE from the Apps Script editor to (re)install the 16:00 daily trigger.
+function setupDailyLogTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'dailyLogReminder') ScriptApp.deleteTrigger(triggers[i]);
+  }
+  ScriptApp.newTrigger('dailyLogReminder').timeBased().atHour(16).nearMinute(0).everyDays(1).create();
+  return 'Günlük log hatırlatıcı kuruldu: her gün ~16:00 (hafta sonu ve 1 Haziran öncesi atlanır).';
+}
+
 function doGet(e) {
   var result;
   try {
