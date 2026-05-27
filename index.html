@@ -6,9 +6,15 @@
 <meta name="theme-color" content="#0A0D12" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#F4F6FB" media="(prefers-color-scheme: light)">
 <title>Arşen Proses — Lab Takip</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Arşen Process">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>(function(){try{var s=localStorage.getItem('arsenTheme');if(!s){s=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',s);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
 <style>
 :root,[data-theme="dark"]{--bg:#0A0D12;--bg2:#11161D;--bg3:#161c25;--bg-hover:#1c2330;--border:rgba(180,210,230,0.10);--border2:rgba(180,210,230,0.22);--text:#E7EEF5;--text2:#8A98A8;--text3:#5B6776;--accent:#28B4CC;--accent2:#147588;--accent-soft:rgba(40,180,204,0.14);--green:#3DD27E;--amber:#F0B23A;--red:#F26458;--purple:#9b59b6;--teal:#28B4CC;--overlay:rgba(6,8,12,0.80);--modal-backdrop:rgba(0,0,0,0.7);--tint:180,210,230;--shadow-sm:0 1px 2px rgba(0,0,0,.32);--shadow-md:0 20px 50px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.30);--ring:rgba(40,180,204,0.34);--radius:5px;--mono:'JetBrains Mono',ui-monospace,monospace;--sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color-scheme:dark;}
 [data-theme="light"]{--bg:#F4F6FB;--bg2:#FFFFFF;--bg3:#F8FAFC;--bg-hover:#eef2f7;--border:rgba(15,25,40,0.10);--border2:rgba(15,25,40,0.18);--text:#0E1116;--text2:#5A6473;--text3:#94A0B0;--accent:#1FA2B8;--accent2:#147588;--accent-soft:rgba(31,162,184,0.12);--green:#1E9F5F;--amber:#D89412;--red:#D24A3E;--purple:#7a3aa5;--teal:#1FA2B8;--overlay:rgba(244,246,251,0.82);--modal-backdrop:rgba(20,28,50,0.45);--tint:15,25,40;--shadow-sm:0 1px 2px rgba(20,30,55,.06),0 1px 3px rgba(20,30,55,.04);--shadow-md:0 14px 34px rgba(20,30,55,.10),0 4px 12px rgba(20,30,55,.06);--ring:rgba(31,162,184,0.24);--radius:5px;--mono:'JetBrains Mono',ui-monospace,monospace;--sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color-scheme:light;}
@@ -823,13 +829,27 @@ function updateNotificationBadge(){
   const n=unreadNotifications().length;
   ['notif-count','bildirim-badge'].forEach(id=>{const el=document.getElementById(id);if(!el)return;if(n>0){el.textContent=n;el.style.display=id==='notif-count'?'flex':'';}else el.style.display='none';});
 }
-function initNotifications(){knownNotifIds=new Set(myNotifications().map(n=>n.id));notifReady=true;updateNotificationBadge();}
+function initNotifications(){knownNotifIds=new Set(myNotifications().map(n=>n.id));notifReady=true;updateNotificationBadge();requestNotifPermission();}
 function handleNewNotifications(){
   if(!notifReady||!currentUser)return;
   const fresh=unreadNotifications().filter(n=>!knownNotifIds.has(n.id));
   myNotifications().forEach(n=>knownNotifIds.add(n.id));
-  if(fresh.length){const n=fresh[0];toast(`${n.baslik}: ${n.mesaj}`);}
+  if(fresh.length){const n=fresh[0];toast(`${n.baslik}: ${n.mesaj}`);fresh.forEach(showOSNotification);}
   if(currentPage==='bildirim')renderBildirim();
+}
+// OS-level (phone/desktop) notification banner when granted. Works while the app/PWA is open.
+function showOSNotification(n){
+  try{
+    if(!('Notification' in window)||Notification.permission!=='granted')return;
+    const reg=navigator.serviceWorker&&navigator.serviceWorker.ready;
+    const opts={body:n.mesaj||'',icon:'assets/icon-192.png',badge:'assets/icon-192.png',tag:n.id,data:{sayfa:n.sayfa||''}};
+    if(reg&&reg.then){reg.then(r=>{try{r.showNotification(n.baslik||'Arşen Process',opts);}catch(e){new Notification(n.baslik||'Arşen Process',opts);}}).catch(()=>{try{new Notification(n.baslik||'Arşen Process',opts);}catch(e){}});}
+    else{new Notification(n.baslik||'Arşen Process',opts);}
+  }catch(e){}
+}
+function requestNotifPermission(){
+  if(!('Notification' in window))return;
+  if(Notification.permission==='default'){Notification.requestPermission().then(p=>{if(p==='granted')toast('Telefon/masaüstü bildirimleri açıldı ✓');}).catch(()=>{});}
 }
 async function notifyApi(payload){
   const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'createNotification',token:authToken,company:currentCompany,...payload})});
