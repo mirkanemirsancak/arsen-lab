@@ -885,12 +885,12 @@ function scheduleDefaultRows(){
   });
   return rows;
 }
-function scheduleDefaultTaskCount(){
-  return Object.values(scheduleTemplate().tasks||{}).reduce((n,arr)=>n+arr.length,0);
-}
 async function ensureScheduleOnline(){
   if(C.Gorevler.some(scheduleIsRow))return;
-  C.Gorevler.push(...scheduleDefaultRows());
+  // Seed ONLY the meta row (title/days/dates/goals). People are added by the user via the
+  // "+ Kişi" selector — no hardcoded names, no preloaded plan.
+  const tpl=scheduleTemplate(),dates=tpl.dates||GOREV_CIZELGE.dates;
+  C.Gorevler.push(scheduleBaseRow({baslik:S_META,durum:'Aktif',aciklama:JSON.stringify({title:tpl.title,subtitle:tpl.subtitle,days:tpl.days,dates,goals:tpl.goals||[]})}));
   await save('Gorevler');
 }
 function scheduleMetaRow(){
@@ -919,7 +919,7 @@ function scheduleData(){
     const item={id:r.id,t:r.baslik||'Görev',p:['red','amber','teal','blue'].includes(priority)?priority:'teal',done:r.durum==='Tamamlandı',goalId:m.goalId||''};
     tasks[ck].push(item);if(item.done)done[item.id]=true;
   });
-  if(!persons.length)scheduleTemplate().persons.forEach(p=>persons.push({...p}));
+  // People list reflects only actually-added persons (no hardcoded template fallback).
   return {...meta,persons,tasks,done};
 }
 async function scheduleSaveAndRefresh(message='Çizelge güncellendi ✓'){
@@ -1065,7 +1065,30 @@ async function scheduleDropTask(ev,personIdx,dayIndex){
   const m=scheduleTaskMeta(r)||{};m.dayIndex=dayIndex;m.role=p.role||'';r.atanan=p.name;r.tarih=D.dates?.[dayIndex]||S_DATES[dayIndex]||today();r.basTarih=r.tarih;r.aciklama=JSON.stringify({...m,type:S_TASK});
   await scheduleSaveAndRefresh('Görev taşındı ✓');
 }
-async function scheduleAddPerson(){if(!scheduleAdminGuard())return;const name=await promptDialog('Kişi adı','','Yeni Kişi');if(!name||!name.trim())return;const role=(await promptDialog('Rol (opsiyonel)','','Rol'))||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
+function scheduleAddPerson(){
+  if(!scheduleAdminGuard())return;
+  const existing=new Set(C.Gorevler.filter(scheduleIsPerson).map(r=>String(r.atanan||'').trim().toLowerCase()));
+  const users=synUsersAll();
+  const opts=users.map(u=>{const nm=u.ad||u.username;const has=existing.has(nm.toLowerCase());return `<label style="display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);cursor:${has?'not-allowed':'pointer'};opacity:${has?'.5':'1'}"><input type="checkbox" value="${esc(nm)}" ${has?'disabled':''} style="width:auto"><span style="flex:1">${esc(nm)} <span class="text-muted text-sm">(${esc(u.username)})</span></span>${has?'<span class="badge badge-gray">ekli</span>':''}</label>`;}).join('');
+  showModal('Kişi Ekle',`
+    <div class="text-sm text-muted mb-16">Çizelgeye eklemek istediğin kişileri listeden seç. Birden fazla seçebilirsin.</div>
+    <div id="sch-person-list" style="max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:6px">${opts||'<span class="text-muted">Aktif kullanıcı bulunamadı.</span>'}</div>
+    <div class="form-group mt-16"><label>Listede yoksa elle ekle (opsiyonel)</label><input type="text" id="sch-person-manual" placeholder="Ad Soyad" autocomplete="off"></div>
+  `,`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleAddPersonSave()">Ekle</button>`);
+}
+async function scheduleAddPersonSave(){
+  if(!scheduleAdminGuard())return;
+  const names=[...document.querySelectorAll('#sch-person-list input[type=checkbox]:checked')].map(c=>c.value);
+  const manual=(document.getElementById('sch-person-manual')?.value||'').trim();
+  if(manual)names.push(manual);
+  if(!names.length){toast('En az bir kişi seçin ya da elle girin.','err');return;}
+  const existing=new Set(C.Gorevler.filter(scheduleIsPerson).map(r=>String(r.atanan||'').trim().toLowerCase()));
+  let added=0;
+  names.forEach(nm=>{const n=nm.trim();if(!n||existing.has(n.toLowerCase()))return;existing.add(n.toLowerCase());C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:n,durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:''})}));added++;});
+  closeModalDirect();
+  if(added)await scheduleSaveAndRefresh(`${added} kişi eklendi ✓`);
+  else toast('Eklenecek yeni kişi yok.','err');
+}
 async function scheduleEditPerson(idx){
   if(!scheduleAdminGuard())return;
   const D=scheduleData(),old=D.persons[idx];if(!old)return;
@@ -1097,25 +1120,6 @@ function scheduleToggleSelect(id){if(!scheduleGuard())return;scheduleSelected.ha
 async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.size===0)return;if(!await confirmDialog(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
 async function scheduleClearTasks(){if(!scheduleAdminGuard())return;if(!await confirmDialog('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
 async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard())return;if(!await confirmDialog('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
-async function scheduleResetWeek(){
-  const label=currentCompany==='syntegra'?'Syntegra üretim plan şablonu':'Excelden aktarılan 11-15 Mayıs 2026 planı';
-  if(!scheduleAdminGuard()||!confirm('Mevcut çizelge silinip '+label+' yüklensin mi?'))return;
-  loading(true,label+' yükleniyor...');
-  try{
-    const others=C.Gorevler.filter(r=>!scheduleIsRow(r));
-    C.Gorevler=[...others,...scheduleDefaultRows()];
-    scheduleSelected.clear();scheduleSelectMode=false;
-    renderCal();
-    await save('Gorevler');
-    await syncAll();
-    renderCal();
-    toast(`${label} yüklendi: ${scheduleDefaultTaskCount()} görev ✓`);
-  }catch(e){
-    toast('Plan yüklenemedi: '+e.message,'err');
-  }finally{
-    loading(false);
-  }
-}
 
 // ── BİLDİRİMLER ──
 function bildirim(){
