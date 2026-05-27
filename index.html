@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0d1018" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A0D12" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F4F6FB" media="(prefers-color-scheme: light)">
 <title>Arşen Proses — Lab Takip</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>(function(){try{var s=localStorage.getItem('arsenTheme');if(!s){s=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',s);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <style>
-:root,[data-theme="dark"]{--bg:#0d1018;--bg2:#161a25;--bg3:#1e2330;--bg-hover:#242a3a;--border:#272d40;--border2:#3a4360;--text:#e8eaf0;--text2:#8892aa;--text3:#525d78;--accent:#5aa6ff;--accent2:#2d7dd2;--accent-soft:rgba(90,166,255,0.12);--green:#3ecf8e;--amber:#f5a623;--red:#e74c3c;--purple:#9b59b6;--teal:#1abc9c;--overlay:rgba(8,10,16,0.78);--modal-backdrop:rgba(0,0,0,0.7);--tint:255,255,255;--shadow-sm:0 1px 2px rgba(0,0,0,.28);--shadow-md:0 10px 28px rgba(0,0,0,.38),0 2px 6px rgba(0,0,0,.25);--ring:rgba(90,166,255,0.32);--radius:8px;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;color-scheme:dark;}
-[data-theme="light"]{--bg:#f4f6fb;--bg2:#ffffff;--bg3:#eef1f7;--bg-hover:#e4e9f3;--border:#e2e6ee;--border2:#c4cbd6;--text:#161b2c;--text2:#525b73;--text3:#8a93a5;--accent:#2d7dd2;--accent2:#1a5ea8;--accent-soft:rgba(45,125,210,0.10);--green:#0f9d6b;--amber:#c47d09;--red:#d6342a;--purple:#7a3aa5;--teal:#0f9690;--overlay:rgba(244,246,251,0.82);--modal-backdrop:rgba(20,28,50,0.45);--tint:30,40,60;--shadow-sm:0 1px 2px rgba(20,30,55,.06),0 1px 3px rgba(20,30,55,.04);--shadow-md:0 14px 34px rgba(20,30,55,.10),0 4px 12px rgba(20,30,55,.06);--ring:rgba(45,125,210,0.22);color-scheme:light;}
+:root,[data-theme="dark"]{--bg:#0A0D12;--bg2:#11161D;--bg3:#161c25;--bg-hover:#1c2330;--border:rgba(180,210,230,0.10);--border2:rgba(180,210,230,0.22);--text:#E7EEF5;--text2:#8A98A8;--text3:#5B6776;--accent:#28B4CC;--accent2:#147588;--accent-soft:rgba(40,180,204,0.14);--green:#3DD27E;--amber:#F0B23A;--red:#F26458;--purple:#9b59b6;--teal:#28B4CC;--overlay:rgba(6,8,12,0.80);--modal-backdrop:rgba(0,0,0,0.7);--tint:180,210,230;--shadow-sm:0 1px 2px rgba(0,0,0,.32);--shadow-md:0 20px 50px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.30);--ring:rgba(40,180,204,0.34);--radius:5px;--mono:'JetBrains Mono',ui-monospace,monospace;--sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color-scheme:dark;}
+[data-theme="light"]{--bg:#F4F6FB;--bg2:#FFFFFF;--bg3:#F8FAFC;--bg-hover:#eef2f7;--border:rgba(15,25,40,0.10);--border2:rgba(15,25,40,0.18);--text:#0E1116;--text2:#5A6473;--text3:#94A0B0;--accent:#1FA2B8;--accent2:#147588;--accent-soft:rgba(31,162,184,0.12);--green:#1E9F5F;--amber:#D89412;--red:#D24A3E;--purple:#7a3aa5;--teal:#1FA2B8;--overlay:rgba(244,246,251,0.82);--modal-backdrop:rgba(20,28,50,0.45);--tint:15,25,40;--shadow-sm:0 1px 2px rgba(20,30,55,.06),0 1px 3px rgba(20,30,55,.04);--shadow-md:0 14px 34px rgba(20,30,55,.10),0 4px 12px rgba(20,30,55,.06);--ring:rgba(31,162,184,0.24);--radius:5px;--mono:'JetBrains Mono',ui-monospace,monospace;--sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color-scheme:light;}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{transition:background-color .25s ease,color .25s ease;}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14px;min-height:100vh;}
@@ -20,7 +20,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14
 #login-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 40%,var(--accent-soft) 0%,transparent 60%),radial-gradient(ellipse at 70% 70%,rgba(62,207,142,0.06) 0%,transparent 50%);pointer-events:none;}
 .login-box{width:380px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:40px;position:relative;z-index:1;box-shadow:var(--shadow-md);}
 .login-box::before{content:'';position:absolute;left:14px;right:14px;top:0;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.7;}
-.login-logo{margin-bottom:34px;text-align:center;}.login-logo img{width:250px;height:auto;max-height:138px;display:block;margin:0 auto;object-fit:contain;background:#fff;border-radius:12px;padding:10px 14px;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
+.login-brandline{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--text3);text-align:center;margin-bottom:18px;}
+.login-footline{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--text3);text-align:center;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;}
+.login-led{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);display:inline-block;}
+.login-logo{margin-bottom:30px;text-align:center;}.login-logo img{width:230px;height:auto;max-height:130px;display:block;margin:0 auto;object-fit:contain;background:#fff;border-radius:10px;padding:10px 14px;}.login-logo .brand{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;}
 .login-logo h1{font-size:22px;font-weight:600;}.login-logo span{color:var(--accent);}.login-subtitle{font-size:12px;color:var(--text3);margin-top:2px;}
 .login-err{color:var(--red);font-size:12px;margin-top:10px;display:none;}
 label{display:block;font-size:11px;font-weight:500;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;margin-top:16px;}
@@ -53,10 +56,13 @@ nav{flex:1;padding:10px 10px;}
 .nav-item:hover{color:var(--text);background:var(--bg3);}
 .nav-item:active{transform:scale(0.985);}
 .nav-item.active{color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px rgba(var(--tint),0.04);}
-.nav-item.active .nav-icon{background:var(--accent);color:#fff;}
-.nav-icon{font-size:14px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:rgba(var(--tint),0.05);color:var(--text2);flex-shrink:0;transition:background-color .18s,color .18s;}
+.nav-item.active .nav-icon{background:var(--accent);color:#031014;}
+.nav-icon{font-size:14px;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:rgba(var(--tint),0.05);color:var(--text2);flex-shrink:0;transition:background-color .18s,color .18s;}
 .nav-item:hover .nav-icon{background:rgba(var(--tint),0.09);color:var(--text);}
-.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:10px;min-width:20px;text-align:center;font-weight:600;}
+.nav-code{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:500;color:var(--text3);letter-spacing:.08em;}
+.nav-item.active .nav-code{color:var(--accent);}
+.nav-item .nav-badge+.nav-code{margin-left:8px;}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:6px;min-width:20px;text-align:center;font-weight:600;}
 .sidebar-footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .topbar{height:56px;min-height:56px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;}
@@ -254,6 +260,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 <div id="login-screen">
   <button class="theme-toggle" id="login-theme-toggle" type="button" onclick="toggleTheme()" title="Tema değiştir" aria-label="Tema değiştir"><span class="theme-toggle-icon" id="login-theme-icon">◐</span></button>
   <div class="login-box">
+    <div class="login-brandline">ARŞEN PROCESS · LAB TAKİP</div>
     <div class="login-logo">
       <img src="assets/arsen-process-mark.png?v=6" alt="Arşen Process">
     </div>
@@ -261,6 +268,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
     <div class="form-group"><label>Şifre</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
     <div class="login-err" id="login-err">Kullanıcı adı veya şifre hatalı.</div>
     <button class="btn btn-primary btn-full mt-16" onclick="doLogin()">Giriş Yap</button>
+    <div class="login-footline"><span class="login-led"></span> SECURE · v3.2</div>
   </div>
 </div>
 
@@ -536,8 +544,18 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }
   document.addEventListener('click',e=>{if(!e.target.closest('.topbar-search'))document.getElementById('gsr').style.display='none';});
+  decorateNav();
   bootstrapSession().catch(()=>{});
 });
+const NAV_CODES={dashboard:'01',genel:'00',stok:'08',analiz:'04',ekipman:'07',metod:'05',sfe:'06',bildirim:'02',takvim:'03',mesai:'11',iletisim:'12',dosyalar:'10',gunluk:'13',rapor:'09',admin:'99',audit:'98'};
+function decorateNav(){
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    const m=(el.getAttribute('onclick')||'').match(/showPage\('([^']+)'/);
+    if(m&&NAV_CODES[m[1]]&&!el.querySelector('.nav-code')){
+      const s=document.createElement('span');s.className='nav-code';s.textContent='·'+NAV_CODES[m[1]];el.appendChild(s);
+    }
+  });
+}
 function runGS(q){
   const box=document.getElementById('gsr');
   if(!q||q.length<2){box.style.display='none';return;}
