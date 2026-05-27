@@ -1181,8 +1181,8 @@ function dashboard(){
       <div class="stat-card"><div class="stat-label">Bugün</div><div class="stat-value stat-blue">${[...C.StokHareketleri,...C.Analiz].filter(x=>x.tarih&&x.tarih.startsWith(bs)).length}</div><div class="stat-sub">stok hareketi ve analiz</div></div>
     </div>
     ${kritik.length>0?`<div class="alert alert-red mb-16">⚠ Kritik stok: <strong>${kritik.map(k=>k.ad).join(', ')}</strong></div>`:''}
-    ${gecmis.length>0?`<div class="alert alert-red mb-16">⚠ Süresi geçmiş kalibrasyon: <strong>${gecmis.map(e=>e.ad).join(', ')}</strong></div>`:''}
-    ${yaklasan.length>0?`<div class="alert alert-amber mb-16">⚡ Kalibrasyon yaklaşıyor: <strong>${yaklasan.map(e=>e.ad).join(', ')}</strong></div>`:''}
+    ${gecmis.length>0?`<div class="alert alert-red mb-16" style="cursor:pointer" onclick="kalibUyariListesi('gecmis')">⚠ Süresi geçmiş kalibrasyon (${gecmis.length}): <strong>${gecmis.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
+    ${yaklasan.length>0?`<div class="alert alert-amber mb-16" style="cursor:pointer" onclick="kalibUyariListesi('yaklasan')">⚡ Kalibrasyon yaklaşıyor (${yaklasan.length}): <strong>${yaklasan.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
     ${temizlikGecmis.length>0?`<div class="alert alert-amber mb-16">🧹 Temizlik zamanı geçmiş: <strong>${temizlikGecmis.map(t=>t.gorev).join(', ')}</strong></div>`:''}
     ${canDelete()&&mesaiPendingCount>0?`<div class="alert alert-amber mb-16">◷ Onay bekleyen ekstra mesai kaydı: <strong>${mesaiPendingCount}</strong> <button class="btn btn-amber btn-sm" style="margin-left:10px" onclick="showPage('mesai')">İncele</button></div>`:''}
     <div class="grid-2 gap-16">
@@ -1197,6 +1197,50 @@ function dashboard(){
     </div>
     <div class="card mt-16">${scheduleHTML(true)}</div>`;
 }
+// Calibration alert → list + assign to a user (sends notification).
+function kalibUyariListesi(tip){
+  const bugun=new Date();
+  const list=(C.Ekipman||[]).filter(e=>{
+    if(!e.kalibrasyonTarihi)return false;
+    const d=(new Date(e.kalibrasyonTarihi)-bugun)/86400000;
+    return tip==='gecmis'?d<0:(d>=0&&d<=30);
+  });
+  const baslik=tip==='gecmis'?'Süresi Geçmiş Kalibrasyonlar':'Yaklaşan Kalibrasyonlar';
+  const users=(C.Users||[]).filter(u=>u.active===true||u.active==='true');
+  const userOpts=`<option value="">Sorumlu seç…</option>`+users.map(u=>`<option value="${esc(u.username)}">${esc(u.ad||u.username)}</option>`).join('');
+  const rows=list.map(e=>{
+    const d=Math.round((new Date(e.kalibrasyonTarihi)-bugun)/86400000);
+    const durum=tip==='gecmis'?`<span class="badge badge-red">${Math.abs(d)} gün geçti</span>`:`<span class="badge badge-amber">${d} gün kaldı</span>`;
+    return `<tr>
+      <td class="td-main">${esc(e.ad)}</td>
+      <td>${esc(e.lab||'—')}</td>
+      <td class="text-mono text-sm">${fmt(e.kalibrasyonTarihi)}</td>
+      <td>${durum}</td>
+      <td>${e.sorumlu?`<span class="badge badge-blue">${esc(e.sorumlu)}</span>`:'<span class="text-muted text-sm">atanmadı</span>'}</td>
+      <td style="white-space:nowrap"><select id="kalib-u-${e.id}" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:5px 7px;font-size:12px;max-width:150px">${userOpts}</select> <button class="btn btn-primary btn-sm" onclick="kalibAta('${e.id}','${tip}')">Ata & Bildir</button></td>
+    </tr>`;
+  }).join('');
+  const body=list.length?`
+    <div class="alert ${tip==='gecmis'?'alert-red':'alert-amber'}" style="font-size:13px">Bu kalibrasyonların ilgilenilmesi için bir sorumluya atanması gerekir. Sorumlu seçip <strong>Ata &amp; Bildir</strong>'e basın; seçilen kişiye bildirim (ve e-posta) gider, ekipmanın sorumlusu güncellenir.</div>
+    <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Ekipman</th><th>Lab</th><th>Son Kalib.</th><th>Durum</th><th>Sorumlu</th><th>İşlem</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    :'<div class="empty-state">Kayıt yok.</div>';
+  showModal(baslik+` · ${list.length}`,body,`<button class="btn btn-ghost" onclick="closeModalDirect()">Kapat</button>`);
+}
+async function kalibAta(ekipmanId,tip){
+  const e=(C.Ekipman||[]).find(x=>x.id===ekipmanId);if(!e)return;
+  const sel=document.getElementById('kalib-u-'+ekipmanId);const username=sel?.value;
+  if(!username){toast('Önce sorumlu seçin.','err');return;}
+  const u=(C.Users||[]).find(x=>x.username===username);
+  const ad=u?(u.ad||u.username):username;
+  e.sorumlu=ad;
+  e.not=(e.not?e.not+' · ':'')+`Kalibrasyon ${tip==='gecmis'?'(gecikmiş)':'(yaklaşan)'} → ${ad} (${today()})`;
+  renderEkipmanIfActive();
+  kalibUyariListesi(tip);
+  try{await save('Ekipman');}catch(err){toast('Kaydetme hatası: '+err.message,'err');return;}
+  toast('Atandı ✓');
+  notifyApi({recipients:[username],baslik:(tip==='gecmis'?'Süresi geçmiş kalibrasyon':'Yaklaşan kalibrasyon')+': '+e.ad,mesaj:`${e.ad}${e.lab?' ('+e.lab+')':''}\nSon kalibrasyon: ${fmt(e.kalibrasyonTarihi)}\n\nBu ekipmanın kalibrasyonu sana atandı. Lütfen ilgilen ve Ekipman Takibi sayfasından kalibrasyon kaydını gir.`,tur:'Kalibrasyon',sayfa:'ekipman',kayitId:e.id,sendEmail:true}).then(()=>toast('Bildirim gönderildi ✓')).catch(err=>toast('Bildirim hatası: '+err.message,'err'));
+}
+function renderEkipmanIfActive(){if(currentPage==='ekipman'){try{renderEkipman('',0);}catch(e){}}if(currentPage==='dashboard'){/* counts unchanged until calib done; skip full re-render to keep modal open */}}
 
 // ── STOK ──
 let sAra='',sLab='',sKat='',sOpen={};
