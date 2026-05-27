@@ -520,6 +520,31 @@ function toast(msg,type='ok'){const t=document.getElementById('toast');t.textCon
 let _lastErrToast=0;
 window.addEventListener('error',e=>{const now=Date.now();if(now-_lastErrToast<1500)return;_lastErrToast=now;try{toast('Hata: '+(e.message||'bilinmeyen'),'err');}catch(_){}});
 window.addEventListener('unhandledrejection',e=>{const now=Date.now();if(now-_lastErrToast<1500)return;_lastErrToast=now;try{toast('Hata: '+((e.reason&&e.reason.message)||e.reason||'işlem başarısız'),'err');}catch(_){}});
+// In-app confirm/prompt — native confirm()/prompt() are blocked in some embedded/PWA contexts, which silently aborts delete/clear actions. These custom dialogs always work.
+function confirmDialog(message,okLabel='Sil',danger=true){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');ov.className='modal-overlay open';ov.style.zIndex='3000';
+    ov.innerHTML=`<div class="modal" style="max-width:440px"><div class="modal-body" style="padding:24px"><div style="font-size:14px;line-height:1.55;white-space:pre-wrap">${esc(message)}</div></div><div class="modal-footer"><button class="btn btn-ghost" data-no>İptal</button><button class="btn ${danger?'btn-danger':'btn-primary'}" data-yes>${esc(okLabel)}</button></div></div>`;
+    document.body.appendChild(ov);
+    const done=v=>{ov.remove();resolve(v);};
+    ov.querySelector('[data-yes]').onclick=()=>done(true);
+    ov.querySelector('[data-no]').onclick=()=>done(false);
+    ov.addEventListener('click',e=>{if(e.target===ov)done(false);});
+  });
+}
+function promptDialog(label,def='',title='Bilgi Gir'){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');ov.className='modal-overlay open';ov.style.zIndex='3000';
+    ov.innerHTML=`<div class="modal" style="max-width:440px"><div class="modal-header"><span class="modal-title">${esc(title)}</span></div><div class="modal-body"><div class="form-group"><label>${esc(label)}</label><input type="text" id="__pdlg_inp" value="${esc(def)}" autocomplete="off"></div></div><div class="modal-footer"><button class="btn btn-ghost" data-no>İptal</button><button class="btn btn-primary" data-yes>Tamam</button></div></div>`;
+    document.body.appendChild(ov);
+    const inp=ov.querySelector('#__pdlg_inp');setTimeout(()=>{inp.focus();inp.select();},30);
+    const done=v=>{ov.remove();resolve(v);};
+    ov.querySelector('[data-yes]').onclick=()=>done(inp.value);
+    ov.querySelector('[data-no]').onclick=()=>done(null);
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();done(inp.value);}else if(e.key==='Escape')done(null);});
+    ov.addEventListener('click',e=>{if(e.target===ov)done(null);});
+  });
+}
 function loading(show,text='İşleniyor...'){document.getElementById('loading-text').textContent=text;document.getElementById('loading-overlay').classList.toggle('show',show);}
 function setSS(s){const e=document.getElementById('sync-status');if(!e)return;e.innerHTML=s==='ok'?'<span class="sync-ok">● Bağlı</span>':s==='loading'?'<span class="sync-loading">↺ Senkronize...</span>':'<span class="sync-err">● Bağlantı hatası</span>';}
 // ── SESSION PERSISTENCE ──
@@ -905,7 +930,7 @@ async function scheduleSaveAndRefresh(message='Çizelge güncellendi ✓'){
 }
 function scheduleRefresh(){if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();}
 function scheduleCanEdit(){return !!currentUser;}
-function scheduleCanManage(){return canDelete();}
+function scheduleCanManage(){return canDelete()||isUmbrella();}
 function scheduleGuard(){if(scheduleCanEdit())return true;toast('Çizelgeyi düzenlemek için giriş yapmalısınız.','err');return false;}
 function scheduleAdminGuard(){if(scheduleCanManage())return true;toast('Bu alanı yalnızca admin düzenleyebilir.','err');return false;}
 function scheduleHTML(compact=false){
@@ -938,7 +963,7 @@ function scheduleHTML(compact=false){
       ${admin?`<button class="btn btn-primary btn-sm" onclick="scheduleAddGoal()">+ Ana Hedef</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="scheduleSelectMode=!scheduleSelectMode;scheduleRefresh()">${scheduleSelectMode?'Seçimi Kapat':'Toplu Seç'}</button>
       ${scheduleSelectMode?`<button class="btn btn-danger btn-sm" onclick="scheduleDeleteSelected()">Seçilenleri Sil (${scheduleSelected.size})</button>`:''}
-      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button><button class="btn btn-amber btn-sm" onclick="scheduleResetWeek()">${currentCompany==='syntegra'?'Syntegra Plan Şablonunu Yükle':'11-15 Mayıs Planını Yükle'}</button>`:''}
+      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button>`:''}
     </div>`:''}
     <div class="table-wrap"><table class="schedule-table">
       <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} ${admin?`<button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button>`:''}</th>`).join('')}</tr></thead>
@@ -1004,7 +1029,7 @@ async function scheduleUpdateTask(id){
   r.baslik=v.title;r.oncelik=S_PRIO_TO_ON[v.priority]||'Normal';r.durum=v.durum;r.aciklama=JSON.stringify({...m,type:S_TASK,priority:v.priority,goalId:v.goalId});
   closeModalDirect();await scheduleSaveAndRefresh('Görev güncellendi ✓');
 }
-async function scheduleRemoveTask(id){if(!scheduleGuard()||!confirm('Bu görev silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>r.id!==id);scheduleSelected.delete(id);await scheduleSaveAndRefresh('Görev silindi.');}
+async function scheduleRemoveTask(id){if(!scheduleGuard())return;if(!await confirmDialog('Bu görev silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>r.id!==id);scheduleSelected.delete(id);await scheduleSaveAndRefresh('Görev silindi.');}
 async function scheduleToggleDone(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;r.durum=r.durum==='Tamamlandı'?'Bekliyor':'Tamamlandı';await scheduleSaveAndRefresh('');}
 async function scheduleCyclePriority(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;const m=scheduleTaskMeta(r)||{},order=['red','amber','teal','blue'];m.priority=order[(order.indexOf(m.priority||S_ON_TO_PRIO[r.oncelik]||'teal')+1)%order.length];r.oncelik=S_PRIO_TO_ON[m.priority]||'Normal';r.aciklama=JSON.stringify({...m,type:S_TASK});await scheduleSaveAndRefresh('');}
 function scheduleGoalForm(g={}){return`
@@ -1025,7 +1050,7 @@ async function scheduleUpdateGoal(id){
   closeModalDirect();await scheduleSaveAndRefresh('Ana hedef güncellendi ✓');
 }
 async function scheduleRemoveGoal(id){
-  if(!scheduleAdminGuard()||!confirm('Bu ana hedef silinsin mi? Görevlerdeki bağlantısı da kaldırılır.'))return;
+  if(!scheduleAdminGuard())return;if(!await confirmDialog('Bu ana hedef silinsin mi? Görevlerdeki bağlantısı da kaldırılır.'))return;
   const r=scheduleMetaRow(),m=scheduleMeta();m.goals=scheduleGoals().filter(g=>g.id!==id);r.aciklama=JSON.stringify(m);
   C.Gorevler.forEach(row=>{const tm=scheduleTaskMeta(row);if(tm&&tm.goalId===id){delete tm.goalId;row.aciklama=JSON.stringify(tm);}});
   await scheduleSaveAndRefresh('Ana hedef silindi.');
@@ -1040,11 +1065,11 @@ async function scheduleDropTask(ev,personIdx,dayIndex){
   const m=scheduleTaskMeta(r)||{};m.dayIndex=dayIndex;m.role=p.role||'';r.atanan=p.name;r.tarih=D.dates?.[dayIndex]||S_DATES[dayIndex]||today();r.basTarih=r.tarih;r.aciklama=JSON.stringify({...m,type:S_TASK});
   await scheduleSaveAndRefresh('Görev taşındı ✓');
 }
-async function scheduleAddPerson(){if(!scheduleAdminGuard())return;const name=prompt('Kişi adı');if(!name)return;const role=prompt('Rol','')||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
+async function scheduleAddPerson(){if(!scheduleAdminGuard())return;const name=await promptDialog('Kişi adı','','Yeni Kişi');if(!name||!name.trim())return;const role=(await promptDialog('Rol (opsiyonel)','','Rol'))||'';C.Gorevler.push(scheduleBaseRow({baslik:S_PERSON,atanan:name.trim(),durum:'Aktif',aciklama:JSON.stringify({type:S_PERSON,role:role.trim()})}));await scheduleSaveAndRefresh('Kişi eklendi ✓');}
 async function scheduleEditPerson(idx){
   if(!scheduleAdminGuard())return;
   const D=scheduleData(),old=D.persons[idx];if(!old)return;
-  const name=prompt('Kişi adı',old.name);if(!name)return;const role=prompt('Rol',old.role||'')||'',n=name.trim();
+  const name=await promptDialog('Kişi adı',old.name,'Kişi Düzenle');if(name===null)return;if(!name.trim())return;const role=(await promptDialog('Rol',old.role||'','Rol'))||'',n=name.trim();
   C.Gorevler.forEach(r=>{
     if(r.atanan===old.name){
       r.atanan=n;
@@ -1054,11 +1079,11 @@ async function scheduleEditPerson(idx){
   });
   await scheduleSaveAndRefresh('Kişi güncellendi ✓');
 }
-async function scheduleRemovePerson(idx){if(!scheduleAdminGuard())return;const D=scheduleData(),p=D.persons[idx];if(!p||!confirm('Bu kişi ve görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
-async function scheduleAddDay(){if(!scheduleAdminGuard())return;const day=prompt('Gün adı');if(!day)return;const date=prompt('Tarih (YYYY-AA-GG)',today())||'';const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());m.dates.push(date.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
+async function scheduleRemovePerson(idx){if(!scheduleAdminGuard())return;const D=scheduleData(),p=D.persons[idx];if(!p)return;if(!await confirmDialog(`"${p.name}" kişisi ve tüm görevleri silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!(r.atanan===p.name&&(scheduleIsPerson(r)||scheduleIsTask(r))));await scheduleSaveAndRefresh('Kişi ve görevleri silindi.');}
+async function scheduleAddDay(){if(!scheduleAdminGuard())return;const day=await promptDialog('Gün adı','','Yeni Gün');if(!day||!day.trim())return;const date=(await promptDialog('Tarih (YYYY-AA-GG)',today(),'Tarih'))||'';const r=scheduleMetaRow(),m=scheduleMeta();m.days.push(day.trim());m.dates.push(date.trim());r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Gün eklendi ✓');}
 async function scheduleRemoveDay(idx){
   if(!scheduleAdminGuard())return;
-  if(!confirm('Bu gün ve içindeki görevler silinsin mi?'))return;
+  if(!await confirmDialog('Bu gün ve içindeki görevler silinsin mi?'))return;
   const r=scheduleMetaRow(),m=scheduleMeta();m.days.splice(idx,1);m.dates.splice(idx,1);r.aciklama=JSON.stringify(m);
   C.Gorevler=C.Gorevler.filter(row=>{
     const tm=scheduleTaskMeta(row);if(!tm)return true;
@@ -1069,9 +1094,9 @@ async function scheduleRemoveDay(idx){
   await scheduleSaveAndRefresh('Gün silindi.');
 }
 function scheduleToggleSelect(id){if(!scheduleGuard())return;scheduleSelected.has(id)?scheduleSelected.delete(id):scheduleSelected.add(id);scheduleRefresh();}
-async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.size===0)return;if(!confirm(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
-async function scheduleClearTasks(){if(!scheduleAdminGuard()||!confirm('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
-async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard()||!confirm('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
+async function scheduleDeleteSelected(){if(!scheduleGuard()||scheduleSelected.size===0)return;if(!await confirmDialog(`${scheduleSelected.size} görev silinsin mi?`))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleSelected.has(r.id));scheduleSelected.clear();await scheduleSaveAndRefresh('Seçili görevler silindi.');}
+async function scheduleClearTasks(){if(!scheduleAdminGuard())return;if(!await confirmDialog('Tüm çizelge görevleri silinsin mi? Kişiler ve günler kalır.'))return;C.Gorevler=C.Gorevler.filter(r=>!scheduleIsTask(r));scheduleSelected.clear();await scheduleSaveAndRefresh('Tüm çizelge görevleri silindi.');}
+async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard())return;if(!await confirmDialog('Tüm kişiler ve tüm çizelge görevleri silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>!(scheduleIsPerson(r)||scheduleIsTask(r)));scheduleSelected.clear();await scheduleSaveAndRefresh('Kişiler ve görevler temizlendi.');}
 async function scheduleResetWeek(){
   const label=currentCompany==='syntegra'?'Syntegra üretim plan şablonu':'Excelden aktarılan 11-15 Mayıs 2026 planı';
   if(!scheduleAdminGuard()||!confirm('Mevcut çizelge silinip '+label+' yüklensin mi?'))return;
@@ -1235,7 +1260,7 @@ function stokYeni(){showModal('Yeni Stok Kalemi',sForm(),`<button class="btn btn
 async function stokKaydet(){const v=sVal();if(!v)return;C.Stok.push({id:uid(),...v});closeModalDirect();updateBadges();renderStok('','','');save('Stok').then(()=>toast('Kaydedildi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function stokDuzenle(id){const s=C.Stok.find(x=>x.id===id);if(!s)return;showModal('Stok Düzenle',sForm(s),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="stokGuncelle('${id}')">Güncelle</button>`);}
 async function stokGuncelle(id){const v=sVal();if(!v)return;const idx=C.Stok.findIndex(x=>x.id===id);C.Stok[idx]={...C.Stok[idx],...v};closeModalDirect();updateBadges();renderStok('','','');save('Stok').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
-async function stokSil(id){if(!confirm('Emin misiniz?'))return;C.Stok=C.Stok.filter(x=>x.id!==id);updateBadges();renderStok('','','');save('Stok').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function stokSil(id){if(!await confirmDialog('Emin misiniz?'))return;C.Stok=C.Stok.filter(x=>x.id!==id);updateBadges();renderStok('','','');save('Stok').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 function stokHareketTablo(){
   const rows=[...C.StokHareketleri].sort((a,b)=>new Date(b.tarih||0)-new Date(a.tarih||0)).slice(0,12);
   return rows.length?`<div class="table-wrap"><table><thead><tr><th>Tip</th><th>Malzeme</th><th>Miktar</th><th>Önce</th><th>Sonra</th><th>Tarih</th><th>Kullanıcı</th><th>Açıklama</th></tr></thead><tbody>${rows.map(h=>`<tr><td><span class="badge ${h.tip==='Girdi'?'badge-green':'badge-purple'}">${esc(h.tip)}</span></td><td class="td-main">${esc(h.stokAd)}</td><td class="text-mono">${esc(h.miktar)} ${esc(h.birim||'')}</td><td class="text-mono">${esc(h.oncekiMiktar)}</td><td class="text-mono">${esc(h.sonrakiMiktar)}</td><td class="text-mono" style="font-size:11px">${fmtDt(h.tarih)}</td><td>${esc(h.kullanici||'—')}</td><td>${esc(h.aciklama||'—')}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty-state"><div class="empty-icon">↕</div><div>Henüz stok hareketi yok</div></div>`;
@@ -1252,7 +1277,7 @@ function stokHareketModal(tip,stokId=''){
 }
 async function stokHareketKaydet(tip){
   const s=C.Stok.find(x=>x.id===document.getElementById('sh-stok').value);const miktar=parseFloat(document.getElementById('sh-miktar').value)||0;if(!s||miktar<=0){toast('Malzeme ve miktar zorunlu.','err');return;}
-  const once=parseFloat(s.miktar)||0;if(tip==='Çıktı'&&miktar>once&&!confirm(`Stokta ${once} ${s.birim||''} var. Yine de çıkış yapılsın mı?`))return;
+  const once=parseFloat(s.miktar)||0;if(tip==='Çıktı'&&miktar>once&&!await confirmDialog(`Stokta ${once} ${s.birim||''} var. Yine de çıkış yapılsın mı?`))return;
   const sonra=tip==='Girdi'?once+miktar:Math.max(0,once-miktar);s.miktar=sonra;s.sonGuncelleme=new Date().toISOString();
   C.StokHareketleri.push({id:uid(),stokId:s.id,stokAd:s.ad,tip,miktar,birim:s.birim||'',oncekiMiktar:once,sonrakiMiktar:sonra,tarih:document.getElementById('sh-tarih').value||new Date().toISOString(),aciklama:document.getElementById('sh-aciklama').value,kullanici:currentUser.username});
   closeModalDirect();updateBadges();renderStok(sAra,sLab,sKat);Promise.all([save('Stok'),save('StokHareketleri')]).then(()=>toast(`${tip} kaydedildi ✓`)).catch(e=>toast('Hata: '+e.message,'err'));
@@ -1301,7 +1326,7 @@ async function metodKaydet(){const v=metodOku();if(!v)return;C.Metodlar.push({id
 function metodDuzenle(id){const m=C.Metodlar.find(x=>x.id===id);if(!m)return;showModal('Metod / İzlek Düzenle',metodForm(m),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="metodGuncelle('${id}')">Güncelle</button>`);}
 async function metodGuncelle(id){const v=metodOku();if(!v)return;const idx=C.Metodlar.findIndex(x=>x.id===id);C.Metodlar[idx]={...C.Metodlar[idx],...v};closeModalDirect();renderMetod(mAra,mTur,mKat);save('Metodlar').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function metodDetay(id){const m=C.Metodlar.find(x=>x.id===id);if(!m)return;showModal(m.baslik,`<div class="mb-16"><span class="badge ${m.tur==='Standart Metod'?'badge-blue':'badge-green'}">${esc(m.tur)}</span> <span class="badge badge-gray">${esc(m.kategori||'Genel')}</span></div><table style="width:100%;font-size:13px;border-collapse:collapse">${[['Kod',m.kod],['Kaynak',m.kaynak],['Hammadde/Matris',m.hammadde],['Not',m.not]].map(([k,v])=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 0;color:var(--text3);width:140px;font-family:var(--mono);font-size:11px">${k}</td><td style="padding:8px 0;color:var(--text)">${esc(v||'—')}</td></tr>`).join('')}</table><label>Adımlar</label><div style="white-space:pre-wrap;line-height:1.55;color:var(--text2)">${esc(m.adimlar)}</div>`,`<button class="btn btn-primary" onclick="closeModalDirect()">Kapat</button>`);}
-async function metodSil(id){if(!confirm('Bu metod/izlek silinsin mi?'))return;C.Metodlar=C.Metodlar.filter(x=>x.id!==id);renderMetod(mAra,mTur,mKat);save('Metodlar').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function metodSil(id){if(!await confirmDialog('Bu metod/izlek silinsin mi?'))return;C.Metodlar=C.Metodlar.filter(x=>x.id!==id);renderMetod(mAra,mTur,mKat);save('Metodlar').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── SÜPERKRİTİK CO2 ──
 function sfe(){
@@ -1891,7 +1916,7 @@ async function projeOnayla(id){
 async function projeReddet(id){
   const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
   if(p.sorumlu!==currentUser.username){toast('Sadece atanan sorumlu reddedebilir.','err');return;}
-  const sebep=prompt('Reddetme sebebi:');if(sebep===null)return;
+  const sebep=await promptDialog('Reddetme sebebi:','','Projeyi Reddet');if(sebep===null)return;
   p.durum='İptal';p.aciklama=(p.aciklama?p.aciklama+'\n\n':'')+'[Reddedildi] '+(sebep||'');p.guncelleme=new Date().toISOString();
   renderProjeListesi();
   save('Syn2_Projeler').then(()=>{
@@ -1906,7 +1931,7 @@ async function projeSil(id){
   const mhCount=(C.Syn2_Muhendislik||[]).filter(r=>r.projectCode===pc).length;
   const ekCount=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===pc).length;
   const tkCount=(C.Syn2_Teklif||[]).filter(r=>r.projectCode===pc).length;
-  if(!confirm(`Bu proje TÜMÜYLE silinsin mi?\n\n• Proje kaydı (${pc})\n• Mühendislik kaydı (${mhCount})\n• Ekipman alt-parça (${ekCount})\n• Satın alma teklif (${tkCount})\n• Drive klasörü ve tüm dosyalar\n\nGERİ ALINAMAZ.`))return;
+  if(!await confirmDialog(`Bu proje TÜMÜYLE silinsin mi?\n\n• Proje kaydı (${pc})\n• Mühendislik kaydı (${mhCount})\n• Ekipman alt-parça (${ekCount})\n• Satın alma teklif (${tkCount})\n• Drive klasörü ve tüm dosyalar\n\nGERİ ALINAMAZ.`))return;
   // Cascade in memory
   C.Syn2_Projeler=C.Syn2_Projeler.filter(x=>x.id!==id);
   if(pc){
@@ -2096,11 +2121,11 @@ function muhRowEkle(){
   _muhBodyDrafts[k].push({id:'',altParca:'',adet:'',olcu:'',malzemeCinsi:'',malzemeKalitesi:'',amac:'',not:'',siraNo:_muhBodyDrafts[k].length+1,_new:true});
   muhWorkspace(_muhSelectedProjectCode);
 }
-function muhRowSil(i){
+async function muhRowSil(i){
   const body=_muhActiveTab.slice(5);
   const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
   if(!_muhBodyDrafts[k])return;
-  if(!confirm('Bu satır silinsin mi?'))return;
+  if(!await confirmDialog('Bu satır silinsin mi?'))return;
   _muhBodyDrafts[k].splice(i,1);
   muhWorkspace(_muhSelectedProjectCode);
 }
@@ -2172,7 +2197,7 @@ async function muhSatinalmayaGonder(){
   const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
   const sa=document.getElementById('muh-sa-sorumlu').value;
   if(!sa){toast('Satın alma sorumlusu seçilmeli.','err');return;}
-  if(!confirm('Ekipman listesi satın alma sürecine gönderilsin mi? Bu işlemden sonra liste kilitlenir.'))return;
+  if(!await confirmDialog('Ekipman listesi satın alma sürecine gönderilsin mi? Bu işlemden sonra liste kilitlenir.'))return;
   mh.satinalmaSorumlu=sa;mh.guncelleme=new Date().toISOString();
   p.durum='Satın Alma Sürecinde';p.guncelleme=mh.guncelleme;
   muhWorkspace(_muhSelectedProjectCode);
@@ -2204,7 +2229,7 @@ async function muhDosyaSil(bucket,i){
   const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
   const arr=synParseFiles(bucket==='pid'?mh.pidDosyalar:mh.cizimDosyalar);
   const f=arr[i];if(!f)return;
-  if(!confirm('Bu dosya silinsin mi? Drive\'dan da kaldırılır.'))return;
+  if(!await confirmDialog('Bu dosya silinsin mi? Drive\'dan da kaldırılır.'))return;
   try{await driveApi('deleteProjectFile',{fileId:f.id});}catch(e){toast('Drive silme hatası: '+e.message,'err');}
   arr.splice(i,1);
   if(bucket==='pid')mh.pidDosyalar=JSON.stringify(arr);else mh.cizimDosyalar=JSON.stringify(arr);
@@ -2225,7 +2250,7 @@ async function muhOnayaGonder(){
 async function muhOnayla(){
   const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
   const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
-  if(!confirm('Mühendislik çizimleri onaylanıyor. Sonra ekipman listesi aşamasına geçilecek. Onaylıyor musun?'))return;
+  if(!await confirmDialog('Mühendislik çizimleri onaylanıyor. Sonra ekipman listesi aşamasına geçilecek. Onaylıyor musun?'))return;
   mh.durum='Onaylandı';mh.sonKararKullanici=currentUser.username;mh.sonKararTarih=new Date().toISOString();mh.guncelleme=mh.sonKararTarih;
   let hist=[];try{hist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
   hist.push({karar:'Onaylandı',not:'',kullanici:currentUser.username,tarih:mh.sonKararTarih});
@@ -2240,7 +2265,7 @@ async function muhOnayla(){
 async function muhRevizyonIste(){
   const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
   const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
-  const not=prompt('Revizyon talebi · neden / hangi değişiklikler istenmeli?');
+  const not=await promptDialog('Revizyon talebi · neden / hangi değişiklikler istenmeli?','','Revizyon İste');
   if(not===null||!not.trim()){toast('Revizyon notu zorunlu.','err');return;}
   mh.durum='Revizyon İstendi';mh.revizyonNumarasi=(parseInt(mh.revizyonNumarasi,10)||0)+1;mh.sonKararKullanici=currentUser.username;mh.sonKararTarih=new Date().toISOString();mh.guncelleme=mh.sonKararTarih;
   let hist=[];try{hist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
@@ -2389,7 +2414,7 @@ async function saTeklifKaydet(ekipmanId,projectCode){
 }
 async function saTeklifSil(id){
   const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
-  if(!confirm(`${t.tedarikci} teklifi silinsin mi?`))return;
+  if(!await confirmDialog(`${t.tedarikci} teklifi silinsin mi?`))return;
   C.Syn2_Teklif=C.Syn2_Teklif.filter(x=>x.id!==id);
   saWorkspace(_saSelectedProjectCode);
   save('Syn2_Teklif').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
@@ -2441,7 +2466,7 @@ async function saKazananKaydet(id){
 }
 async function saKararVer(id,karar){
   const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
-  const not=karar==='reddedildi'?prompt('Reddetme sebebi:'):prompt('Onay notu (opsiyonel):');
+  const not=await promptDialog(karar==='reddedildi'?'Reddetme sebebi:':'Onay notu (opsiyonel):','',karar==='reddedildi'?'Reddet':'Onay');
   if(karar==='reddedildi'&&(not===null||!not.trim())){toast('Reddetme sebebi zorunlu.','err');return;}
   t.onayDurumu=karar;t.onayKullanici=currentUser.username;t.onayTarihi=new Date().toISOString();t.onayNot=(not||'').trim();t.guncelleme=t.onayTarihi;
   if(karar==='reddedildi'){t.kazanan='false';t.durum='';}
@@ -2787,7 +2812,7 @@ async function ciktiKaydet(){
   const hmm=parseFloat(document.getElementById('c-hmmm').value)||0;const hammadde=document.getElementById('c-hmm').value;
   if(hammadde&&hmm>0){
     const s=C.Stok.find(x=>x.ad===hammadde);
-    if(s&&hmm>parseFloat(s.miktar)){if(!confirm(`Stokta ${s.miktar} ${s.birim||''} var, ${hmm} düşmek istiyorsunuz. Devam edilsin mi?`))return;}
+    if(s&&hmm>parseFloat(s.miktar)){if(!await confirmDialog(`Stokta ${s.miktar} ${s.birim||''} var, ${hmm} düşmek istiyorsunuz. Devam edilsin mi?`))return;}
   }
   const k={id:uid(),batchId:document.getElementById('c-batch').value.trim(),ad,hammadde,hammaddeMiktar:hmm,hammaddeBirim:document.getElementById('c-hb').value,ciktiMiktar:parseFloat(document.getElementById('c-cm').value)||0,ciktiBirim:document.getElementById('c-cb').value,tarih,operator:document.getElementById('c-op').value,kosullar:document.getElementById('c-kos').value,not:document.getElementById('c-not').value,kullanici:currentUser.username};
   C.Cikti.push(k);
@@ -2800,7 +2825,7 @@ async function ciktiGuncelle(id){
   const idx=C.Cikti.findIndex(x=>x.id===id);C.Cikti[idx]={...C.Cikti[idx],batchId:document.getElementById('c-batch').value.trim(),ad,hammadde:document.getElementById('c-hmm').value,hammaddeMiktar:parseFloat(document.getElementById('c-hmmm').value)||0,hammaddeBirim:document.getElementById('c-hb').value,ciktiMiktar:parseFloat(document.getElementById('c-cm').value)||0,ciktiBirim:document.getElementById('c-cb').value,tarih,operator:document.getElementById('c-op').value,kosullar:document.getElementById('c-kos').value,not:document.getElementById('c-not').value};
   closeModalDirect();renderCikti('');save('Cikti').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
 }
-async function ciktiSil(id){if(!confirm('Emin misiniz?'))return;C.Cikti=C.Cikti.filter(x=>x.id!==id);renderCikti('');save('Cikti').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function ciktiSil(id){if(!await confirmDialog('Emin misiniz?'))return;C.Cikti=C.Cikti.filter(x=>x.id!==id);renderCikti('');save('Cikti').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── ANALİZ ──
 function analiz(){document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="analizYeni()">+ Yeni Analiz</button>`;renderAnaliz('');}
@@ -2841,7 +2866,7 @@ async function analizGuncelle(id){
   const idx=C.Analiz.findIndex(x=>x.id===id);C.Analiz[idx]={...C.Analiz[idx],numuneId:document.getElementById('a-nid').value,numune,tur:document.getElementById('a-tur').value,yontem:document.getElementById('a-yontem').value,sonuc:document.getElementById('a-sonuc').value,birim:document.getElementById('a-birim').value,tarih,analist:document.getElementById('a-analist').value,batchId:document.getElementById('a-batch').value,not:document.getElementById('a-not').value};
   closeModalDirect();renderAnaliz('');save('Analiz').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
 }
-async function analizSil(id){if(!confirm('Emin misiniz?'))return;C.Analiz=C.Analiz.filter(x=>x.id!==id);renderAnaliz('');save('Analiz').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function analizSil(id){if(!await confirmDialog('Emin misiniz?'))return;C.Analiz=C.Analiz.filter(x=>x.id!==id);renderAnaliz('');save('Analiz').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── EKİPMAN ──
 function ekipman(){document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="ekipmanYeni()">+ Yeni Ekipman</button>`;renderEkipman('',0);}
@@ -2896,7 +2921,7 @@ async function kalibKaydet(ekipmanId){
   closeModalDirect();updateBadges();renderEkipman('',1);
   Promise.all([save('KalibTarihce'),save('Ekipman')]).then(()=>toast('Kalibrasyon kaydedildi ✓')).catch(err=>toast('Hata: '+err.message,'err'));
 }
-async function kalibSil(id){if(!confirm('Bu kalibrasyon kaydı silinsin mi?'))return;C.KalibTarihce=C.KalibTarihce.filter(x=>x.id!==id);renderEkipman('',1);save('KalibTarihce').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function kalibSil(id){if(!await confirmDialog('Bu kalibrasyon kaydı silinsin mi?'))return;C.KalibTarihce=C.KalibTarihce.filter(x=>x.id!==id);renderEkipman('',1);save('KalibTarihce').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 function eForm(e={}){return`
   <div class="form-row"><div class="form-group"><label>Ekipman Adı *</label><input type="text" id="e-ad" value="${e.ad||''}" placeholder="ör: HPLC Cihazı"></div>
   <div class="form-group"><label>Model / Marka</label><input type="text" id="e-model" value="${e.model||''}" placeholder="ör: Agilent 1260"></div></div>
@@ -2913,7 +2938,7 @@ function ekipmanYeni(){showModal('Yeni Ekipman',eForm(),`<button class="btn btn-
 async function ekipmanKaydet(){const ad=document.getElementById('e-ad').value.trim();if(!ad){toast('Ekipman adı zorunlu.','err');return;}C.Ekipman.push({id:uid(),ad,model:document.getElementById('e-model').value,seriNo:document.getElementById('e-seri').value,lab:document.getElementById('e-lab').value,konum:document.getElementById('e-konum').value,kalibrasyonTarihi:document.getElementById('e-kalib').value,kalibrasyonFrekans:document.getElementById('e-freq').value,bakimTarihi:document.getElementById('e-bakim').value,sorumlu:document.getElementById('e-sorumlu').value,durum:document.getElementById('e-durum').value,not:document.getElementById('e-not').value,kullanici:currentUser.username});closeModalDirect();updateBadges();renderEkipman('',0);save('Ekipman').then(()=>toast('Ekipman kaydedildi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function ekipmanDuzenle(id){const e=C.Ekipman.find(x=>x.id===id);if(!e)return;showModal('Ekipman Düzenle',eForm(e),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="ekipmanGuncelle('${id}')">Güncelle</button>`);}
 async function ekipmanGuncelle(id){const ad=document.getElementById('e-ad').value.trim();if(!ad){toast('Zorunlu alan eksik.','err');return;}const idx=C.Ekipman.findIndex(x=>x.id===id);C.Ekipman[idx]={...C.Ekipman[idx],ad,model:document.getElementById('e-model').value,seriNo:document.getElementById('e-seri').value,lab:document.getElementById('e-lab').value,konum:document.getElementById('e-konum').value,kalibrasyonTarihi:document.getElementById('e-kalib').value,kalibrasyonFrekans:document.getElementById('e-freq').value,bakimTarihi:document.getElementById('e-bakim').value,sorumlu:document.getElementById('e-sorumlu').value,durum:document.getElementById('e-durum').value,not:document.getElementById('e-not').value};closeModalDirect();updateBadges();renderEkipman('',0);save('Ekipman').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
-async function ekipmanSil(id){if(!confirm('Emin misiniz?'))return;C.Ekipman=C.Ekipman.filter(x=>x.id!==id);updateBadges();renderEkipman('',0);save('Ekipman').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function ekipmanSil(id){if(!await confirmDialog('Emin misiniz?'))return;C.Ekipman=C.Ekipman.filter(x=>x.id!==id);updateBadges();renderEkipman('',0);save('Ekipman').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── TEMİZLİK PLANI ──
 function temizlik(){document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="temizlikYeni()">+ Yeni Görev</button>`;renderTemizlik('');}
@@ -2998,7 +3023,7 @@ async function temizlikGuncelle(id){
   C.Temizlik[idx]={...C.Temizlik[idx],gorev,lab:document.getElementById('t-lab').value,sorumlu:document.getElementById('t-sorumlu').value,periyot:document.getElementById('t-periyot').value,sonYapilma:document.getElementById('t-son').value,sonrakiTarih:document.getElementById('t-sonraki').value,not:document.getElementById('t-not').value};
   closeModalDirect();renderTemizlik('');save('Temizlik').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
 }
-async function temizlikSil(id){if(!confirm('Emin misiniz?'))return;C.Temizlik=C.Temizlik.filter(x=>x.id!==id);renderTemizlik('');save('Temizlik').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function temizlikSil(id){if(!await confirmDialog('Emin misiniz?'))return;C.Temizlik=C.Temizlik.filter(x=>x.id!==id);renderTemizlik('');save('Temizlik').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── RAPORLAMA ──
 // ── GÖREV TAKVİMİ ──
@@ -3121,7 +3146,7 @@ async function gorevGuncelle(id){
   C.Gorevler[idx]={...C.Gorevler[idx],baslik,kategori:document.getElementById('gd-kat').value,atanan:document.getElementById('gd-atanan').value,oncelik:document.getElementById('gd-oncelik').value,tarih:document.getElementById('gd-tarih').value,basTarih:document.getElementById('gd-tarih').value,bitisTarih:document.getElementById('gd-bitis').value,durum:document.getElementById('gd-durum').value,aciklama:document.getElementById('gd-aciklama').value};
   logDuz('Gorev',id,on,C.Gorevler[idx]);closeModalDirect();renderCal();save('Gorevler').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
 }
-async function gorevSil(id){if(!confirm('Emin misiniz?'))return;C.Gorevler=C.Gorevler.filter(x=>x.id!==id);closeModalDirect();renderCal();save('Gorevler').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function gorevSil(id){if(!await confirmDialog('Emin misiniz?'))return;C.Gorevler=C.Gorevler.filter(x=>x.id!==id);closeModalDirect();renderCal();save('Gorevler').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── İLETİŞİMDE OLUNAN KİŞİLER ──
 let iAra='',iKat='';
@@ -3166,7 +3191,7 @@ function iletisimYeni(){showModal('Yeni İletişim Kaydı',iletisimForm(),`<butt
 async function iletisimKaydet(){const v=iletisimOku();if(!v)return;C.IletisimKisileri.push({id:uid(),...v});closeModalDirect();renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Kişi kaydedildi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function iletisimDuzenle(id){const r=C.IletisimKisileri.find(x=>x.id===id);if(!r)return;showModal('İletişim Kaydı Düzenle',iletisimForm(r),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="iletisimGuncelle('${id}')">Güncelle</button>`);}
 async function iletisimGuncelle(id){const v=iletisimOku();if(!v)return;const idx=C.IletisimKisileri.findIndex(x=>x.id===id);C.IletisimKisileri[idx]={...C.IletisimKisileri[idx],...v};closeModalDirect();renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Kişi güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
-async function iletisimSil(id){if(!canDelete()){toast('Kişi silmek için admin yetkisi gerekli.','err');return;}if(!confirm('Bu iletişim kaydı silinsin mi?'))return;C.IletisimKisileri=C.IletisimKisileri.filter(x=>x.id!==id);renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function iletisimSil(id){if(!canDelete()){toast('Kişi silmek için admin yetkisi gerekli.','err');return;}if(!await confirmDialog('Bu iletişim kaydı silinsin mi?'))return;C.IletisimKisileri=C.IletisimKisileri.filter(x=>x.id!==id);renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── DOSYA DEPOLAMA ──
 let fileCache=[],fileSearch='',fileFolder='';
@@ -3222,7 +3247,7 @@ function dosyaModal(){
 }
 async function dosyaYukle(){
   const input=document.getElementById('file-input'),file=input.files&&input.files[0];if(!file){toast('Dosya seçmelisiniz.','err');return;}
-  if(file.size>20*1024*1024&&!confirm('Dosya 20 MB üzerinde. Apps Script sınırına takılabilir, yine de denensin mi?'))return;
+  if(file.size>20*1024*1024&&!await confirmDialog('Dosya 20 MB üzerinde. Apps Script sınırına takılabilir, yine de denensin mi?'))return;
   loading(true,'Dosya Drive’a yükleniyor...');
   try{
     const base64=await fileToBase64(file);
@@ -3232,7 +3257,7 @@ async function dosyaYukle(){
 }
 async function dosyaSil(id){
   if(!canDelete()){toast('Dosyayı yalnızca admin silebilir.','err');return;}
-  if(!confirm('Bu dosya Drive’dan silinsin mi?'))return;
+  if(!await confirmDialog('Bu dosya Drive’dan silinsin mi?'))return;
   loading(true,'Dosya siliniyor...');
   try{await driveApi('deleteFile',{id});loading(false);toast('Dosya silindi.','err');await renderDosyalar(fileSearch,fileFolder);}
   catch(e){loading(false);toast('Silme hatası: '+e.message,'err');}
@@ -3319,7 +3344,7 @@ async function mesaiKaydet(){
 }
 async function mesaiOnay(id,durum){
   if(!canDelete()){toast('Onay yetkisi sadece admin kullanıcıda.','err');return;}
-  const note=prompt(durum==='Onaylandı'?'Onay notu (opsiyonel)':'Red nedeni / not','')||'';
+  const note=(await promptDialog(durum==='Onaylandı'?'Onay notu (opsiyonel)':'Red nedeni / not','',durum==='Onaylandı'?'Onay':'Red'))||'';
   loading(true,'Mesai durumu güncelleniyor...');
   try{await driveApi('updateOvertimeStatus',{id,durum,adminNot:note,onaylayan:currentUser.ad||currentUser.username});loading(false);toast('Mesai durumu güncellendi ✓');await refreshMesaiBadge();await renderMesai();}
   catch(e){loading(false);toast('Onay hatası: '+e.message,'err');}
@@ -3384,7 +3409,7 @@ async function logGuncelle(id){
   C.GunlukLog[idx]={...C.GunlukLog[idx],tarih,kategori:document.getElementById('l-kat').value,baslik:document.getElementById('l-baslik').value,icerik,duzenlendi:'true',duzenlemeTarihi:new Date().toISOString()};
   logDuz('GunlukLog',id,on,C.GunlukLog[idx]);closeModalDirect();renderGunluk(lKul,lKat);save('GunlukLog').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
 }
-async function logSil(id){if(!confirm('Emin misiniz?'))return;C.GunlukLog=C.GunlukLog.filter(x=>x.id!==id);renderGunluk(lKul,lKat);save('GunlukLog').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function logSil(id){if(!await confirmDialog('Emin misiniz?'))return;C.GunlukLog=C.GunlukLog.filter(x=>x.id!==id);renderGunluk(lKul,lKat);save('GunlukLog').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── SYNTEGRA PROJE TAKİBİ ──
 const SYN_ASAMALAR=['Satıştan Geldi','Ön Mühendislik','Satın Alma','Detay Mühendislik','Arşen Onayı','İmalat','Kalite/Sertifikasyon','Müşteri Raporlama','Sevk/Teslim','Kapandı'];
@@ -3460,7 +3485,7 @@ function synReportNew(){showModal('Yeni Proje Raporu',synReportForm(),`<button c
 async function synReportSave(){const v=synReportRead();C.SynRaporlar.push({id:uid(),company:currentCompany,...v,kullanici:currentUser.username});closeModalDirect();synRaporlar();save('SynRaporlar').then(()=>toast('Rapor kaydedildi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function synReportEdit(id){const r=C.SynRaporlar.find(x=>x.id===id);if(!r)return;showModal('Proje Raporu Düzenle',synReportForm(r),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="synReportUpdate('${id}')">Güncelle</button>`);}
 async function synReportUpdate(id){const v=synReportRead();const idx=C.SynRaporlar.findIndex(x=>x.id===id);C.SynRaporlar[idx]={...C.SynRaporlar[idx],...v};closeModalDirect();synRaporlar();save('SynRaporlar').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
-async function synDelete(sheet,id,rerender){if(!confirm('Bu kayıt silinsin mi?'))return;C[sheet]=C[sheet].filter(x=>x.id!==id);rerender();save(sheet).then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+async function synDelete(sheet,id,rerender){if(!await confirmDialog('Bu kayıt silinsin mi?'))return;C[sheet]=C[sheet].filter(x=>x.id!==id);rerender();save(sheet).then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 function rapor(){
   document.getElementById('content').innerHTML=`
