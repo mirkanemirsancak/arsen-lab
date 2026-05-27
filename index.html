@@ -3305,7 +3305,7 @@ async function iletisimGuncelle(id){const v=iletisimOku();if(!v)return;const idx
 async function iletisimSil(id){if(!canDelete()){toast('Kişi silmek için admin yetkisi gerekli.','err');return;}if(!await confirmDialog('Bu iletişim kaydı silinsin mi?'))return;C.IletisimKisileri=C.IletisimKisileri.filter(x=>x.id!==id);renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── DOSYA DEPOLAMA ──
-let fileCache=[],fileSearch='',fileFolder='';
+let fileTree={folders:[],files:[],breadcrumb:[],folderId:'root',rootId:''},fileSearch='',fileSort='new';
 async function driveApi(action,payload={}){
   const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,token:authToken,company:currentCompany,...payload})});
   const data=await res.json();if(data.error)throw new Error(data.error);return data;
@@ -3314,45 +3314,63 @@ function fileSize(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return 
 function fileIcon(mime,name){const n=(name||'').toLowerCase();if((mime||'').includes('image'))return'▧';if(n.endsWith('.pdf'))return'▣';if(n.match(/\.(xlsx|xls|csv)$/))return'▦';if(n.match(/\.(docx|doc)$/))return'▤';return'◇';}
 function fileToBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=reject;r.readAsDataURL(file);});}
 async function dosyalar(){
-  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="dosyaModal()">+ Dosya Yükle</button>`;
-  await renderDosyalar();
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="dosyaKlasorYeni()">+ Klasör</button><button class="btn btn-primary btn-sm" onclick="dosyaModal()">+ Dosya Yükle</button>`;
+  await loadFolder(fileTree.folderId||'root');
 }
-async function renderDosyalar(q=fileSearch,folder=fileFolder){
-  fileSearch=q;fileFolder=folder;
-  document.getElementById('content').innerHTML=`<div class="empty-state"><div class="spinner" style="margin:0 auto 12px"></div><div>Drive dosyaları yükleniyor...</div></div>`;
+async function loadFolder(folderId){
+  document.getElementById('content').innerHTML=`<div class="empty-state"><div class="spinner" style="margin:0 auto 12px"></div><div>Drive klasörü yükleniyor...</div></div>`;
   try{
-    const data=await driveApi('listFiles');fileCache=data.files||[];
-    const folders=[...new Set(fileCache.map(f=>f.folder||'Genel'))].sort((a,b)=>a.localeCompare(b,'tr'));
-    let rows=[...fileCache];
-    if(folder)rows=rows.filter(f=>(f.folder||'Genel')===folder);
-    if(q){const s=q.toLowerCase();rows=rows.filter(f=>(f.name||'').toLowerCase().includes(s)||(f.description||'').toLowerCase().includes(s)||(f.folder||'').toLowerCase().includes(s));}
-    rows.sort((a,b)=>new Date(b.created||0)-new Date(a.created||0));
-    document.getElementById('content').innerHTML=`
-      <div class="filter-bar">
-        <div class="search-bar" style="min-width:260px;flex:1"><span class="search-icon">⌕</span><input type="text" placeholder="Dosya ara..." value="${esc(q)}" oninput="renderDosyalar(this.value,fileFolder)"></div>
-        <button class="filter-btn ${folder===''?'active':''}" onclick="renderDosyalar(fileSearch,'')">Tümü (${fileCache.length})</button>
-        ${folders.map(f=>`<button class="filter-btn ${folder===f?'active':''}" onclick="renderDosyalar(fileSearch,${JSON.stringify(f).replace(/"/g,'&quot;')})">${esc(f)}</button>`).join('')}
-      </div>
-      ${rows.length?`<div class="file-grid">${rows.map(f=>`
-        <div class="file-card">
-          <div class="flex gap-12"><div class="file-icon">${fileIcon(f.mimeType,f.name)}</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${esc(f.folder||'Genel')} · ${fileSize(f.size)}</div></div></div>
-          ${f.description?`<div class="text-sm text-muted">${esc(f.description)}</div>`:''}
-          <div class="file-meta">Yükleyen: ${esc(f.uploadedBy||'—')}<br>${fmtDt(f.created)}</div>
-          <div class="file-actions"><a class="btn btn-ghost btn-sm" href="${esc(f.url)}" target="_blank">Aç ↗</a><a class="btn btn-ghost btn-sm" href="${esc(f.downloadUrl||f.url)}" target="_blank">İndir</a>${canDelete()?`<button class="btn btn-danger btn-sm" onclick="dosyaSil('${f.id}')">Sil</button>`:''}</div>
-        </div>`).join('')}</div>`:`<div class="empty-state"><div class="empty-icon">▣</div><div>Dosya bulunamadı.</div></div>`}`;
+    const data=await driveApi('listFolder',{folderId});
+    fileTree={folders:data.folders||[],files:data.files||[],breadcrumb:data.breadcrumb||[],folderId:data.folderId||'root',rootId:data.rootId||''};
+    renderDosyalar();
   }catch(e){
-    document.getElementById('content').innerHTML=`<div class="alert alert-amber">Drive bağlantısı henüz aktif değil. Apps Script dosya depolama kodunu ekleyip deployment güncellendiğinde bu sayfa çalışacak.<br><br><strong>Hata:</strong> ${esc(e.message)}</div>`;
+    document.getElementById('content').innerHTML=`<div class="alert alert-amber">Drive klasör sistemi henüz aktif değil. Apps Script kodunu güncelleyip yeni deployment aldığında bu sayfa çalışacak.<br><br><strong>Hata:</strong> ${esc(e.message)}</div>`;
   }
 }
+function renderDosyalar(){
+  const s=fileSearch.toLowerCase();
+  let folders=[...fileTree.folders],files=[...fileTree.files];
+  if(s){folders=folders.filter(f=>(f.name||'').toLowerCase().includes(s));files=files.filter(f=>(f.name||'').toLowerCase().includes(s)||(f.description||'').toLowerCase().includes(s));}
+  if(fileSort==='old'){files.sort((a,b)=>new Date(a.created||0)-new Date(b.created||0));}
+  else if(fileSort==='name'){files.sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));}
+  else{files.sort((a,b)=>new Date(b.created||0)-new Date(a.created||0));}
+  const crumbs=fileTree.breadcrumb.map((c,i)=>`<span class="file-crumb" onclick="loadFolder('${c.id}')" style="cursor:pointer;color:${i===fileTree.breadcrumb.length-1?'var(--text)':'var(--accent)'}">${esc(c.name)}</span>`).join('<span style="color:var(--text3)"> / </span>');
+  document.getElementById('content').innerHTML=`
+    <div class="card" style="padding:12px 14px;margin-bottom:14px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">▣ ${crumbs}</div></div>
+    <div class="filter-bar">
+      <div class="search-bar" style="min-width:240px;flex:1"><span class="search-icon">⌕</span><input type="text" placeholder="Bu klasörde ara..." value="${esc(fileSearch)}" oninput="fileSearch=this.value;renderDosyalar()"></div>
+      <button class="filter-btn ${fileSort==='new'?'active':''}" onclick="fileSort='new';renderDosyalar()">En Yeni</button>
+      <button class="filter-btn ${fileSort==='old'?'active':''}" onclick="fileSort='old';renderDosyalar()">En Eski</button>
+      <button class="filter-btn ${fileSort==='name'?'active':''}" onclick="fileSort='name';renderDosyalar()">Ada Göre</button>
+    </div>
+    ${(folders.length||files.length)?`<div class="file-grid">
+      ${folders.map(f=>`<div class="file-card" style="cursor:pointer" onclick="loadFolder('${f.id}')">
+        <div class="flex gap-12"><div class="file-icon">▤</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">Klasör · ${fmtDt(f.created)}</div></div></div>
+        <div class="file-actions" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="loadFolder('${f.id}')">Aç →</button><button class="btn btn-danger btn-sm" onclick="dosyaTreeSil('${f.id}',true,${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Sil</button></div>
+      </div>`).join('')}
+      ${files.map(f=>`<div class="file-card">
+        <div class="flex gap-12"><div class="file-icon">${fileIcon(f.mimeType,f.name)}</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${fileSize(f.size)}</div></div></div>
+        ${f.description?`<div class="text-sm text-muted">${esc(f.description)}</div>`:''}
+        <div class="file-meta">Yükleyen: ${esc(f.uploadedBy||'—')}<br>${fmtDt(f.created)}</div>
+        <div class="file-actions"><a class="btn btn-ghost btn-sm" href="${esc(f.url)}" target="_blank">Aç ↗</a><a class="btn btn-ghost btn-sm" href="${esc(f.downloadUrl||f.url)}" target="_blank">İndir</a><button class="btn btn-danger btn-sm" onclick="dosyaTreeSil('${f.id}',false,${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Sil</button></div>
+      </div>`).join('')}
+    </div>`:`<div class="empty-state"><div class="empty-icon">▣</div><div>${fileSearch?'Eşleşen öğe yok.':'Bu klasör boş. Klasör oluşturabilir veya dosya yükleyebilirsiniz.'}</div></div>`}`;
+}
+async function dosyaKlasorYeni(){
+  const name=await promptDialog('Klasör adı','','Yeni Klasör');if(name===null||!name.trim())return;
+  loading(true,'Klasör oluşturuluyor...');
+  try{await driveApi('createTreeFolder',{parentId:fileTree.folderId,name:name.trim()});loading(false);toast('Klasör oluşturuldu ✓');await loadFolder(fileTree.folderId);}
+  catch(e){loading(false);toast('Klasör hatası: '+e.message,'err');}
+}
 function dosyaModal(){
-  showModal('Drive Dosya Yükle',`
+  showModal('Dosya Yükle',`
+    <div class="alert alert-blue mb-16" style="font-size:12px">Dosya, içinde bulunduğun klasöre yüklenir: <strong>${esc((fileTree.breadcrumb[fileTree.breadcrumb.length-1]||{}).name||'Ana klasör')}</strong></div>
     <div class="file-drop">
       <div class="td-main">Dosya seç</div>
-      <div class="text-sm text-muted mt-8">Dosyalar Google Drive'daki Arsen Lab klasörüne yüklenir. Büyük dosyalarda 20 MB altı önerilir.</div>
+      <div class="text-sm text-muted mt-8">20 MB altı dosyalar önerilir (Apps Script sınırı).</div>
       <input type="file" id="file-input">
     </div>
-    <div class="form-row mt-16"><div class="form-group"><label>Klasör / Kategori</label><input type="text" id="file-folder" value="${esc(fileFolder||'Genel')}" placeholder="Genel, Analiz, Satın Alma..."></div>
-    <div class="form-group"><label>Görünecek Ad (opsiyonel)</label><input type="text" id="file-name" placeholder="Boşsa dosya adı kullanılır"></div></div>
+    <div class="form-group mt-16"><label>Görünecek Ad (opsiyonel)</label><input type="text" id="file-name" placeholder="Boşsa dosya adı kullanılır"></div>
     <div class="form-group"><label>Açıklama</label><textarea id="file-desc" placeholder="Kısa not, proje veya içerik bilgisi"></textarea></div>`,
     `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="dosyaYukle()">Yükle</button>`);
 }
@@ -3362,15 +3380,14 @@ async function dosyaYukle(){
   loading(true,'Dosya Drive’a yükleniyor...');
   try{
     const base64=await fileToBase64(file);
-    await driveApi('uploadFile',{name:document.getElementById('file-name').value.trim()||file.name,mimeType:file.type||'application/octet-stream',base64,folder:document.getElementById('file-folder').value.trim()||'Genel',description:document.getElementById('file-desc').value,uploadedBy:currentUser.ad||currentUser.username});
-    closeModalDirect();loading(false);toast('Dosya yüklendi ✓');await renderDosyalar(fileSearch,fileFolder);
+    await driveApi('uploadTreeFile',{folderId:fileTree.folderId,name:document.getElementById('file-name').value.trim()||file.name,mimeType:file.type||'application/octet-stream',base64,description:document.getElementById('file-desc').value});
+    closeModalDirect();loading(false);toast('Dosya yüklendi ✓');await loadFolder(fileTree.folderId);
   }catch(e){loading(false);toast('Yükleme hatası: '+e.message,'err');}
 }
-async function dosyaSil(id){
-  if(!canDelete()){toast('Dosyayı yalnızca admin silebilir.','err');return;}
-  if(!await confirmDialog('Bu dosya Drive’dan silinsin mi?'))return;
-  loading(true,'Dosya siliniyor...');
-  try{await driveApi('deleteFile',{id});loading(false);toast('Dosya silindi.','err');await renderDosyalar(fileSearch,fileFolder);}
+async function dosyaTreeSil(id,isFolder,name){
+  if(!await confirmDialog(`"${name}" ${isFolder?'klasörü ve içindeki tüm dosyalar':'dosyası'} silinsin mi?`))return;
+  loading(true,'Siliniyor...');
+  try{await driveApi('deleteTreeItem',{id,isFolder});loading(false);toast('Silindi.','err');await loadFolder(fileTree.folderId);}
   catch(e){loading(false);toast('Silme hatası: '+e.message,'err');}
 }
 

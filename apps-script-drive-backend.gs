@@ -641,6 +641,95 @@ function deleteFile(data, user) {
   return { ok: true };
 }
 
+// ── DRIVE FOLDER TREE (per-company, real subfolders, navigable like Drive) ──
+function companyDisplayName(company) { return company === 'syntegra' ? 'Syntegra' : 'Fuwell'; }
+function companyFilesRoot(company) {
+  var root = rootFolder();
+  var name = 'Dosyalar - ' + companyDisplayName(company);
+  var it = root.getFoldersByName(name);
+  return it.hasNext() ? it.next() : root.createFolder(name);
+}
+function folderIsWithin(folder, ancestorId) {
+  var cur = folder;
+  for (var g = 0; g < 60; g++) {
+    if (cur.getId() === ancestorId) return true;
+    var ps = cur.getParents();
+    if (!ps.hasNext()) return false;
+    cur = ps.next();
+  }
+  return false;
+}
+function resolveTreeFolder(company, folderId) {
+  var croot = companyFilesRoot(company);
+  if (!folderId || folderId === 'root') return croot;
+  var f;
+  try { f = DriveApp.getFolderById(folderId); } catch (e) { throw new Error('Klasor bulunamadi.'); }
+  if (f.getId() !== croot.getId() && !folderIsWithin(f, croot.getId())) throw new Error('Bu klasore erisim yetkiniz yok.');
+  return f;
+}
+function treeFileInfo(file) {
+  var desc = file.getDescription() || '';
+  return { id: file.getId(), name: file.getName(), type: 'file', mimeType: file.getMimeType(), size: file.getSize(), url: file.getUrl(), downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId(), created: file.getDateCreated(), updated: file.getLastUpdated(), uploadedBy: metaValue(desc, 'Yukleyen'), description: cleanDescription(desc) };
+}
+function listFolder(user, company, folderId) {
+  company = requireCompany(user, company);
+  var croot = companyFilesRoot(company);
+  var folder = resolveTreeFolder(company, folderId);
+  var crumbs = [], cur = folder;
+  for (var g = 0; g < 60; g++) {
+    crumbs.unshift({ id: cur.getId(), name: cur.getId() === croot.getId() ? companyDisplayName(company) : cur.getName() });
+    if (cur.getId() === croot.getId()) break;
+    var ps = cur.getParents();
+    if (!ps.hasNext()) break;
+    cur = ps.next();
+  }
+  var folders = [], it = folder.getFolders();
+  while (it.hasNext()) { var sf = it.next(); folders.push({ id: sf.getId(), name: sf.getName(), type: 'folder', created: sf.getDateCreated(), updated: sf.getLastUpdated() }); }
+  var files = [], fit = folder.getFiles();
+  while (fit.hasNext()) files.push(treeFileInfo(fit.next()));
+  folders.sort(function(a, b) { return String(a.name).localeCompare(String(b.name)); });
+  files.sort(function(a, b) { return new Date(b.created).getTime() - new Date(a.created).getTime(); });
+  return { ok: true, rootId: croot.getId(), folderId: folder.getId(), breadcrumb: crumbs, folders: folders, files: files };
+}
+function createTreeFolder(user, company, parentId, name) {
+  company = requireCompany(user, company);
+  var parent = resolveTreeFolder(company, parentId);
+  var safe = String(name || '').replace(/[\\/]/g, '-').trim();
+  if (!safe) throw new Error('Klasor adi gerekli.');
+  if (parent.getFoldersByName(safe).hasNext()) throw new Error('Bu isimde klasor zaten var.');
+  var f = parent.createFolder(safe);
+  return { ok: true, folder: { id: f.getId(), name: f.getName(), type: 'folder', created: f.getDateCreated(), updated: f.getLastUpdated() } };
+}
+function uploadTreeFile(user, company, folderId, name, base64, mimeType, description) {
+  company = requireCompany(user, company);
+  if (!base64 || !name) throw new Error('Dosya bilgisi eksik.');
+  var folder = resolveTreeFolder(company, folderId);
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType || 'application/octet-stream', name);
+  var file = folder.createFile(blob);
+  file.setDescription((description || '') + '\nYukleyen: ' + (user.ad || user.username || '') + '\nYuklemeTarihi: ' + new Date().toISOString());
+  return { ok: true, file: treeFileInfo(file) };
+}
+function deleteTreeItem(user, company, id, isFolder) {
+  company = requireCompany(user, company);
+  if (!id) throw new Error('Kimlik eksik.');
+  var croot = companyFilesRoot(company);
+  if (isFolder === true || isFolder === 'true') {
+    var folder;
+    try { folder = DriveApp.getFolderById(id); } catch (e) { throw new Error('Klasor bulunamadi.'); }
+    if (folder.getId() === croot.getId()) throw new Error('Ana klasor silinemez.');
+    if (!folderIsWithin(folder, croot.getId())) throw new Error('Bu klasore erisim yetkiniz yok.');
+    folder.setTrashed(true);
+    return { ok: true };
+  }
+  var file;
+  try { file = DriveApp.getFileById(id); } catch (e) { throw new Error('Dosya bulunamadi.'); }
+  var ps = file.getParents(), within = false;
+  while (ps.hasNext()) { if (folderIsWithin(ps.next(), croot.getId())) { within = true; break; } }
+  if (!within) throw new Error('Bu dosyaya erisim yetkiniz yok.');
+  file.setTrashed(true);
+  return { ok: true };
+}
+
 function overtimeSheet() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sh = ss.getSheetByName(OVERTIME_SHEET_NAME);
@@ -854,6 +943,10 @@ function doPost(e) {
       else if (data.action === 'createOvertime') result = createOvertime(data, user);
       else if (data.action === 'updateOvertimeStatus') result = updateOvertimeStatus(data, user);
       else if (data.action === 'scheduleOverview') result = scheduleOverview(user);
+      else if (data.action === 'listFolder') result = listFolder(user, data.company, data.folderId);
+      else if (data.action === 'createTreeFolder') result = createTreeFolder(user, data.company, data.parentId, data.name);
+      else if (data.action === 'uploadTreeFile') result = uploadTreeFile(user, data.company, data.folderId, data.name, data.base64, data.mimeType, data.description);
+      else if (data.action === 'deleteTreeItem') result = deleteTreeItem(user, data.company, data.id, data.isFolder);
       else result = { error: 'Bilinmeyen istek.' };
     }
   } catch (err) {
