@@ -264,7 +264,7 @@ function valuesForUsers(user) {
     var row = [];
     for (var j = 0; j < headers.length; j++) {
       var key = headers[j];
-      row.push(user.role === 'admin' ? (data.rows[i][key] || '') : (key === 'passwordHash' ? '' : (data.rows[i][key] || '')));
+      row.push(key === 'passwordHash' ? (isArsenAdmin(user) ? (data.rows[i][key] || '') : '') : (data.rows[i][key] || ''));
     }
     values.push(row);
   }
