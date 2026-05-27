@@ -308,7 +308,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> <span id="nav-metod-label">Metodlar ve İzlekler</span></div>
       <div class="nav-item" onclick="showPage('sfe')"><span class="nav-icon">◇</span> Süperkritik CO₂</div>
       <div class="nav-section">Ekip</div>
-      <div class="nav-item" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
+      <div class="nav-item" style="display:none" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> <span id="nav-takvim-label">Görev Takvimi</span></div>
       <div class="nav-item" onclick="showPage('mesai')"><span class="nav-icon">◷</span> Ekstra Mesai <span class="nav-badge" id="mesai-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('iletisim')"><span class="nav-icon">☏</span> İletişimde Olunan Kişiler</div>
@@ -388,7 +388,7 @@ const KURUMS={
 };
 const UMBRELLA_KURUM='arsen';
 const COLS={
-  Users:['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Users:['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma','roller'],
   Stok:['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
   StokHareketleri:['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
   Metodlar:['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
@@ -516,6 +516,14 @@ function userKurum(user=currentUser){
   return COMPANIES[def]?def:'fuwell';
 }
 function isUmbrella(user=currentUser){return userKurum(user)===UMBRELLA_KURUM;}
+function isAdmin(user=currentUser){return !!(user&&user.role==='admin');}
+// Only the Arşen (umbrella) admin manages users and approves overtime.
+function isArsenAdmin(user=currentUser){return isAdmin(user)&&isUmbrella(user);}
+const USER_ROLES=['Proje Sorumlusu','Mühendis','Satınalma Sorumlusu','Onaylayıcı','Operatör'];
+function userRoller(user=currentUser){return String(user?.roller||'').split(',').map(s=>s.trim()).filter(Boolean);}
+function userHasRole(user,role){return userRoller(user).indexOf(role)>=0;}
+// Resolve a fixed role to the active usernames carrying it (optionally scoped to a company) — used to auto-route approvals without picking a name.
+function usersWithRole(role,company=currentCompany){return (C.Users||[]).filter(u=>(u.active===true||u.active==='true')&&userHasRole(u,role)&&(!company||companyAccess(u).includes(company))).map(u=>u.username);}
 function companyAccess(user=currentUser){
   if(isUmbrella(user))return Object.keys(COMPANIES);
   const k=userKurum(user);
@@ -682,12 +690,13 @@ function enterApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('sidebar-username').textContent=currentUser.ad||currentUser.username;
-  document.getElementById('sidebar-role').textContent=currentUser.role==='admin'?'Admin':'Kullanıcı';
+  document.getElementById('sidebar-role').textContent=isArsenAdmin()?'Arşen Admin':isAdmin()?(kurumLabel()+' Admin'):'Kullanıcı';
   renderCompanySelector();
   updateCompanyUI();
-  document.getElementById('admin-nav-section').style.display='';
-  document.getElementById('admin-nav-item').style.display='';
-  if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
+  // User management (Kullanıcılar) is Arşen-admin only.
+  const showUserMgmt=isArsenAdmin();
+  document.getElementById('admin-nav-section').style.display=showUserMgmt?'':'none';
+  document.getElementById('admin-nav-item').style.display=showUserMgmt?'':'none';
 }
 function startAutoSync(){if(syncTimer)clearInterval(syncTimer);syncTimer=setInterval(()=>syncAll().then(ok=>{if(ok&&currentPage&&!document.getElementById('modal-overlay').classList.contains('open'))showPage(currentPage,true);}),90000);}
 async function doLogin(){
@@ -804,6 +813,7 @@ async function switchCompany(key){
 function showPage(page,silent=false){
   // Umbrella-only pages
   if((page==='genel'||page==='audit')&&!isUmbrella()){toast('Bu sayfa yalnızca Arşen Proses yetkililerine açıktır.','err');page='dashboard';}
+  if(page==='admin'&&!isArsenAdmin()){toast('Kullanıcı yönetimi yalnızca Arşen admin tarafından yapılır.','err');page='dashboard';}
   currentPage=page;
   closeSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -955,18 +965,30 @@ async function scheduleSaveAndRefresh(message='Çizelge güncellendi ✓'){
 }
 function scheduleRefresh(){if(currentPage==='dashboard')dashboard();else if(currentPage==='takvim')renderCal();}
 function scheduleCanEdit(){return !!currentUser;}
-function scheduleCanManage(){return canDelete()||isUmbrella();}
+// Persons / days / bulk-clear = any admin (assigning others). Main goals = Arşen admin only.
+function scheduleCanManage(){return isAdmin();}
+function scheduleCanGoals(){return isArsenAdmin();}
+function schedulePersonIsMe(name){
+  if(!currentUser)return false;
+  const n=String(name||'').trim().toLowerCase();
+  return n===String(currentUser.ad||'').trim().toLowerCase()||n===String(currentUser.username||'').trim().toLowerCase();
+}
+// A user may edit tasks only in their own row; admins may edit any row.
+function scheduleCanEditPerson(name){return isAdmin()||schedulePersonIsMe(name);}
+function scheduleCanEditTask(id){const r=C.Gorevler.find(x=>x.id===id);return r?scheduleCanEditPerson(r.atanan):isAdmin();}
 function scheduleGuard(){if(scheduleCanEdit())return true;toast('Çizelgeyi düzenlemek için giriş yapmalısınız.','err');return false;}
 function scheduleAdminGuard(){if(scheduleCanManage())return true;toast('Bu alanı yalnızca admin düzenleyebilir.','err');return false;}
+function scheduleGoalGuard(){if(scheduleCanGoals())return true;toast('Ana hedefleri yalnızca Arşen admin düzenleyebilir.','err');return false;}
+function scheduleTaskGuard(name){if(scheduleCanEditPerson(name))return true;toast('Yalnızca kendi görevlerini düzenleyebilirsin.','err');return false;}
 function scheduleHTML(compact=false){
   const D=scheduleData();
   const total=Object.values(D.tasks).reduce((n,arr)=>n+arr.length,0);
   const done=Object.values(D.tasks).flat().filter(t=>t.done).length;
-  const editable=scheduleCanEdit(),admin=scheduleCanManage();
+  const editable=scheduleCanEdit(),admin=scheduleCanManage(),goalAdmin=scheduleCanGoals();
   const goals=scheduleGoals();
   const shownGoals=goalScopeFilter?goals.filter(g=>(g.scope||'Haftalık')===goalScopeFilter):goals;
-  const titleEdit=admin?`contenteditable="true" onblur="scheduleEditMeta('title',this.textContent)"`:'';
-  const subEdit=admin?`contenteditable="true" onblur="scheduleEditMeta('subtitle',this.textContent)"`:'';
+  const titleEdit=goalAdmin?`contenteditable="true" onblur="scheduleEditMeta('title',this.textContent)"`:'';
+  const subEdit=goalAdmin?`contenteditable="true" onblur="scheduleEditMeta('subtitle',this.textContent)"`:'';
   if(!editable&&scheduleSelectMode){scheduleSelectMode=false;scheduleSelected.clear();}
   return`
     <div class="schedule-meta">
@@ -982,27 +1004,28 @@ function scheduleHTML(compact=false){
       ${['','Haftalık','Aylık','3 Aylık','6 Aylık','Yıllık'].map(s=>`<button class="filter-btn ${goalScopeFilter===s?'active':''}" onclick="goalScopeFilter='${s}';scheduleRefresh()">${s||'Tüm Hedefler'}</button>`).join('')}
     </div>
     <div class="schedule-goals">
-      ${shownGoals.length?shownGoals.map(g=>`<div class="schedule-goal" style="border-left-color:${esc(g.color||'#4f9cf9')}"><strong>${esc(g.title)}</strong><span>${esc(g.scope||'Haftalık')}</span>${g.note?`<span>${esc(g.note)}</span>`:''}${admin?`<div class="schedule-goal-actions"><button class="schedule-mini" onclick="scheduleEditGoal('${g.id}')">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemoveGoal('${g.id}')">Sil</button></div>`:''}</div>`).join(''):`<div class="schedule-goal"><strong>Ana hedef yok</strong><span>${admin?'Admin olarak hedefleri dönemlerine göre ekleyebilirsin.':'Bu dönem için ana hedef girilmemiş.'}</span></div>`}
+      ${shownGoals.length?shownGoals.map(g=>`<div class="schedule-goal" style="border-left-color:${esc(g.color||'#4f9cf9')}"><strong>${esc(g.title)}</strong><span>${esc(g.scope||'Haftalık')}</span>${g.note?`<span>${esc(g.note)}</span>`:''}${goalAdmin?`<div class="schedule-goal-actions"><button class="schedule-mini" onclick="scheduleEditGoal('${g.id}')">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemoveGoal('${g.id}')">Sil</button></div>`:''}</div>`).join(''):`<div class="schedule-goal"><strong>Ana hedef yok</strong><span>${goalAdmin?'Arşen admin olarak hedefleri dönemlerine göre ekleyebilirsin.':'Bu dönem için ana hedef girilmemiş.'}</span></div>`}
     </div>
     ${editable?`<div class="schedule-tools">
-      ${admin?`<button class="btn btn-primary btn-sm" onclick="scheduleAddGoal()">+ Ana Hedef</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>`:''}
+      ${goalAdmin?`<button class="btn btn-primary btn-sm" onclick="scheduleAddGoal()">+ Ana Hedef</button>`:''}
+      ${admin?`<button class="btn btn-ghost btn-sm" onclick="scheduleAddPerson()">+ Kişi</button><button class="btn btn-ghost btn-sm" onclick="scheduleAddDay()">+ Gün</button>
       <button class="btn btn-ghost btn-sm" onclick="scheduleSelectMode=!scheduleSelectMode;scheduleRefresh()">${scheduleSelectMode?'Seçimi Kapat':'Toplu Seç'}</button>
       ${scheduleSelectMode?`<button class="btn btn-danger btn-sm" onclick="scheduleDeleteSelected()">Seçilenleri Sil (${scheduleSelected.size})</button>`:''}
-      ${admin?`<button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button>`:''}
+      <button class="btn btn-danger btn-sm" onclick="scheduleClearTasks()">Tüm Görevleri Sil</button><button class="btn btn-danger btn-sm" onclick="scheduleClearPeopleAndTasks()">Kişi+Görev Temizle</button>`:''}
     </div>`:''}
     <div class="table-wrap"><table class="schedule-table">
       <thead><tr><th style="width:130px">Ekip</th>${D.days.map((d,idx)=>`<th>${esc(d)} ${admin?`<button class="schedule-remove" title="Günü sil" onclick="scheduleRemoveDay(${idx})">×</button>`:''}</th>`).join('')}</tr></thead>
-      <tbody>${D.persons.map((p,pIdx)=>`<tr>
-        <td class="schedule-person"><strong>${esc(p.name)}</strong><span>${esc(p.role||'')}</span>${admin?`<div class="schedule-person-actions"><button class="schedule-mini" onclick="scheduleEditPerson(${pIdx})">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemovePerson(${pIdx})">Sil</button></div>`:''}</td>
+      <tbody>${D.persons.map((p,pIdx)=>{const rowEdit=editable&&scheduleCanEditPerson(p.name);return `<tr>
+        <td class="schedule-person"><strong>${esc(p.name)}</strong><span>${esc(p.role||'')}</span>${schedulePersonIsMe(p.name)&&!admin?`<span class="badge badge-teal" style="font-size:9px;margin-top:3px">Sen</span>`:''}${admin?`<div class="schedule-person-actions"><button class="schedule-mini" onclick="scheduleEditPerson(${pIdx})">Düzenle</button><button class="schedule-mini danger" onclick="scheduleRemovePerson(${pIdx})">Sil</button></div>`:''}</td>
         ${D.days.map((_,idx)=>{
           const ck=scheduleCellKey(p.name,idx);
           const tasks=D.tasks[ck]||[];
-          return`<td class="schedule-cell" ${editable?`ondragover="scheduleDragOver(event)" ondragleave="scheduleDragLeave(event)" ondrop="scheduleDropTask(event,${pIdx},${idx})"`:''}>${tasks.length?tasks.map(t=>`<div class="schedule-task ${t.done?'done':''}" ${editable?`draggable="true" ondragstart="scheduleDragStart(event,'${t.id}')" ondragend="scheduleDragEnd(event)"`:''}>${editable&&scheduleSelectMode?`<input class="schedule-select" type="checkbox" ${scheduleSelected.has(t.id)?'checked':''} onchange="scheduleToggleSelect('${t.id}')">`:''}<i class="schedule-priority ${t.p}" ${editable?`onclick="scheduleEditTask('${t.id}')"`:''}></i><span ${editable?`onclick="scheduleEditTask('${t.id}')"`:''}>${esc(t.t)}${t.goalId?`<em class="task-goal">${esc(scheduleGoalName(t.goalId))}</em>`:''}</span>${editable?`<button class="schedule-remove" onclick="scheduleRemoveTask('${t.id}')">×</button>`:''}</div>`).join(''):'<span class="text-muted text-sm">—</span>'}${editable?`<span class="schedule-add" onclick="scheduleAddTask(${pIdx},${idx})">+ görev</span>`:''}</td>`;
+          return`<td class="schedule-cell" ${rowEdit?`ondragover="scheduleDragOver(event)" ondragleave="scheduleDragLeave(event)" ondrop="scheduleDropTask(event,${pIdx},${idx})"`:''}>${tasks.length?tasks.map(t=>`<div class="schedule-task ${t.done?'done':''}" ${rowEdit?`draggable="true" ondragstart="scheduleDragStart(event,'${t.id}')" ondragend="scheduleDragEnd(event)"`:''}>${rowEdit&&scheduleSelectMode?`<input class="schedule-select" type="checkbox" ${scheduleSelected.has(t.id)?'checked':''} onchange="scheduleToggleSelect('${t.id}')">`:''}<i class="schedule-priority ${t.p}" ${rowEdit?`onclick="scheduleEditTask('${t.id}')"`:''}></i><span ${rowEdit?`onclick="scheduleEditTask('${t.id}')"`:''}>${esc(t.t)}${t.goalId?`<em class="task-goal">${esc(scheduleGoalName(t.goalId))}</em>`:''}</span>${rowEdit?`<button class="schedule-remove" onclick="scheduleRemoveTask('${t.id}')">×</button>`:''}</div>`).join(''):'<span class="text-muted text-sm">—</span>'}${rowEdit?`<span class="schedule-add" onclick="scheduleAddTask(${pIdx},${idx})">+ görev</span>`:''}</td>`;
         }).join('')}
-      </tr>`).join('')}</tbody>
+      </tr>`;}).join('')}</tbody>
     </table></div>`;
 }
-async function scheduleEditMeta(field,value){if(!scheduleAdminGuard())return;const r=scheduleMetaRow(),m=scheduleMeta();m[field]=value.trim()||GOREV_CIZELGE[field];r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Başlık güncellendi ✓');}
+async function scheduleEditMeta(field,value){if(!scheduleGoalGuard())return;const r=scheduleMetaRow(),m=scheduleMeta();m[field]=value.trim()||GOREV_CIZELGE[field];r.aciklama=JSON.stringify(m);await scheduleSaveAndRefresh('Başlık güncellendi ✓');}
 function scheduleTaskForm(task={},personIdx=0,dayIndex=0){
   const meta=scheduleTaskMeta(task)||{};
   const goals=scheduleGoals();
@@ -1025,57 +1048,60 @@ function scheduleReadTask(){
 }
 function scheduleAddTask(personIdx,dayIndex){
   if(!scheduleGuard())return;
+  const pObj=scheduleData().persons[personIdx];if(pObj&&!scheduleTaskGuard(pObj.name))return;
   showModal('Yeni Çizelge Görevi',scheduleTaskForm({},personIdx,dayIndex),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleSaveNewTask()">Kaydet</button>`);
 }
 async function scheduleSaveNewTask(){
   if(!scheduleGuard())return;
   const v=scheduleReadTask();if(!v)return;
   const D=scheduleData(),pObj=D.persons[parseInt(document.getElementById('sch-person-idx').value,10)||0];if(!pObj)return;
+  if(!scheduleTaskGuard(pObj.name))return;
   const dayIndex=parseInt(document.getElementById('sch-day-idx').value,10)||0,date=D.dates?.[dayIndex]||S_DATES[dayIndex]||today();
   const row=scheduleBaseRow({baslik:v.title,atanan:pObj.name,tarih:date,basTarih:date,oncelik:S_PRIO_TO_ON[v.priority]||'Normal',durum:v.durum,aciklama:JSON.stringify({type:S_TASK,dayIndex,priority:v.priority,goalId:v.goalId,role:pObj.role||''})});
   C.Gorevler.push(row);
   const sendMail=document.getElementById('sch-mail')?.checked;
   closeModalDirect();await scheduleSaveAndRefresh();
   const u=userForSchedulePerson(pObj.name);
-  if(u){notifyApi({recipients:[u.username],baslik:'Yeni görev atandı',mesaj:`${v.title}\n\nGün: ${D.days[dayIndex]||''}${v.goalId?`\nAna hedef: ${scheduleGoalName(v.goalId)}`:''}`,tur:'Görev',sayfa:'takvim',kayitId:row.id,sendEmail:sendMail}).then(()=>syncAll()).catch(e=>toast('Bildirim gönderilemedi: '+e.message,'err'));}
-  else toast('Görev kaydedildi; kişi kullanıcıyla eşleşmediği için bildirim gönderilmedi.','err');
+  if(u&&u.username!==currentUser.username){notifyApi({recipients:[u.username],baslik:'Yeni görev atandı',mesaj:`${v.title}\n\nGün: ${D.days[dayIndex]||''}${v.goalId?`\nAna hedef: ${scheduleGoalName(v.goalId)}`:''}`,tur:'Görev',sayfa:'takvim',kayitId:row.id,sendEmail:sendMail}).then(()=>syncAll()).catch(e=>toast('Bildirim gönderilemedi: '+e.message,'err'));}
 }
 function scheduleEditTask(id){
   if(!scheduleGuard())return;
   const r=C.Gorevler.find(x=>x.id===id);if(!r)return;
+  if(!scheduleTaskGuard(r.atanan))return;
   const m=scheduleTaskMeta(r)||{},D=scheduleData(),pIdx=Math.max(0,D.persons.findIndex(p=>p.name===r.atanan));
   showModal('Çizelge Görevi Düzenle',scheduleTaskForm(r,pIdx,parseInt(m.dayIndex,10)||0),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-danger" onclick="scheduleRemoveTask('${id}')">Sil</button><button class="btn btn-primary" onclick="scheduleUpdateTask('${id}')">Güncelle</button>`);
 }
 async function scheduleUpdateTask(id){
   if(!scheduleGuard())return;
+  const r0=C.Gorevler.find(x=>x.id===id);if(r0&&!scheduleTaskGuard(r0.atanan))return;
   const v=scheduleReadTask();if(!v)return;
   const r=C.Gorevler.find(x=>x.id===id);if(!r)return;
   const m=scheduleTaskMeta(r)||{};
   r.baslik=v.title;r.oncelik=S_PRIO_TO_ON[v.priority]||'Normal';r.durum=v.durum;r.aciklama=JSON.stringify({...m,type:S_TASK,priority:v.priority,goalId:v.goalId});
   closeModalDirect();await scheduleSaveAndRefresh('Görev güncellendi ✓');
 }
-async function scheduleRemoveTask(id){if(!scheduleGuard())return;if(!await confirmDialog('Bu görev silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>r.id!==id);scheduleSelected.delete(id);await scheduleSaveAndRefresh('Görev silindi.');}
-async function scheduleToggleDone(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;r.durum=r.durum==='Tamamlandı'?'Bekliyor':'Tamamlandı';await scheduleSaveAndRefresh('');}
-async function scheduleCyclePriority(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;const m=scheduleTaskMeta(r)||{},order=['red','amber','teal','blue'];m.priority=order[(order.indexOf(m.priority||S_ON_TO_PRIO[r.oncelik]||'teal')+1)%order.length];r.oncelik=S_PRIO_TO_ON[m.priority]||'Normal';r.aciklama=JSON.stringify({...m,type:S_TASK});await scheduleSaveAndRefresh('');}
+async function scheduleRemoveTask(id){if(!scheduleGuard())return;const t=C.Gorevler.find(x=>x.id===id);if(t&&!scheduleTaskGuard(t.atanan))return;if(!await confirmDialog('Bu görev silinsin mi?'))return;C.Gorevler=C.Gorevler.filter(r=>r.id!==id);scheduleSelected.delete(id);await scheduleSaveAndRefresh('Görev silindi.');}
+async function scheduleToggleDone(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;if(!scheduleTaskGuard(r.atanan))return;r.durum=r.durum==='Tamamlandı'?'Bekliyor':'Tamamlandı';await scheduleSaveAndRefresh('');}
+async function scheduleCyclePriority(id){if(!scheduleGuard())return;const r=C.Gorevler.find(x=>x.id===id);if(!r)return;if(!scheduleTaskGuard(r.atanan))return;const m=scheduleTaskMeta(r)||{},order=['red','amber','teal','blue'];m.priority=order[(order.indexOf(m.priority||S_ON_TO_PRIO[r.oncelik]||'teal')+1)%order.length];r.oncelik=S_PRIO_TO_ON[m.priority]||'Normal';r.aciklama=JSON.stringify({...m,type:S_TASK});await scheduleSaveAndRefresh('');}
 function scheduleGoalForm(g={}){return`
   <div class="form-group"><label>Ana Hedef *</label><input type="text" id="sg-title" value="${esc(g.title||'')}" placeholder="ör: Kabak çekirdeği proses standardizasyonu"></div>
   <div class="form-row"><div class="form-group"><label>Dönem</label><select id="sg-scope">${['Haftalık','Aylık','3 Aylık','6 Aylık','Yıllık'].map(s=>`<option ${g.scope===s?'selected':''}>${s}</option>`).join('')}</select></div>
   <div class="form-group"><label>Renk</label><input type="color" id="sg-color" value="${esc(g.color||'#4f9cf9')}"></div></div>
   <div class="form-group"><label>Kısa Not</label><input type="text" id="sg-note" value="${esc(g.note||'')}"></div>`;}
-function scheduleAddGoal(){if(!scheduleAdminGuard())return;showModal('Yeni Ana Hedef',scheduleGoalForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleSaveGoal()">Kaydet</button>`);}
+function scheduleAddGoal(){if(!scheduleGoalGuard())return;showModal('Yeni Ana Hedef',scheduleGoalForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleSaveGoal()">Kaydet</button>`);}
 async function scheduleSaveGoal(){
-  if(!scheduleAdminGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
+  if(!scheduleGoalGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
   const r=scheduleMetaRow(),m=scheduleMeta();m.goals=[...scheduleGoals(),{id:uid(),title,scope:document.getElementById('sg-scope').value,color:document.getElementById('sg-color').value,note:document.getElementById('sg-note').value}];r.aciklama=JSON.stringify(m);
   closeModalDirect();await scheduleSaveAndRefresh('Ana hedef eklendi ✓');
 }
-function scheduleEditGoal(id){if(!scheduleAdminGuard())return;const g=scheduleGoals().find(x=>x.id===id);if(!g)return;showModal('Ana Hedef Düzenle',scheduleGoalForm(g),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleUpdateGoal('${id}')">Güncelle</button>`);}
+function scheduleEditGoal(id){if(!scheduleGoalGuard())return;const g=scheduleGoals().find(x=>x.id===id);if(!g)return;showModal('Ana Hedef Düzenle',scheduleGoalForm(g),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="scheduleUpdateGoal('${id}')">Güncelle</button>`);}
 async function scheduleUpdateGoal(id){
-  if(!scheduleAdminGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
+  if(!scheduleGoalGuard())return;const title=document.getElementById('sg-title').value.trim();if(!title){toast('Ana hedef zorunlu.','err');return;}
   const r=scheduleMetaRow(),m=scheduleMeta();m.goals=scheduleGoals().map(g=>g.id===id?{...g,title,scope:document.getElementById('sg-scope').value,color:document.getElementById('sg-color').value,note:document.getElementById('sg-note').value}:g);r.aciklama=JSON.stringify(m);
   closeModalDirect();await scheduleSaveAndRefresh('Ana hedef güncellendi ✓');
 }
 async function scheduleRemoveGoal(id){
-  if(!scheduleAdminGuard())return;if(!await confirmDialog('Bu ana hedef silinsin mi? Görevlerdeki bağlantısı da kaldırılır.'))return;
+  if(!scheduleGoalGuard())return;if(!await confirmDialog('Bu ana hedef silinsin mi? Görevlerdeki bağlantısı da kaldırılır.'))return;
   const r=scheduleMetaRow(),m=scheduleMeta();m.goals=scheduleGoals().filter(g=>g.id!==id);r.aciklama=JSON.stringify(m);
   C.Gorevler.forEach(row=>{const tm=scheduleTaskMeta(row);if(tm&&tm.goalId===id){delete tm.goalId;row.aciklama=JSON.stringify(tm);}});
   await scheduleSaveAndRefresh('Ana hedef silindi.');
@@ -1087,6 +1113,7 @@ function scheduleDragLeave(ev){ev.currentTarget.classList.remove('drag-over');}
 async function scheduleDropTask(ev,personIdx,dayIndex){
   if(!scheduleGuard())return;ev.preventDefault();ev.currentTarget.classList.remove('drag-over');
   const id=ev.dataTransfer.getData('text/plain'),r=C.Gorevler.find(x=>x.id===id),D=scheduleData(),p=D.persons[personIdx];if(!r||!p)return;
+  if(!scheduleCanEditPerson(r.atanan)||!scheduleCanEditPerson(p.name)){toast('Yalnızca kendi görevlerini taşıyabilirsin.','err');return;}
   const m=scheduleTaskMeta(r)||{};m.dayIndex=dayIndex;m.role=p.role||'';r.atanan=p.name;r.tarih=D.dates?.[dayIndex]||S_DATES[dayIndex]||today();r.basTarih=r.tarih;r.aciklama=JSON.stringify({...m,type:S_TASK});
   await scheduleSaveAndRefresh('Görev taşındı ✓');
 }
@@ -1148,7 +1175,7 @@ async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard())return;if(
 
 // ── BİLDİRİMLER ──
 function bildirim(){
-  document.getElementById('topbar-actions').innerHTML=`${canDelete()?'<button class="btn btn-primary btn-sm" onclick="bildirimYeni()">+ Bildirim Gönder</button>':''}<button class="btn btn-ghost btn-sm" onclick="bildirimHepsiniOku()">Tümünü Okundu Yap</button>`;
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="bildirimHepsiniOku()">Tümünü Okundu Yap</button>`;
   renderBildirim();
 }
 function renderBildirim(){
@@ -1168,25 +1195,6 @@ function renderBildirim(){
 async function bildirimOku(id){const n=C.Bildirimler.find(x=>x.id===id);if(!n)return;n.okundu='true';try{await markNotificationsRead({ids:[id]});updateNotificationBadge();renderBildirim();}catch(e){toast('Hata: '+e.message,'err');}}
 async function bildirimHepsiniOku(){myNotifications().forEach(n=>n.okundu='true');try{await markNotificationsRead({all:true});updateNotificationBadge();renderBildirim();}catch(e){toast('Hata: '+e.message,'err');}}
 async function bildirimAc(id,page){await bildirimOku(id);showPage(page);}
-function bildirimYeni(){
-  const umb=isUmbrella();
-  const eligible=C.Users.filter(u=>(u.active===true||u.active==='true')&&(umb||companyAccess(u).includes(currentCompany)));
-  const opts=`<option value="all">${umb?'Tüm aktif kullanıcılar':'Bu şirketin tüm aktif kullanıcıları ('+companyLabel()+')'}</option>${eligible.map(u=>`<option value="${u.username}">${esc(u.ad||u.username)}${umb?` · ${esc(KURUMS[userKurum(u)]?.short||'')}`:''}</option>`).join('')}`;
-  showModal('Bildirim Gönder',`
-    <div class="alert alert-${umb?'green':'amber'} mb-16" style="font-size:12px">${umb?'Arşen şemsiyesi olarak tüm kullanıcılara bildirim gönderebilirsin.':'Yalnızca '+companyLabel()+' şirketine erişimi olan kullanıcılara bildirim gönderebilirsin.'}</div>
-    <div class="form-row"><div class="form-group"><label>Alıcı</label><select id="bn-kime">${opts}</select></div>
-    <div class="form-group"><label>Tür</label><select id="bn-tur"><option>Duyuru</option><option>Görev</option><option>Mesai</option><option>Sistem</option></select></div></div>
-    <div class="form-group"><label>Başlık *</label><input type="text" id="bn-baslik"></div>
-    <div class="form-group"><label>Mesaj *</label><textarea id="bn-mesaj" style="min-height:120px"></textarea></div>
-    <label style="display:flex;gap:8px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" id="bn-mail" checked style="width:auto"> Kurumsal e-postaya da gönder</label>`,
-    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="bildirimGonder()">Gönder</button>`);
-}
-async function bildirimGonder(){
-  if(!canDelete())return;const baslik=document.getElementById('bn-baslik').value.trim(),mesaj=document.getElementById('bn-mesaj').value.trim();if(!baslik||!mesaj){toast('Başlık ve mesaj zorunlu.','err');return;}
-  const kime=document.getElementById('bn-kime').value,recipients=kime==='all'?['all']:[kime];
-  closeModalDirect();loading(true,'Bildirim gönderiliyor...');
-  try{await notifyApi({recipients,baslik,mesaj,tur:document.getElementById('bn-tur').value,sayfa:'bildirim',sendEmail:document.getElementById('bn-mail').checked});await syncAll();loading(false);toast('Bildirim gönderildi ✓');showPage('bildirim',true);}catch(e){loading(false);toast('Hata: '+e.message,'err');}
-}
 
 // ── DASHBOARD ──
 function dashboard(){
@@ -1209,7 +1217,7 @@ function dashboard(){
     ${gecmis.length>0?`<div class="alert alert-red mb-16" style="cursor:pointer" onclick="kalibUyariListesi('gecmis')">⚠ Süresi geçmiş kalibrasyon (${gecmis.length}): <strong>${gecmis.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
     ${yaklasan.length>0?`<div class="alert alert-amber mb-16" style="cursor:pointer" onclick="kalibUyariListesi('yaklasan')">⚡ Kalibrasyon yaklaşıyor (${yaklasan.length}): <strong>${yaklasan.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
     ${temizlikGecmis.length>0?`<div class="alert alert-amber mb-16">🧹 Temizlik zamanı geçmiş: <strong>${temizlikGecmis.map(t=>t.gorev).join(', ')}</strong></div>`:''}
-    ${canDelete()&&mesaiPendingCount>0?`<div class="alert alert-amber mb-16">◷ Onay bekleyen ekstra mesai kaydı: <strong>${mesaiPendingCount}</strong> <button class="btn btn-amber btn-sm" style="margin-left:10px" onclick="showPage('mesai')">İncele</button></div>`:''}
+    ${isArsenAdmin()&&mesaiPendingCount>0?`<div class="alert alert-amber mb-16">◷ Onay bekleyen ekstra mesai kaydı: <strong>${mesaiPendingCount}</strong> <button class="btn btn-amber btn-sm" style="margin-left:10px" onclick="showPage('mesai')">İncele</button></div>`:''}
     <div class="grid-2 gap-16">
       <div class="card"><div class="card-header"><span class="card-title">Son Aktiviteler</span></div>
         ${son.length===0?`<div class="empty-state"><div class="empty-icon">◈</div><div>Henüz kayıt yok</div></div>`:
@@ -1220,7 +1228,37 @@ function dashboard(){
         `<div style="display:flex;flex-direction:column;gap:10px;">${C.Stok.slice(0,8).map(s=>{const pct=s.maksimum>0?Math.min(100,Math.round(s.miktar/s.maksimum*100)):50;const renk=s.miktar<=(s.kritikSeviye||0)?'#e74c3c':s.miktar<=(s.kritikSeviye||0)*2?'#f5a623':'#3ecf8e';return`<div><div class="flex justify-between" style="font-size:12px;margin-bottom:4px"><span>${s.ad}${s.lab?` <span style="color:var(--text3);font-size:10px">[${s.lab}]</span>`:''}</span><span class="text-mono" style="color:${renk}">${s.miktar} ${s.birim||''}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${renk}"></div></div></div>`;}).join('')}</div>`}
       </div>
     </div>
-    <div class="card mt-16">${scheduleHTML(true)}</div>`;
+    <div class="card mt-16">${scheduleHTML(true)}</div>
+    <div id="team-schedule-overview" class="mt-16"></div>`;
+  renderTeamScheduleOverview();
+}
+// Cross-company, read-only "whole team" weekly plan for the dashboard.
+let _teamScheduleCache=null,_teamScheduleAt=0;
+async function renderTeamScheduleOverview(){
+  const box=document.getElementById('team-schedule-overview');if(!box)return;
+  let data=_teamScheduleCache;
+  if(!data||Date.now()-_teamScheduleAt>60000){
+    try{data=await driveApi('scheduleOverview');_teamScheduleCache=data;_teamScheduleAt=Date.now();}
+    catch(e){box.innerHTML='';return;}
+  }
+  const rows=(data&&data.rows)||[];
+  const byCompany={};
+  rows.forEach(r=>{const c=(r.company||'fuwell').toLowerCase();(byCompany[c]=byCompany[c]||[]).push(r);});
+  const sections=Object.keys(COMPANIES).map(c=>{
+    const cr=byCompany[c]||[];if(!cr.length)return '';
+    const meta=scheduleJSON((cr.find(r=>r.baslik===S_META)||{}).aciklama,{});
+    const days=Array.isArray(meta.days)&&meta.days.length?meta.days:(COMPANIES[c].mode==='manufacturing'?(SYNTEGRA_CIZELGE?.days||[]):(GOREV_CIZELGE?.days||[]));
+    const persons=[];const seen=new Set();
+    cr.filter(r=>r.baslik===S_PERSON).forEach(r=>{const n=(r.atanan||'').trim();if(n&&!seen.has(n)){seen.add(n);persons.push(n);}});
+    const tasks={};
+    cr.forEach(r=>{const m=scheduleJSON(r.aciklama,{});if(m.type!==S_TASK)return;const n=(r.atanan||'').trim()||'Genel';if(!seen.has(n)){seen.add(n);persons.push(n);}const di=Math.max(0,parseInt(m.dayIndex,10)||0);const k=n+'-'+di;(tasks[k]=tasks[k]||[]).push({t:r.baslik||'Görev',p:m.priority||'teal',done:r.durum==='Tamamlandı'});});
+    if(!persons.length)return '';
+    const acc=COMPANIES[c].accent;
+    return `<div class="card mt-16"><div class="card-header"><span class="card-title"><span class="badge" style="color:${acc};border:1px solid ${acc};background:transparent">${esc(COMPANIES[c].short)}</span> Haftalık Görev Planı</span></div>
+      <div class="table-wrap"><table class="schedule-table"><thead><tr><th style="width:130px">Ekip</th>${days.map(d=>`<th>${esc(d)}</th>`).join('')}</tr></thead>
+      <tbody>${persons.map(n=>`<tr><td class="schedule-person"><strong>${esc(n)}</strong></td>${days.map((_,idx)=>{const ts=tasks[n+'-'+idx]||[];return `<td class="schedule-cell">${ts.length?ts.map(t=>`<div class="schedule-task ${t.done?'done':''}"><i class="schedule-priority ${t.p}"></i><span>${esc(t.t)}</span></div>`).join(''):'<span class="text-muted text-sm">—</span>'}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+  }).filter(Boolean).join('');
+  box.innerHTML=sections?`<div class="schedule-sub mb-8" style="opacity:.8">Tüm ekip — şirket fark etmeksizin (salt görüntüleme)</div>${sections}`:'';
 }
 // Calibration alert → list + assign to a user (sends notification).
 function kalibUyariListesi(tip){
@@ -3267,7 +3305,7 @@ async function iletisimGuncelle(id){const v=iletisimOku();if(!v)return;const idx
 async function iletisimSil(id){if(!canDelete()){toast('Kişi silmek için admin yetkisi gerekli.','err');return;}if(!await confirmDialog('Bu iletişim kaydı silinsin mi?'))return;C.IletisimKisileri=C.IletisimKisileri.filter(x=>x.id!==id);renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
 
 // ── DOSYA DEPOLAMA ──
-let fileCache=[],fileSearch='',fileFolder='';
+let fileTree={folders:[],files:[],breadcrumb:[],folderId:'root',rootId:''},fileSearch='',fileSort='new';
 async function driveApi(action,payload={}){
   const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,token:authToken,company:currentCompany,...payload})});
   const data=await res.json();if(data.error)throw new Error(data.error);return data;
@@ -3276,45 +3314,63 @@ function fileSize(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return 
 function fileIcon(mime,name){const n=(name||'').toLowerCase();if((mime||'').includes('image'))return'▧';if(n.endsWith('.pdf'))return'▣';if(n.match(/\.(xlsx|xls|csv)$/))return'▦';if(n.match(/\.(docx|doc)$/))return'▤';return'◇';}
 function fileToBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=reject;r.readAsDataURL(file);});}
 async function dosyalar(){
-  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="dosyaModal()">+ Dosya Yükle</button>`;
-  await renderDosyalar();
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="dosyaKlasorYeni()">+ Klasör</button><button class="btn btn-primary btn-sm" onclick="dosyaModal()">+ Dosya Yükle</button>`;
+  await loadFolder(fileTree.folderId||'root');
 }
-async function renderDosyalar(q=fileSearch,folder=fileFolder){
-  fileSearch=q;fileFolder=folder;
-  document.getElementById('content').innerHTML=`<div class="empty-state"><div class="spinner" style="margin:0 auto 12px"></div><div>Drive dosyaları yükleniyor...</div></div>`;
+async function loadFolder(folderId){
+  document.getElementById('content').innerHTML=`<div class="empty-state"><div class="spinner" style="margin:0 auto 12px"></div><div>Drive klasörü yükleniyor...</div></div>`;
   try{
-    const data=await driveApi('listFiles');fileCache=data.files||[];
-    const folders=[...new Set(fileCache.map(f=>f.folder||'Genel'))].sort((a,b)=>a.localeCompare(b,'tr'));
-    let rows=[...fileCache];
-    if(folder)rows=rows.filter(f=>(f.folder||'Genel')===folder);
-    if(q){const s=q.toLowerCase();rows=rows.filter(f=>(f.name||'').toLowerCase().includes(s)||(f.description||'').toLowerCase().includes(s)||(f.folder||'').toLowerCase().includes(s));}
-    rows.sort((a,b)=>new Date(b.created||0)-new Date(a.created||0));
-    document.getElementById('content').innerHTML=`
-      <div class="filter-bar">
-        <div class="search-bar" style="min-width:260px;flex:1"><span class="search-icon">⌕</span><input type="text" placeholder="Dosya ara..." value="${esc(q)}" oninput="renderDosyalar(this.value,fileFolder)"></div>
-        <button class="filter-btn ${folder===''?'active':''}" onclick="renderDosyalar(fileSearch,'')">Tümü (${fileCache.length})</button>
-        ${folders.map(f=>`<button class="filter-btn ${folder===f?'active':''}" onclick="renderDosyalar(fileSearch,${JSON.stringify(f).replace(/"/g,'&quot;')})">${esc(f)}</button>`).join('')}
-      </div>
-      ${rows.length?`<div class="file-grid">${rows.map(f=>`
-        <div class="file-card">
-          <div class="flex gap-12"><div class="file-icon">${fileIcon(f.mimeType,f.name)}</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${esc(f.folder||'Genel')} · ${fileSize(f.size)}</div></div></div>
-          ${f.description?`<div class="text-sm text-muted">${esc(f.description)}</div>`:''}
-          <div class="file-meta">Yükleyen: ${esc(f.uploadedBy||'—')}<br>${fmtDt(f.created)}</div>
-          <div class="file-actions"><a class="btn btn-ghost btn-sm" href="${esc(f.url)}" target="_blank">Aç ↗</a><a class="btn btn-ghost btn-sm" href="${esc(f.downloadUrl||f.url)}" target="_blank">İndir</a>${canDelete()?`<button class="btn btn-danger btn-sm" onclick="dosyaSil('${f.id}')">Sil</button>`:''}</div>
-        </div>`).join('')}</div>`:`<div class="empty-state"><div class="empty-icon">▣</div><div>Dosya bulunamadı.</div></div>`}`;
+    const data=await driveApi('listFolder',{folderId});
+    fileTree={folders:data.folders||[],files:data.files||[],breadcrumb:data.breadcrumb||[],folderId:data.folderId||'root',rootId:data.rootId||''};
+    renderDosyalar();
   }catch(e){
-    document.getElementById('content').innerHTML=`<div class="alert alert-amber">Drive bağlantısı henüz aktif değil. Apps Script dosya depolama kodunu ekleyip deployment güncellendiğinde bu sayfa çalışacak.<br><br><strong>Hata:</strong> ${esc(e.message)}</div>`;
+    document.getElementById('content').innerHTML=`<div class="alert alert-amber">Drive klasör sistemi henüz aktif değil. Apps Script kodunu güncelleyip yeni deployment aldığında bu sayfa çalışacak.<br><br><strong>Hata:</strong> ${esc(e.message)}</div>`;
   }
 }
+function renderDosyalar(){
+  const s=fileSearch.toLowerCase();
+  let folders=[...fileTree.folders],files=[...fileTree.files];
+  if(s){folders=folders.filter(f=>(f.name||'').toLowerCase().includes(s));files=files.filter(f=>(f.name||'').toLowerCase().includes(s)||(f.description||'').toLowerCase().includes(s));}
+  if(fileSort==='old'){files.sort((a,b)=>new Date(a.created||0)-new Date(b.created||0));}
+  else if(fileSort==='name'){files.sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));}
+  else{files.sort((a,b)=>new Date(b.created||0)-new Date(a.created||0));}
+  const crumbs=fileTree.breadcrumb.map((c,i)=>`<span class="file-crumb" onclick="loadFolder('${c.id}')" style="cursor:pointer;color:${i===fileTree.breadcrumb.length-1?'var(--text)':'var(--accent)'}">${esc(c.name)}</span>`).join('<span style="color:var(--text3)"> / </span>');
+  document.getElementById('content').innerHTML=`
+    <div class="card" style="padding:12px 14px;margin-bottom:14px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">▣ ${crumbs}</div></div>
+    <div class="filter-bar">
+      <div class="search-bar" style="min-width:240px;flex:1"><span class="search-icon">⌕</span><input type="text" placeholder="Bu klasörde ara..." value="${esc(fileSearch)}" oninput="fileSearch=this.value;renderDosyalar()"></div>
+      <button class="filter-btn ${fileSort==='new'?'active':''}" onclick="fileSort='new';renderDosyalar()">En Yeni</button>
+      <button class="filter-btn ${fileSort==='old'?'active':''}" onclick="fileSort='old';renderDosyalar()">En Eski</button>
+      <button class="filter-btn ${fileSort==='name'?'active':''}" onclick="fileSort='name';renderDosyalar()">Ada Göre</button>
+    </div>
+    ${(folders.length||files.length)?`<div class="file-grid">
+      ${folders.map(f=>`<div class="file-card" style="cursor:pointer" onclick="loadFolder('${f.id}')">
+        <div class="flex gap-12"><div class="file-icon">▤</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">Klasör · ${fmtDt(f.created)}</div></div></div>
+        <div class="file-actions" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="loadFolder('${f.id}')">Aç →</button><button class="btn btn-danger btn-sm" onclick="dosyaTreeSil('${f.id}',true,${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Sil</button></div>
+      </div>`).join('')}
+      ${files.map(f=>`<div class="file-card">
+        <div class="flex gap-12"><div class="file-icon">${fileIcon(f.mimeType,f.name)}</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${fileSize(f.size)}</div></div></div>
+        ${f.description?`<div class="text-sm text-muted">${esc(f.description)}</div>`:''}
+        <div class="file-meta">Yükleyen: ${esc(f.uploadedBy||'—')}<br>${fmtDt(f.created)}</div>
+        <div class="file-actions"><a class="btn btn-ghost btn-sm" href="${esc(f.url)}" target="_blank">Aç ↗</a><a class="btn btn-ghost btn-sm" href="${esc(f.downloadUrl||f.url)}" target="_blank">İndir</a><button class="btn btn-danger btn-sm" onclick="dosyaTreeSil('${f.id}',false,${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Sil</button></div>
+      </div>`).join('')}
+    </div>`:`<div class="empty-state"><div class="empty-icon">▣</div><div>${fileSearch?'Eşleşen öğe yok.':'Bu klasör boş. Klasör oluşturabilir veya dosya yükleyebilirsiniz.'}</div></div>`}`;
+}
+async function dosyaKlasorYeni(){
+  const name=await promptDialog('Klasör adı','','Yeni Klasör');if(name===null||!name.trim())return;
+  loading(true,'Klasör oluşturuluyor...');
+  try{await driveApi('createTreeFolder',{parentId:fileTree.folderId,name:name.trim()});loading(false);toast('Klasör oluşturuldu ✓');await loadFolder(fileTree.folderId);}
+  catch(e){loading(false);toast('Klasör hatası: '+e.message,'err');}
+}
 function dosyaModal(){
-  showModal('Drive Dosya Yükle',`
+  showModal('Dosya Yükle',`
+    <div class="alert alert-blue mb-16" style="font-size:12px">Dosya, içinde bulunduğun klasöre yüklenir: <strong>${esc((fileTree.breadcrumb[fileTree.breadcrumb.length-1]||{}).name||'Ana klasör')}</strong></div>
     <div class="file-drop">
       <div class="td-main">Dosya seç</div>
-      <div class="text-sm text-muted mt-8">Dosyalar Google Drive'daki Arsen Lab klasörüne yüklenir. Büyük dosyalarda 20 MB altı önerilir.</div>
+      <div class="text-sm text-muted mt-8">20 MB altı dosyalar önerilir (Apps Script sınırı).</div>
       <input type="file" id="file-input">
     </div>
-    <div class="form-row mt-16"><div class="form-group"><label>Klasör / Kategori</label><input type="text" id="file-folder" value="${esc(fileFolder||'Genel')}" placeholder="Genel, Analiz, Satın Alma..."></div>
-    <div class="form-group"><label>Görünecek Ad (opsiyonel)</label><input type="text" id="file-name" placeholder="Boşsa dosya adı kullanılır"></div></div>
+    <div class="form-group mt-16"><label>Görünecek Ad (opsiyonel)</label><input type="text" id="file-name" placeholder="Boşsa dosya adı kullanılır"></div>
     <div class="form-group"><label>Açıklama</label><textarea id="file-desc" placeholder="Kısa not, proje veya içerik bilgisi"></textarea></div>`,
     `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="dosyaYukle()">Yükle</button>`);
 }
@@ -3324,15 +3380,14 @@ async function dosyaYukle(){
   loading(true,'Dosya Drive’a yükleniyor...');
   try{
     const base64=await fileToBase64(file);
-    await driveApi('uploadFile',{name:document.getElementById('file-name').value.trim()||file.name,mimeType:file.type||'application/octet-stream',base64,folder:document.getElementById('file-folder').value.trim()||'Genel',description:document.getElementById('file-desc').value,uploadedBy:currentUser.ad||currentUser.username});
-    closeModalDirect();loading(false);toast('Dosya yüklendi ✓');await renderDosyalar(fileSearch,fileFolder);
+    await driveApi('uploadTreeFile',{folderId:fileTree.folderId,name:document.getElementById('file-name').value.trim()||file.name,mimeType:file.type||'application/octet-stream',base64,description:document.getElementById('file-desc').value});
+    closeModalDirect();loading(false);toast('Dosya yüklendi ✓');await loadFolder(fileTree.folderId);
   }catch(e){loading(false);toast('Yükleme hatası: '+e.message,'err');}
 }
-async function dosyaSil(id){
-  if(!canDelete()){toast('Dosyayı yalnızca admin silebilir.','err');return;}
-  if(!await confirmDialog('Bu dosya Drive’dan silinsin mi?'))return;
-  loading(true,'Dosya siliniyor...');
-  try{await driveApi('deleteFile',{id});loading(false);toast('Dosya silindi.','err');await renderDosyalar(fileSearch,fileFolder);}
+async function dosyaTreeSil(id,isFolder,name){
+  if(!await confirmDialog(`"${name}" ${isFolder?'klasörü ve içindeki tüm dosyalar':'dosyası'} silinsin mi?`))return;
+  loading(true,'Siliniyor...');
+  try{await driveApi('deleteTreeItem',{id,isFolder});loading(false);toast('Silindi.','err');await loadFolder(fileTree.folderId);}
   catch(e){loading(false);toast('Silme hatası: '+e.message,'err');}
 }
 
@@ -3340,7 +3395,7 @@ async function dosyaSil(id){
 let mesaiRows=[],mesaiFilter='all',mesaiPendingCount=0;
 async function refreshMesaiBadge(){
   const b=document.getElementById('mesai-badge');if(!b)return;
-  if(!canDelete()){b.style.display='none';return;}
+  if(!isArsenAdmin()){b.style.display='none';return;}
   try{
     const data=await driveApi('listOvertime');mesaiPendingCount=(data.records||[]).filter(r=>r.durum==='Bekliyor').length;
     if(mesaiPendingCount>0){b.textContent=mesaiPendingCount;b.style.display='';}else b.style.display='none';
@@ -3383,7 +3438,7 @@ async function renderMesai(filter=mesaiFilter){
           <td><strong style="color:var(--text)">${(parseFloat(r.toplamSaat)||0).toFixed(1)}</strong> saat</td>
           <td>${mesaiStatusBadge(r.durum)}</td>
           <td class="mesai-note">${esc(r.aciklama||'—')}${r.adminNot?`<div class="text-sm text-muted mt-8">Admin notu: ${esc(r.adminNot)}</div>`:''}</td>
-          <td>${canDelete()&&r.durum==='Bekliyor'?`<button class="btn btn-success btn-sm" onclick="mesaiOnay('${r.id}','Onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="mesaiOnay('${r.id}','Reddedildi')">Reddet</button>`:`<span class="text-muted text-sm">${r.onaylayan?`Onaylayan: ${esc(r.onaylayan)}`:'—'}</span>`}</td>
+          <td>${isArsenAdmin()&&r.durum==='Bekliyor'?`<button class="btn btn-success btn-sm" onclick="mesaiOnay('${r.id}','Onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="mesaiOnay('${r.id}','Reddedildi')">Reddet</button>`:`<span class="text-muted text-sm">${r.onaylayan?`Onaylayan: ${esc(r.onaylayan)}`:'—'}</span>`}</td>
         </tr>`).join(''):`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">◷</div><div>Mesai kaydı yok.</div></div></td></tr>`}
       </tbody></table></div>`;
   }catch(e){
@@ -3505,7 +3560,9 @@ function synDashboard(){
     <div class="grid-2 gap-16">
       <div class="card"><div class="card-header"><span class="card-title">Aktif Projeler</span></div>${synProjectTable(C.SynProjeler.slice(0,8),false)}</div>
       <div class="card"><div class="card-header"><span class="card-title">Yaklaşan Terminler</span></div>${synTimelineTable([...C.SynTimeline].sort((a,b)=>new Date(a.bitis||'2999')-new Date(b.bitis||'2999')).slice(0,8),false)}</div>
-    </div>`;
+    </div>
+    <div id="team-schedule-overview" class="mt-16"></div>`;
+  renderTeamScheduleOverview();
 }
 function synProjectTable(rows,actions=true){return rows.length?`<div class="table-wrap"><table><thead><tr><th>Kod</th><th>Proje</th><th>Müşteri</th><th>Aşama</th><th>Termin</th><th>İlerleme</th>${actions?'<th>İşlem</th>':''}</tr></thead><tbody>${rows.map(p=>`<tr>
   <td class="text-mono">${esc(p.projeKodu||'—')}</td><td class="td-main">${esc(p.projeAdi||'—')}</td><td>${esc(p.musteri||'—')}</td>
@@ -3595,16 +3652,17 @@ function xExportAll(){const wb=XLSX.utils.book_new();[['Stok','Stok'],['StokHare
 
 // ── ADMİN ──
 function admin(){
-  if(!canDelete()){document.getElementById('content').innerHTML='<div class="empty-state"><div class="empty-icon">⊘</div><div>Erişim yetkiniz yok.</div></div>';return;}
+  if(!isArsenAdmin()){document.getElementById('content').innerHTML='<div class="empty-state"><div class="empty-icon">⊘</div><div>Kullanıcı yönetimi yalnızca Arşen admin tarafından yapılır.</div></div>';return;}
   document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="kullaniciYeni()">+ Yeni Kullanıcı</button>`;renderAdmin();
 }
 function renderAdmin(){
   const missingEmails=C.Users.filter(u=>!normEmail(u.email)).length;
-  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Kurum</th><th>Erişim</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
+  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Kurum</th><th>Roller</th><th>Erişim</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
     <td class="td-main">${u.ad||'—'}</td><td class="text-mono">${u.username}</td>
     <td>${u.email?`<span class="text-mono" style="font-size:11px">${esc(u.email)}</span>`:`<span class="badge badge-amber">Eksik</span>`}</td>
     <td><span class="badge ${u.role==='admin'?'badge-blue':'badge-gray'}">${u.role==='admin'?'Admin':'Kullanıcı'}</span></td>
     <td><span class="badge ${userKurum(u)===UMBRELLA_KURUM?'badge-blue':'badge-gray'}">${esc(KURUMS[userKurum(u)]?.short||userKurum(u))}</span></td>
+    <td>${userRoller(u).length?userRoller(u).map(r=>`<span class="badge badge-gray" style="margin:1px 2px;font-size:10px">${esc(r)}</span>`).join(''):'<span class="text-muted text-sm">—</span>'}</td>
     <td>${companyAccess(u).map(k=>`<span class="badge" style="margin-right:4px;color:${COMPANIES[k].accent};border:1px solid ${COMPANIES[k].accent};background:transparent">${esc(COMPANIES[k].short)}</span>`).join('')}</td>
     <td><span class="badge ${u.active===true||u.active==='true'?'badge-green':'badge-red'}">${u.active===true||u.active==='true'?'Aktif':'Pasif'}</span></td>
     <td>${u.id!==currentUser.id?`<button class="btn btn-ghost btn-sm" onclick="kullaniciDuzenle('${u.id}')">Düzenle</button><button class="btn btn-${u.active===true||u.active==='true'?'danger':'success'} btn-sm" onclick="kullaniciToggle('${u.id}')">${u.active===true||u.active==='true'?'Pasif Et':'Aktif Et'}</button>`:'<span class="text-muted text-sm">Mevcut oturum</span>'}</td>
@@ -3616,9 +3674,13 @@ function uForm(u={}){const uk=userKurum(u);return`
   <div class="form-row"><div class="form-group"><label>${u.id?'Yeni Şifre (boş=değişmez)':'Şifre *'}</label><input type="password" id="u-pass" placeholder="••••••••"></div>
   <div class="form-group"><label>Rol</label><select id="u-rol"><option value="user" ${u.role==='user'?'selected':''}>Kullanıcı</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></div></div>
   <div class="form-group"><label>Bağlı Olduğu Kurum *</label><select id="u-kurum">${Object.entries(KURUMS).map(([k,c])=>`<option value="${k}" ${uk===k?'selected':''}>${esc(c.label)}</option>`).join('')}</select></div>
-  <div class="text-sm text-muted">Arşen Proses kademesi her iki şirketi de yönetebilir. Fuwell veya Syntegra seçilirse kullanıcı yalnızca o şirketin verilerine erişir. Şirketler arası geçiş yapamaz. E-posta boşsa kullanıcı sisteme giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
+  <div class="form-group"><label>Görevler / Roller</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 14px">${USER_ROLES.map(r=>`<label style="display:flex;gap:6px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" class="u-rol-chk" value="${esc(r)}" ${userHasRole(u,r)?'checked':''} style="width:auto"> ${esc(r)}</label>`).join('')}</div>
+    <div class="text-sm text-muted mt-8">Roller, onay/atama süreçlerinin isim seçmeden otomatik akması için kullanılır (ör. Onaylayıcı, Satınalma Sorumlusu).</div>
+  </div>
+  <div class="text-sm text-muted">Arşen Proses kademesi her iki şirketi de yönetebilir; Admin rolü + Arşen kurumu = tam yetkili koordinatör. Fuwell veya Syntegra seçilen Admin yalnızca kendi şirketinin yöneticisidir (kullanıcı yönetimi ve mesai onayı Arşen'de kalır). E-posta boşsa kullanıcı giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
 function kullaniciYeni(){showModal('Yeni Kullanıcı',uForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciKaydet()">Kaydet</button>`);}
-function readUserCompanyFields(){const k=document.getElementById('u-kurum').value;const access=k===UMBRELLA_KURUM?Object.keys(COMPANIES):[COMPANIES[k]?k:'fuwell'];return {kurum:k,companyAccess:access.join(','),defaultCompany:access[0]};}
+function readUserCompanyFields(){const k=document.getElementById('u-kurum').value;const access=k===UMBRELLA_KURUM?Object.keys(COMPANIES):[COMPANIES[k]?k:'fuwell'];const roller=[...document.querySelectorAll('.u-rol-chk:checked')].map(c=>c.value).join(',');return {kurum:k,companyAccess:access.join(','),defaultCompany:access[0],roller};}
 async function kullaniciKaydet(){const ad=document.getElementById('u-ad').value.trim();const un=document.getElementById('u-un').value.trim();const email=normEmail(document.getElementById('u-email').value);const p=document.getElementById('u-pass').value;if(!ad||!un||!p){toast('Tüm alanlar zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(C.Users.find(u=>u.username===un)){toast('Bu kullanıcı adı zaten var.','err');return;}if(email&&C.Users.find(u=>normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}C.Users.push({id:uid(),ad,username:un,passwordHash:hash(p),role:document.getElementById('u-rol').value,email,...readUserCompanyFields(),active:'true',olusturma:new Date().toISOString()});closeModalDirect();renderAdmin();save('Users').then(()=>toast('Kullanıcı eklendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function kullaniciDuzenle(id){const u=C.Users.find(x=>x.id===id);if(!u)return;showModal('Kullanıcı Düzenle',uForm(u),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciGuncelle('${id}')">Güncelle</button>`);}
 async function kullaniciGuncelle(id){const ad=document.getElementById('u-ad').value.trim();const email=normEmail(document.getElementById('u-email').value);if(!ad){toast('Ad zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(email&&C.Users.find(u=>u.id!==id&&normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}const idx=C.Users.findIndex(x=>x.id===id);const p=document.getElementById('u-pass').value;C.Users[idx]={...C.Users[idx],ad,email,role:document.getElementById('u-rol').value,...readUserCompanyFields()};if(p)C.Users[idx].passwordHash=hash(p);closeModalDirect();renderAdmin();save('Users').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}

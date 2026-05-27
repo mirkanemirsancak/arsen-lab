@@ -7,7 +7,7 @@ var COMPANIES = ['fuwell', 'syntegra'];
 var KURUMS = ['arsen', 'fuwell', 'syntegra'];
 var UMBRELLA_KURUM = 'arsen';
 var DEFAULT_SHEET_HEADERS = {
-  Users: ['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Users: ['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma','roller'],
   Stok: ['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
   StokHareketleri: ['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
   Metodlar: ['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
@@ -64,6 +64,10 @@ function userKurum(user) {
 }
 
 function isUmbrella(user) { return userKurum(user) === UMBRELLA_KURUM; }
+function isAdmin(user) { return user && user.role === 'admin'; }
+// Only the Arşen (umbrella) admin manages users and approves overtime; sub-firm
+// admins are full admins inside their own company but cannot do these.
+function isArsenAdmin(user) { return isAdmin(user) && isUmbrella(user); }
 
 function companyAccess(user) {
   if (isUmbrella(user)) return COMPANIES.slice();
@@ -185,7 +189,8 @@ function publicUser(user) {
     companyAccess: accessList.join(','),
     defaultCompany: def,
     active: user.active === true || user.active === 'true' ? 'true' : 'false',
-    olusturma: user.olusturma || ''
+    olusturma: user.olusturma || '',
+    roller: user.roller || ''
   };
 }
 
@@ -259,7 +264,7 @@ function valuesForUsers(user) {
     var row = [];
     for (var j = 0; j < headers.length; j++) {
       var key = headers[j];
-      row.push(user.role === 'admin' ? (data.rows[i][key] || '') : (key === 'passwordHash' ? '' : (data.rows[i][key] || '')));
+      row.push(key === 'passwordHash' ? (isArsenAdmin(user) ? (data.rows[i][key] || '') : '') : (data.rows[i][key] || ''));
     }
     values.push(row);
   }
@@ -301,6 +306,28 @@ function readSheet(name, user, company) {
   return valuesForCompany(name, user, company);
 }
 
+// Read-only weekly-schedule rows across ALL companies, so every user's dashboard
+// can show the whole team's task planning regardless of their own company.
+var SCHEDULE_MARKERS = ['__CIZELGE_META__', '__CIZELGE_PERSON__', '__CIZELGE_TASK__'];
+function scheduleOverview(user) {
+  var sh = sheetByName('Gorevler');
+  var values = sh.getDataRange().getValues();
+  if (!values.length) return { ok: true, rows: [] };
+  var headers = values[0].map(function(h) { return String(h || ''); });
+  var bIdx = headers.indexOf('baslik'), aIdx = headers.indexOf('aciklama');
+  var rows = [];
+  for (var i = 1; i < values.length; i++) {
+    var baslik = bIdx >= 0 ? String(values[i][bIdx] || '') : '';
+    var acik = aIdx >= 0 ? String(values[i][aIdx] || '') : '';
+    var isSchedule = SCHEDULE_MARKERS.indexOf(baslik) >= 0 || acik.indexOf('__CIZELGE_TASK__') >= 0;
+    if (!isSchedule) continue;
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) obj[headers[j]] = values[i][j] === undefined ? '' : String(values[i][j]);
+    rows.push(obj);
+  }
+  return { ok: true, rows: rows };
+}
+
 function readSheets(names, user, company) {
   var normCompany = normalizeCompany(company);
   var key = 'br_' + (user.username || '') + '_' + normCompany + '_' + _batchVersion() + '_' + names.length;
@@ -336,7 +363,7 @@ function readSheets(names, user, company) {
 }
 
 function writeSheet(name, values, user, company) {
-  if (name === 'Users' && user.role !== 'admin') throw new Error('Kullanici yonetimi icin admin yetkisi gerekli.');
+  if (name === 'Users' && !isArsenAdmin(user)) throw new Error('Kullanici yonetimi icin Arşen admin yetkisi gerekli.');
   if (name === 'Bildirimler') throw new Error('Bildirimler icin bildirim aksiyonlarini kullanin.');
   company = requireCompany(user, company);
   var sh = sheetByName(name);
@@ -435,22 +462,23 @@ function appendNotification(target, data, user) {
   return row;
 }
 
+// Assignment notifications: any authenticated user may trigger one when they
+// assign/select someone in any tab. There is no manual "broadcast to all" any
+// more — recipients must be explicit usernames. A sender who is not umbrella can
+// only notify users who share access to the current company.
 function createNotification(data, user) {
-  if (user.role !== 'admin') throw new Error('Bildirim gondermek icin admin yetkisi gerekli.');
   var company = requireCompany(user, data.company);
   if (!data.baslik || !data.mesaj) throw new Error('Bildirim basligi ve mesaji gerekli.');
   var sender_isUmbrella = isUmbrella(user);
-  var recipients = data.recipients || [];
-  var targets = [];
-  if (recipients.indexOf('all') >= 0) targets = activeUsers().filter(function(u) { return companyAccess(u).indexOf(company) >= 0; });
-  else {
-    for (var i = 0; i < recipients.length; i++) {
-      var target = findUser(recipients[i]);
-      if (!target || !(target.active === true || target.active === 'true')) continue;
-      // Sub-firm admin can only message users who have access to this company.
-      if (!sender_isUmbrella && companyAccess(target).indexOf(company) < 0) continue;
-      targets.push(target);
-    }
+  var recipients = (data.recipients || []).filter(function(r) { return r && r !== 'all'; });
+  var seen = {}, targets = [];
+  for (var i = 0; i < recipients.length; i++) {
+    if (seen[recipients[i]]) continue;
+    seen[recipients[i]] = true;
+    var target = findUser(recipients[i]);
+    if (!target || !(target.active === true || target.active === 'true')) continue;
+    if (!sender_isUmbrella && companyAccess(target).indexOf(company) < 0) continue;
+    targets.push(target);
   }
   if (!targets.length) throw new Error('Gecerli alici bulunamadi.');
   var created = [];
@@ -613,6 +641,95 @@ function deleteFile(data, user) {
   return { ok: true };
 }
 
+// ── DRIVE FOLDER TREE (per-company, real subfolders, navigable like Drive) ──
+function companyDisplayName(company) { return company === 'syntegra' ? 'Syntegra' : 'Fuwell'; }
+function companyFilesRoot(company) {
+  var root = rootFolder();
+  var name = 'Dosyalar - ' + companyDisplayName(company);
+  var it = root.getFoldersByName(name);
+  return it.hasNext() ? it.next() : root.createFolder(name);
+}
+function folderIsWithin(folder, ancestorId) {
+  var cur = folder;
+  for (var g = 0; g < 60; g++) {
+    if (cur.getId() === ancestorId) return true;
+    var ps = cur.getParents();
+    if (!ps.hasNext()) return false;
+    cur = ps.next();
+  }
+  return false;
+}
+function resolveTreeFolder(company, folderId) {
+  var croot = companyFilesRoot(company);
+  if (!folderId || folderId === 'root') return croot;
+  var f;
+  try { f = DriveApp.getFolderById(folderId); } catch (e) { throw new Error('Klasor bulunamadi.'); }
+  if (f.getId() !== croot.getId() && !folderIsWithin(f, croot.getId())) throw new Error('Bu klasore erisim yetkiniz yok.');
+  return f;
+}
+function treeFileInfo(file) {
+  var desc = file.getDescription() || '';
+  return { id: file.getId(), name: file.getName(), type: 'file', mimeType: file.getMimeType(), size: file.getSize(), url: file.getUrl(), downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId(), created: file.getDateCreated(), updated: file.getLastUpdated(), uploadedBy: metaValue(desc, 'Yukleyen'), description: cleanDescription(desc) };
+}
+function listFolder(user, company, folderId) {
+  company = requireCompany(user, company);
+  var croot = companyFilesRoot(company);
+  var folder = resolveTreeFolder(company, folderId);
+  var crumbs = [], cur = folder;
+  for (var g = 0; g < 60; g++) {
+    crumbs.unshift({ id: cur.getId(), name: cur.getId() === croot.getId() ? companyDisplayName(company) : cur.getName() });
+    if (cur.getId() === croot.getId()) break;
+    var ps = cur.getParents();
+    if (!ps.hasNext()) break;
+    cur = ps.next();
+  }
+  var folders = [], it = folder.getFolders();
+  while (it.hasNext()) { var sf = it.next(); folders.push({ id: sf.getId(), name: sf.getName(), type: 'folder', created: sf.getDateCreated(), updated: sf.getLastUpdated() }); }
+  var files = [], fit = folder.getFiles();
+  while (fit.hasNext()) files.push(treeFileInfo(fit.next()));
+  folders.sort(function(a, b) { return String(a.name).localeCompare(String(b.name)); });
+  files.sort(function(a, b) { return new Date(b.created).getTime() - new Date(a.created).getTime(); });
+  return { ok: true, rootId: croot.getId(), folderId: folder.getId(), breadcrumb: crumbs, folders: folders, files: files };
+}
+function createTreeFolder(user, company, parentId, name) {
+  company = requireCompany(user, company);
+  var parent = resolveTreeFolder(company, parentId);
+  var safe = String(name || '').replace(/[\\/]/g, '-').trim();
+  if (!safe) throw new Error('Klasor adi gerekli.');
+  if (parent.getFoldersByName(safe).hasNext()) throw new Error('Bu isimde klasor zaten var.');
+  var f = parent.createFolder(safe);
+  return { ok: true, folder: { id: f.getId(), name: f.getName(), type: 'folder', created: f.getDateCreated(), updated: f.getLastUpdated() } };
+}
+function uploadTreeFile(user, company, folderId, name, base64, mimeType, description) {
+  company = requireCompany(user, company);
+  if (!base64 || !name) throw new Error('Dosya bilgisi eksik.');
+  var folder = resolveTreeFolder(company, folderId);
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType || 'application/octet-stream', name);
+  var file = folder.createFile(blob);
+  file.setDescription((description || '') + '\nYukleyen: ' + (user.ad || user.username || '') + '\nYuklemeTarihi: ' + new Date().toISOString());
+  return { ok: true, file: treeFileInfo(file) };
+}
+function deleteTreeItem(user, company, id, isFolder) {
+  company = requireCompany(user, company);
+  if (!id) throw new Error('Kimlik eksik.');
+  var croot = companyFilesRoot(company);
+  if (isFolder === true || isFolder === 'true') {
+    var folder;
+    try { folder = DriveApp.getFolderById(id); } catch (e) { throw new Error('Klasor bulunamadi.'); }
+    if (folder.getId() === croot.getId()) throw new Error('Ana klasor silinemez.');
+    if (!folderIsWithin(folder, croot.getId())) throw new Error('Bu klasore erisim yetkiniz yok.');
+    folder.setTrashed(true);
+    return { ok: true };
+  }
+  var file;
+  try { file = DriveApp.getFileById(id); } catch (e) { throw new Error('Dosya bulunamadi.'); }
+  var ps = file.getParents(), within = false;
+  while (ps.hasNext()) { if (folderIsWithin(ps.next(), croot.getId())) { within = true; break; } }
+  if (!within) throw new Error('Bu dosyaya erisim yetkiniz yok.');
+  file.setTrashed(true);
+  return { ok: true };
+}
+
 function overtimeSheet() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sh = ss.getSheetByName(OVERTIME_SHEET_NAME);
@@ -685,7 +802,7 @@ function createOvertime(data, user) {
 }
 
 function updateOvertimeStatus(data, user) {
-  if (user.role !== 'admin') throw new Error('Mesai onayi icin admin yetkisi gerekli.');
+  if (!isArsenAdmin(user)) throw new Error('Ekstra mesai onayi yalnizca Arşen admin tarafindan yapilabilir.');
   var company = requireCompany(user, data.company);
   if (!data.id || !data.durum) throw new Error('Onay bilgisi eksik.');
   var rows = overtimeRows(), found = false, targetUsername = '';
@@ -759,6 +876,34 @@ function setupDailyLogTrigger() {
   return 'Günlük log hatırlatıcı kuruldu: her gün ~16:00 (hafta sonu ve 1 Haziran öncesi atlanır).';
 }
 
+// ── WEEKLY SCHEDULE REMINDER (Sunday morning) ───────────────────────────────
+// Reminds every active user to enter their weekly tasks into the calendar.
+function weeklyScheduleReminder() {
+  var users = activeUsers(), sent = 0;
+  var sys = { ad: 'Sistem', username: 'system' };
+  for (var i = 0; i < users.length; i++) {
+    appendNotification(users[i], {
+      company: normalizeCompany(users[i].defaultCompany || 'fuwell'),
+      baslik: 'Haftalık görev planı',
+      mesaj: 'Yeni hafta başlıyor. Lütfen bu haftaki görevlerinizi Görev Takvimi sayfasından çizelgeye giriniz.',
+      tur: 'Hatırlatma',
+      sayfa: 'takvim',
+      sendEmail: true
+    }, sys);
+    sent++;
+  }
+  return { ok: true, sent: sent };
+}
+// Run this ONCE from the Apps Script editor to install the Sunday ~08:00 trigger.
+function setupWeeklyScheduleTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'weeklyScheduleReminder') ScriptApp.deleteTrigger(triggers[i]);
+  }
+  ScriptApp.newTrigger('weeklyScheduleReminder').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(8).nearMinute(0).create();
+  return 'Haftalık görev hatırlatıcı kuruldu: her Pazar ~08:00.';
+}
+
 function doGet(e) {
   var result;
   try {
@@ -767,6 +912,7 @@ function doGet(e) {
     else if (e.parameter.action === 'batchRead') result = readSheets(String(e.parameter.sheets || '').split(','), user, e.parameter.company);
     else if (e.parameter.action === 'listFiles') result = listFiles(user, e.parameter.company);
     else if (e.parameter.action === 'listOvertime') result = listOvertime(user, e.parameter.company);
+    else if (e.parameter.action === 'scheduleOverview') result = scheduleOverview(user);
     else result = { error: 'Bilinmeyen istek.' };
   } catch (err) {
     result = { error: err.message };
@@ -796,6 +942,11 @@ function doPost(e) {
       else if (data.action === 'listOvertime') result = listOvertime(user, data.company);
       else if (data.action === 'createOvertime') result = createOvertime(data, user);
       else if (data.action === 'updateOvertimeStatus') result = updateOvertimeStatus(data, user);
+      else if (data.action === 'scheduleOverview') result = scheduleOverview(user);
+      else if (data.action === 'listFolder') result = listFolder(user, data.company, data.folderId);
+      else if (data.action === 'createTreeFolder') result = createTreeFolder(user, data.company, data.parentId, data.name);
+      else if (data.action === 'uploadTreeFile') result = uploadTreeFile(user, data.company, data.folderId, data.name, data.base64, data.mimeType, data.description);
+      else if (data.action === 'deleteTreeItem') result = deleteTreeItem(user, data.company, data.id, data.isFolder);
       else result = { error: 'Bilinmeyen istek.' };
     }
   } catch (err) {
