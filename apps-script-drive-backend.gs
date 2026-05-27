@@ -306,6 +306,28 @@ function readSheet(name, user, company) {
   return valuesForCompany(name, user, company);
 }
 
+// Read-only weekly-schedule rows across ALL companies, so every user's dashboard
+// can show the whole team's task planning regardless of their own company.
+var SCHEDULE_MARKERS = ['__CIZELGE_META__', '__CIZELGE_PERSON__', '__CIZELGE_TASK__'];
+function scheduleOverview(user) {
+  var sh = sheetByName('Gorevler');
+  var values = sh.getDataRange().getValues();
+  if (!values.length) return { ok: true, rows: [] };
+  var headers = values[0].map(function(h) { return String(h || ''); });
+  var bIdx = headers.indexOf('baslik'), aIdx = headers.indexOf('aciklama');
+  var rows = [];
+  for (var i = 1; i < values.length; i++) {
+    var baslik = bIdx >= 0 ? String(values[i][bIdx] || '') : '';
+    var acik = aIdx >= 0 ? String(values[i][aIdx] || '') : '';
+    var isSchedule = SCHEDULE_MARKERS.indexOf(baslik) >= 0 || acik.indexOf('__CIZELGE_TASK__') >= 0;
+    if (!isSchedule) continue;
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) obj[headers[j]] = values[i][j] === undefined ? '' : String(values[i][j]);
+    rows.push(obj);
+  }
+  return { ok: true, rows: rows };
+}
+
 function readSheets(names, user, company) {
   var normCompany = normalizeCompany(company);
   var key = 'br_' + (user.username || '') + '_' + normCompany + '_' + _batchVersion() + '_' + names.length;
@@ -801,6 +823,7 @@ function doGet(e) {
     else if (e.parameter.action === 'batchRead') result = readSheets(String(e.parameter.sheets || '').split(','), user, e.parameter.company);
     else if (e.parameter.action === 'listFiles') result = listFiles(user, e.parameter.company);
     else if (e.parameter.action === 'listOvertime') result = listOvertime(user, e.parameter.company);
+    else if (e.parameter.action === 'scheduleOverview') result = scheduleOverview(user);
     else result = { error: 'Bilinmeyen istek.' };
   } catch (err) {
     result = { error: err.message };
@@ -830,6 +853,7 @@ function doPost(e) {
       else if (data.action === 'listOvertime') result = listOvertime(user, data.company);
       else if (data.action === 'createOvertime') result = createOvertime(data, user);
       else if (data.action === 'updateOvertimeStatus') result = updateOvertimeStatus(data, user);
+      else if (data.action === 'scheduleOverview') result = scheduleOverview(user);
       else result = { error: 'Bilinmeyen istek.' };
     }
   } catch (err) {
