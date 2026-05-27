@@ -516,6 +516,10 @@ function kurumLabel(key=userKurum()){return KURUMS[key]?.short||key||'Arşen';}
 function isCompanySheet(sheet){return COLS[sheet]?.includes('company');}
 function withCompanyRecord(sheet,row){return isCompanySheet(sheet)?{company:currentCompany,...row,company:row.company||currentCompany}:row;}
 function toast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='show toast-'+type;clearTimeout(t._t);t._t=setTimeout(()=>t.className='',2800);}
+// Surface otherwise-silent runtime errors (e.g. a throw inside an inline onclick) so "button does nothing" becomes a readable message.
+let _lastErrToast=0;
+window.addEventListener('error',e=>{const now=Date.now();if(now-_lastErrToast<1500)return;_lastErrToast=now;try{toast('Hata: '+(e.message||'bilinmeyen'),'err');}catch(_){}});
+window.addEventListener('unhandledrejection',e=>{const now=Date.now();if(now-_lastErrToast<1500)return;_lastErrToast=now;try{toast('Hata: '+((e.reason&&e.reason.message)||e.reason||'işlem başarısız'),'err');}catch(_){}});
 function loading(show,text='İşleniyor...'){document.getElementById('loading-text').textContent=text;document.getElementById('loading-overlay').classList.toggle('show',show);}
 function setSS(s){const e=document.getElementById('sync-status');if(!e)return;e.innerHTML=s==='ok'?'<span class="sync-ok">● Bağlı</span>':s==='loading'?'<span class="sync-loading">↺ Senkronize...</span>':'<span class="sync-err">● Bağlantı hatası</span>';}
 // ── SESSION PERSISTENCE ──
@@ -3007,7 +3011,13 @@ function takvim(){
 function gRenk(kat){const m={'Analiz':'#4f9cf9','Ekstraksiyon/Proses':'#9b59b6','Ekipman Bakımı':'#f5a623','Kalibrasyon':'#1abc9c','Temizlik':'#3ecf8e','Numune Hazırlama':'#4f9cf9','Raporlama':'#8892aa','Tedarik/Satın Alma':'#8892aa','Ar-Ge':'#9b59b6','Toplantı':'#1abc9c','Diğer':'#8892aa'};return m[kat]||'#8892aa';}
 function renderCal(){renderSchedule();}
 function renderSchedule(){
-  document.getElementById('content').innerHTML=scheduleHTML();
+  const el=document.getElementById('content');
+  try{
+    el.innerHTML=scheduleHTML();
+  }catch(e){
+    console.error('Çizelge render hatası:',e);
+    el.innerHTML=`<div class="card"><div class="alert alert-red"><strong>Çizelge yüklenemedi.</strong><br>${esc(e.message||String(e))}</div><div class="text-mono text-sm text-muted" style="white-space:pre-wrap;margin-top:8px">${esc((e.stack||'').split('\n').slice(0,4).join('\n'))}</div><button class="btn btn-ghost btn-sm mt-16" onclick="ensureScheduleOnline().then(()=>renderSchedule()).catch(err=>toast(err.message,'err'))">Çizelgeyi yeniden kur</button></div>`;
+  }
 }
 function renderMonthly(){
   const yr=calDate.getFullYear(),mo=calDate.getMonth();
