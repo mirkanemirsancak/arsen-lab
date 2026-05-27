@@ -263,7 +263,12 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 }
 @supports(padding:max(0px)){
   body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
-  .sidebar{padding-top:env(safe-area-inset-top);}
+  /* Push the top bar's content below the iOS status bar (clock/battery) so buttons aren't covered, while the bar background still fills the notch area for a fullscreen feel. */
+  .topbar{height:calc(52px + env(safe-area-inset-top));min-height:calc(52px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top);}
+  .login-box{margin-top:calc(env(safe-area-inset-top) + 8px);}
+  #login-theme-toggle{top:calc(14px + env(safe-area-inset-top));}
+  .sidebar-header{padding-top:calc(18px + env(safe-area-inset-top));}
+  .content{padding-bottom:calc(24px + env(safe-area-inset-bottom));}
 }
 </style>
 </head>
