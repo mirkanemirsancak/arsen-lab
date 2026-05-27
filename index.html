@@ -308,7 +308,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> <span id="nav-metod-label">Metodlar ve İzlekler</span></div>
       <div class="nav-item" onclick="showPage('sfe')"><span class="nav-icon">◇</span> Süperkritik CO₂</div>
       <div class="nav-section">Ekip</div>
-      <div class="nav-item" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
+      <div class="nav-item" style="display:none" onclick="showPage('bildirim')"><span class="nav-icon">◔</span> Bildirimler <span class="nav-badge" id="bildirim-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('takvim')"><span class="nav-icon">▦</span> <span id="nav-takvim-label">Görev Takvimi</span></div>
       <div class="nav-item" onclick="showPage('mesai')"><span class="nav-icon">◷</span> Ekstra Mesai <span class="nav-badge" id="mesai-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('iletisim')"><span class="nav-icon">☏</span> İletişimde Olunan Kişiler</div>
@@ -388,7 +388,7 @@ const KURUMS={
 };
 const UMBRELLA_KURUM='arsen';
 const COLS={
-  Users:['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Users:['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma','roller'],
   Stok:['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
   StokHareketleri:['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
   Metodlar:['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
@@ -516,6 +516,14 @@ function userKurum(user=currentUser){
   return COMPANIES[def]?def:'fuwell';
 }
 function isUmbrella(user=currentUser){return userKurum(user)===UMBRELLA_KURUM;}
+function isAdmin(user=currentUser){return !!(user&&user.role==='admin');}
+// Only the Arşen (umbrella) admin manages users and approves overtime.
+function isArsenAdmin(user=currentUser){return isAdmin(user)&&isUmbrella(user);}
+const USER_ROLES=['Proje Sorumlusu','Mühendis','Satınalma Sorumlusu','Onaylayıcı','Operatör'];
+function userRoller(user=currentUser){return String(user?.roller||'').split(',').map(s=>s.trim()).filter(Boolean);}
+function userHasRole(user,role){return userRoller(user).indexOf(role)>=0;}
+// Resolve a fixed role to the active usernames carrying it (optionally scoped to a company) — used to auto-route approvals without picking a name.
+function usersWithRole(role,company=currentCompany){return (C.Users||[]).filter(u=>(u.active===true||u.active==='true')&&userHasRole(u,role)&&(!company||companyAccess(u).includes(company))).map(u=>u.username);}
 function companyAccess(user=currentUser){
   if(isUmbrella(user))return Object.keys(COMPANIES);
   const k=userKurum(user);
@@ -682,12 +690,13 @@ function enterApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('sidebar-username').textContent=currentUser.ad||currentUser.username;
-  document.getElementById('sidebar-role').textContent=currentUser.role==='admin'?'Admin':'Kullanıcı';
+  document.getElementById('sidebar-role').textContent=isArsenAdmin()?'Arşen Admin':isAdmin()?(kurumLabel()+' Admin'):'Kullanıcı';
   renderCompanySelector();
   updateCompanyUI();
-  document.getElementById('admin-nav-section').style.display='';
-  document.getElementById('admin-nav-item').style.display='';
-  if(currentUser.role!=='admin'){document.getElementById('admin-nav-section').style.display='none';document.getElementById('admin-nav-item').style.display='none';}
+  // User management (Kullanıcılar) is Arşen-admin only.
+  const showUserMgmt=isArsenAdmin();
+  document.getElementById('admin-nav-section').style.display=showUserMgmt?'':'none';
+  document.getElementById('admin-nav-item').style.display=showUserMgmt?'':'none';
 }
 function startAutoSync(){if(syncTimer)clearInterval(syncTimer);syncTimer=setInterval(()=>syncAll().then(ok=>{if(ok&&currentPage&&!document.getElementById('modal-overlay').classList.contains('open'))showPage(currentPage,true);}),90000);}
 async function doLogin(){
@@ -804,6 +813,7 @@ async function switchCompany(key){
 function showPage(page,silent=false){
   // Umbrella-only pages
   if((page==='genel'||page==='audit')&&!isUmbrella()){toast('Bu sayfa yalnızca Arşen Proses yetkililerine açıktır.','err');page='dashboard';}
+  if(page==='admin'&&!isArsenAdmin()){toast('Kullanıcı yönetimi yalnızca Arşen admin tarafından yapılır.','err');page='dashboard';}
   currentPage=page;
   closeSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -1148,7 +1158,7 @@ async function scheduleClearPeopleAndTasks(){if(!scheduleAdminGuard())return;if(
 
 // ── BİLDİRİMLER ──
 function bildirim(){
-  document.getElementById('topbar-actions').innerHTML=`${canDelete()?'<button class="btn btn-primary btn-sm" onclick="bildirimYeni()">+ Bildirim Gönder</button>':''}<button class="btn btn-ghost btn-sm" onclick="bildirimHepsiniOku()">Tümünü Okundu Yap</button>`;
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="bildirimHepsiniOku()">Tümünü Okundu Yap</button>`;
   renderBildirim();
 }
 function renderBildirim(){
@@ -1168,25 +1178,6 @@ function renderBildirim(){
 async function bildirimOku(id){const n=C.Bildirimler.find(x=>x.id===id);if(!n)return;n.okundu='true';try{await markNotificationsRead({ids:[id]});updateNotificationBadge();renderBildirim();}catch(e){toast('Hata: '+e.message,'err');}}
 async function bildirimHepsiniOku(){myNotifications().forEach(n=>n.okundu='true');try{await markNotificationsRead({all:true});updateNotificationBadge();renderBildirim();}catch(e){toast('Hata: '+e.message,'err');}}
 async function bildirimAc(id,page){await bildirimOku(id);showPage(page);}
-function bildirimYeni(){
-  const umb=isUmbrella();
-  const eligible=C.Users.filter(u=>(u.active===true||u.active==='true')&&(umb||companyAccess(u).includes(currentCompany)));
-  const opts=`<option value="all">${umb?'Tüm aktif kullanıcılar':'Bu şirketin tüm aktif kullanıcıları ('+companyLabel()+')'}</option>${eligible.map(u=>`<option value="${u.username}">${esc(u.ad||u.username)}${umb?` · ${esc(KURUMS[userKurum(u)]?.short||'')}`:''}</option>`).join('')}`;
-  showModal('Bildirim Gönder',`
-    <div class="alert alert-${umb?'green':'amber'} mb-16" style="font-size:12px">${umb?'Arşen şemsiyesi olarak tüm kullanıcılara bildirim gönderebilirsin.':'Yalnızca '+companyLabel()+' şirketine erişimi olan kullanıcılara bildirim gönderebilirsin.'}</div>
-    <div class="form-row"><div class="form-group"><label>Alıcı</label><select id="bn-kime">${opts}</select></div>
-    <div class="form-group"><label>Tür</label><select id="bn-tur"><option>Duyuru</option><option>Görev</option><option>Mesai</option><option>Sistem</option></select></div></div>
-    <div class="form-group"><label>Başlık *</label><input type="text" id="bn-baslik"></div>
-    <div class="form-group"><label>Mesaj *</label><textarea id="bn-mesaj" style="min-height:120px"></textarea></div>
-    <label style="display:flex;gap:8px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" id="bn-mail" checked style="width:auto"> Kurumsal e-postaya da gönder</label>`,
-    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="bildirimGonder()">Gönder</button>`);
-}
-async function bildirimGonder(){
-  if(!canDelete())return;const baslik=document.getElementById('bn-baslik').value.trim(),mesaj=document.getElementById('bn-mesaj').value.trim();if(!baslik||!mesaj){toast('Başlık ve mesaj zorunlu.','err');return;}
-  const kime=document.getElementById('bn-kime').value,recipients=kime==='all'?['all']:[kime];
-  closeModalDirect();loading(true,'Bildirim gönderiliyor...');
-  try{await notifyApi({recipients,baslik,mesaj,tur:document.getElementById('bn-tur').value,sayfa:'bildirim',sendEmail:document.getElementById('bn-mail').checked});await syncAll();loading(false);toast('Bildirim gönderildi ✓');showPage('bildirim',true);}catch(e){loading(false);toast('Hata: '+e.message,'err');}
-}
 
 // ── DASHBOARD ──
 function dashboard(){
@@ -1209,7 +1200,7 @@ function dashboard(){
     ${gecmis.length>0?`<div class="alert alert-red mb-16" style="cursor:pointer" onclick="kalibUyariListesi('gecmis')">⚠ Süresi geçmiş kalibrasyon (${gecmis.length}): <strong>${gecmis.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
     ${yaklasan.length>0?`<div class="alert alert-amber mb-16" style="cursor:pointer" onclick="kalibUyariListesi('yaklasan')">⚡ Kalibrasyon yaklaşıyor (${yaklasan.length}): <strong>${yaklasan.map(e=>e.ad).join(', ')}</strong> <span class="text-mono text-sm" style="float:right;opacity:.8">listele & ata →</span></div>`:''}
     ${temizlikGecmis.length>0?`<div class="alert alert-amber mb-16">🧹 Temizlik zamanı geçmiş: <strong>${temizlikGecmis.map(t=>t.gorev).join(', ')}</strong></div>`:''}
-    ${canDelete()&&mesaiPendingCount>0?`<div class="alert alert-amber mb-16">◷ Onay bekleyen ekstra mesai kaydı: <strong>${mesaiPendingCount}</strong> <button class="btn btn-amber btn-sm" style="margin-left:10px" onclick="showPage('mesai')">İncele</button></div>`:''}
+    ${isArsenAdmin()&&mesaiPendingCount>0?`<div class="alert alert-amber mb-16">◷ Onay bekleyen ekstra mesai kaydı: <strong>${mesaiPendingCount}</strong> <button class="btn btn-amber btn-sm" style="margin-left:10px" onclick="showPage('mesai')">İncele</button></div>`:''}
     <div class="grid-2 gap-16">
       <div class="card"><div class="card-header"><span class="card-title">Son Aktiviteler</span></div>
         ${son.length===0?`<div class="empty-state"><div class="empty-icon">◈</div><div>Henüz kayıt yok</div></div>`:
@@ -3340,7 +3331,7 @@ async function dosyaSil(id){
 let mesaiRows=[],mesaiFilter='all',mesaiPendingCount=0;
 async function refreshMesaiBadge(){
   const b=document.getElementById('mesai-badge');if(!b)return;
-  if(!canDelete()){b.style.display='none';return;}
+  if(!isArsenAdmin()){b.style.display='none';return;}
   try{
     const data=await driveApi('listOvertime');mesaiPendingCount=(data.records||[]).filter(r=>r.durum==='Bekliyor').length;
     if(mesaiPendingCount>0){b.textContent=mesaiPendingCount;b.style.display='';}else b.style.display='none';
@@ -3383,7 +3374,7 @@ async function renderMesai(filter=mesaiFilter){
           <td><strong style="color:var(--text)">${(parseFloat(r.toplamSaat)||0).toFixed(1)}</strong> saat</td>
           <td>${mesaiStatusBadge(r.durum)}</td>
           <td class="mesai-note">${esc(r.aciklama||'—')}${r.adminNot?`<div class="text-sm text-muted mt-8">Admin notu: ${esc(r.adminNot)}</div>`:''}</td>
-          <td>${canDelete()&&r.durum==='Bekliyor'?`<button class="btn btn-success btn-sm" onclick="mesaiOnay('${r.id}','Onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="mesaiOnay('${r.id}','Reddedildi')">Reddet</button>`:`<span class="text-muted text-sm">${r.onaylayan?`Onaylayan: ${esc(r.onaylayan)}`:'—'}</span>`}</td>
+          <td>${isArsenAdmin()&&r.durum==='Bekliyor'?`<button class="btn btn-success btn-sm" onclick="mesaiOnay('${r.id}','Onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="mesaiOnay('${r.id}','Reddedildi')">Reddet</button>`:`<span class="text-muted text-sm">${r.onaylayan?`Onaylayan: ${esc(r.onaylayan)}`:'—'}</span>`}</td>
         </tr>`).join(''):`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">◷</div><div>Mesai kaydı yok.</div></div></td></tr>`}
       </tbody></table></div>`;
   }catch(e){
@@ -3595,16 +3586,17 @@ function xExportAll(){const wb=XLSX.utils.book_new();[['Stok','Stok'],['StokHare
 
 // ── ADMİN ──
 function admin(){
-  if(!canDelete()){document.getElementById('content').innerHTML='<div class="empty-state"><div class="empty-icon">⊘</div><div>Erişim yetkiniz yok.</div></div>';return;}
+  if(!isArsenAdmin()){document.getElementById('content').innerHTML='<div class="empty-state"><div class="empty-icon">⊘</div><div>Kullanıcı yönetimi yalnızca Arşen admin tarafından yapılır.</div></div>';return;}
   document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-primary btn-sm" onclick="kullaniciYeni()">+ Yeni Kullanıcı</button>`;renderAdmin();
 }
 function renderAdmin(){
   const missingEmails=C.Users.filter(u=>!normEmail(u.email)).length;
-  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Kurum</th><th>Erişim</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
+  document.getElementById('content').innerHTML=`${missingEmails?`<div class="alert alert-amber">Google erişimi kısıtlamasında e-postası boş olan kullanıcılar yetkilendirilemez. Eksik kullanıcı sayısı: <strong>${missingEmails}</strong></div>`:''}<div class="table-wrap"><table><thead><tr><th>Ad Soyad</th><th>Kullanıcı Adı</th><th>Google E-posta</th><th>Rol</th><th>Kurum</th><th>Roller</th><th>Erişim</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>${C.Users.map(u=>`<tr>
     <td class="td-main">${u.ad||'—'}</td><td class="text-mono">${u.username}</td>
     <td>${u.email?`<span class="text-mono" style="font-size:11px">${esc(u.email)}</span>`:`<span class="badge badge-amber">Eksik</span>`}</td>
     <td><span class="badge ${u.role==='admin'?'badge-blue':'badge-gray'}">${u.role==='admin'?'Admin':'Kullanıcı'}</span></td>
     <td><span class="badge ${userKurum(u)===UMBRELLA_KURUM?'badge-blue':'badge-gray'}">${esc(KURUMS[userKurum(u)]?.short||userKurum(u))}</span></td>
+    <td>${userRoller(u).length?userRoller(u).map(r=>`<span class="badge badge-gray" style="margin:1px 2px;font-size:10px">${esc(r)}</span>`).join(''):'<span class="text-muted text-sm">—</span>'}</td>
     <td>${companyAccess(u).map(k=>`<span class="badge" style="margin-right:4px;color:${COMPANIES[k].accent};border:1px solid ${COMPANIES[k].accent};background:transparent">${esc(COMPANIES[k].short)}</span>`).join('')}</td>
     <td><span class="badge ${u.active===true||u.active==='true'?'badge-green':'badge-red'}">${u.active===true||u.active==='true'?'Aktif':'Pasif'}</span></td>
     <td>${u.id!==currentUser.id?`<button class="btn btn-ghost btn-sm" onclick="kullaniciDuzenle('${u.id}')">Düzenle</button><button class="btn btn-${u.active===true||u.active==='true'?'danger':'success'} btn-sm" onclick="kullaniciToggle('${u.id}')">${u.active===true||u.active==='true'?'Pasif Et':'Aktif Et'}</button>`:'<span class="text-muted text-sm">Mevcut oturum</span>'}</td>
@@ -3616,9 +3608,13 @@ function uForm(u={}){const uk=userKurum(u);return`
   <div class="form-row"><div class="form-group"><label>${u.id?'Yeni Şifre (boş=değişmez)':'Şifre *'}</label><input type="password" id="u-pass" placeholder="••••••••"></div>
   <div class="form-group"><label>Rol</label><select id="u-rol"><option value="user" ${u.role==='user'?'selected':''}>Kullanıcı</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select></div></div>
   <div class="form-group"><label>Bağlı Olduğu Kurum *</label><select id="u-kurum">${Object.entries(KURUMS).map(([k,c])=>`<option value="${k}" ${uk===k?'selected':''}>${esc(c.label)}</option>`).join('')}</select></div>
-  <div class="text-sm text-muted">Arşen Proses kademesi her iki şirketi de yönetebilir. Fuwell veya Syntegra seçilirse kullanıcı yalnızca o şirketin verilerine erişir. Şirketler arası geçiş yapamaz. E-posta boşsa kullanıcı sisteme giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
+  <div class="form-group"><label>Görevler / Roller</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 14px">${USER_ROLES.map(r=>`<label style="display:flex;gap:6px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" class="u-rol-chk" value="${esc(r)}" ${userHasRole(u,r)?'checked':''} style="width:auto"> ${esc(r)}</label>`).join('')}</div>
+    <div class="text-sm text-muted mt-8">Roller, onay/atama süreçlerinin isim seçmeden otomatik akması için kullanılır (ör. Onaylayıcı, Satınalma Sorumlusu).</div>
+  </div>
+  <div class="text-sm text-muted">Arşen Proses kademesi her iki şirketi de yönetebilir; Admin rolü + Arşen kurumu = tam yetkili koordinatör. Fuwell veya Syntegra seçilen Admin yalnızca kendi şirketinin yöneticisidir (kullanıcı yönetimi ve mesai onayı Arşen'de kalır). E-posta boşsa kullanıcı giriş yapsa bile Google tarafında yetki verilemez.</div>`;}
 function kullaniciYeni(){showModal('Yeni Kullanıcı',uForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciKaydet()">Kaydet</button>`);}
-function readUserCompanyFields(){const k=document.getElementById('u-kurum').value;const access=k===UMBRELLA_KURUM?Object.keys(COMPANIES):[COMPANIES[k]?k:'fuwell'];return {kurum:k,companyAccess:access.join(','),defaultCompany:access[0]};}
+function readUserCompanyFields(){const k=document.getElementById('u-kurum').value;const access=k===UMBRELLA_KURUM?Object.keys(COMPANIES):[COMPANIES[k]?k:'fuwell'];const roller=[...document.querySelectorAll('.u-rol-chk:checked')].map(c=>c.value).join(',');return {kurum:k,companyAccess:access.join(','),defaultCompany:access[0],roller};}
 async function kullaniciKaydet(){const ad=document.getElementById('u-ad').value.trim();const un=document.getElementById('u-un').value.trim();const email=normEmail(document.getElementById('u-email').value);const p=document.getElementById('u-pass').value;if(!ad||!un||!p){toast('Tüm alanlar zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(C.Users.find(u=>u.username===un)){toast('Bu kullanıcı adı zaten var.','err');return;}if(email&&C.Users.find(u=>normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}C.Users.push({id:uid(),ad,username:un,passwordHash:hash(p),role:document.getElementById('u-rol').value,email,...readUserCompanyFields(),active:'true',olusturma:new Date().toISOString()});closeModalDirect();renderAdmin();save('Users').then(()=>toast('Kullanıcı eklendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 function kullaniciDuzenle(id){const u=C.Users.find(x=>x.id===id);if(!u)return;showModal('Kullanıcı Düzenle',uForm(u),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="kullaniciGuncelle('${id}')">Güncelle</button>`);}
 async function kullaniciGuncelle(id){const ad=document.getElementById('u-ad').value.trim();const email=normEmail(document.getElementById('u-email').value);if(!ad){toast('Ad zorunlu.','err');return;}if(!validEmail(email)){toast('Geçerli bir Google e-posta girin.','err');return;}if(email&&C.Users.find(u=>u.id!==id&&normEmail(u.email)===email)){toast('Bu e-posta başka bir kullanıcıda kayıtlı.','err');return;}const idx=C.Users.findIndex(x=>x.id===id);const p=document.getElementById('u-pass').value;C.Users[idx]={...C.Users[idx],ad,email,role:document.getElementById('u-rol').value,...readUserCompanyFields()};if(p)C.Users[idx].passwordHash=hash(p);closeModalDirect();renderAdmin();save('Users').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}

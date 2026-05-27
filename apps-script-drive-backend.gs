@@ -7,7 +7,7 @@ var COMPANIES = ['fuwell', 'syntegra'];
 var KURUMS = ['arsen', 'fuwell', 'syntegra'];
 var UMBRELLA_KURUM = 'arsen';
 var DEFAULT_SHEET_HEADERS = {
-  Users: ['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma'],
+  Users: ['id','username','passwordHash','role','kurum','ad','email','companyAccess','defaultCompany','active','olusturma','roller'],
   Stok: ['id','company','ad','marka','kategori','lab','dolap','raf','miktar','birim','kritikSeviye','maksimum','skt','konum','not','sonGuncelleme'],
   StokHareketleri: ['id','company','stokId','stokAd','tip','miktar','birim','oncekiMiktar','sonrakiMiktar','tarih','aciklama','kullanici'],
   Metodlar: ['id','company','baslik','tur','kategori','hammadde','kaynak','kod','adimlar','not','aktif','tarih','kullanici'],
@@ -64,6 +64,10 @@ function userKurum(user) {
 }
 
 function isUmbrella(user) { return userKurum(user) === UMBRELLA_KURUM; }
+function isAdmin(user) { return user && user.role === 'admin'; }
+// Only the Arşen (umbrella) admin manages users and approves overtime; sub-firm
+// admins are full admins inside their own company but cannot do these.
+function isArsenAdmin(user) { return isAdmin(user) && isUmbrella(user); }
 
 function companyAccess(user) {
   if (isUmbrella(user)) return COMPANIES.slice();
@@ -185,7 +189,8 @@ function publicUser(user) {
     companyAccess: accessList.join(','),
     defaultCompany: def,
     active: user.active === true || user.active === 'true' ? 'true' : 'false',
-    olusturma: user.olusturma || ''
+    olusturma: user.olusturma || '',
+    roller: user.roller || ''
   };
 }
 
@@ -336,7 +341,7 @@ function readSheets(names, user, company) {
 }
 
 function writeSheet(name, values, user, company) {
-  if (name === 'Users' && user.role !== 'admin') throw new Error('Kullanici yonetimi icin admin yetkisi gerekli.');
+  if (name === 'Users' && !isArsenAdmin(user)) throw new Error('Kullanici yonetimi icin Arşen admin yetkisi gerekli.');
   if (name === 'Bildirimler') throw new Error('Bildirimler icin bildirim aksiyonlarini kullanin.');
   company = requireCompany(user, company);
   var sh = sheetByName(name);
@@ -435,22 +440,23 @@ function appendNotification(target, data, user) {
   return row;
 }
 
+// Assignment notifications: any authenticated user may trigger one when they
+// assign/select someone in any tab. There is no manual "broadcast to all" any
+// more — recipients must be explicit usernames. A sender who is not umbrella can
+// only notify users who share access to the current company.
 function createNotification(data, user) {
-  if (user.role !== 'admin') throw new Error('Bildirim gondermek icin admin yetkisi gerekli.');
   var company = requireCompany(user, data.company);
   if (!data.baslik || !data.mesaj) throw new Error('Bildirim basligi ve mesaji gerekli.');
   var sender_isUmbrella = isUmbrella(user);
-  var recipients = data.recipients || [];
-  var targets = [];
-  if (recipients.indexOf('all') >= 0) targets = activeUsers().filter(function(u) { return companyAccess(u).indexOf(company) >= 0; });
-  else {
-    for (var i = 0; i < recipients.length; i++) {
-      var target = findUser(recipients[i]);
-      if (!target || !(target.active === true || target.active === 'true')) continue;
-      // Sub-firm admin can only message users who have access to this company.
-      if (!sender_isUmbrella && companyAccess(target).indexOf(company) < 0) continue;
-      targets.push(target);
-    }
+  var recipients = (data.recipients || []).filter(function(r) { return r && r !== 'all'; });
+  var seen = {}, targets = [];
+  for (var i = 0; i < recipients.length; i++) {
+    if (seen[recipients[i]]) continue;
+    seen[recipients[i]] = true;
+    var target = findUser(recipients[i]);
+    if (!target || !(target.active === true || target.active === 'true')) continue;
+    if (!sender_isUmbrella && companyAccess(target).indexOf(company) < 0) continue;
+    targets.push(target);
   }
   if (!targets.length) throw new Error('Gecerli alici bulunamadi.');
   var created = [];
@@ -685,7 +691,7 @@ function createOvertime(data, user) {
 }
 
 function updateOvertimeStatus(data, user) {
-  if (user.role !== 'admin') throw new Error('Mesai onayi icin admin yetkisi gerekli.');
+  if (!isArsenAdmin(user)) throw new Error('Ekstra mesai onayi yalnizca Arşen admin tarafindan yapilabilir.');
   var company = requireCompany(user, data.company);
   if (!data.id || !data.durum) throw new Error('Onay bilgisi eksik.');
   var rows = overtimeRows(), found = false, targetUsername = '';
@@ -757,6 +763,34 @@ function setupDailyLogTrigger() {
   }
   ScriptApp.newTrigger('dailyLogReminder').timeBased().atHour(16).nearMinute(0).everyDays(1).create();
   return 'Günlük log hatırlatıcı kuruldu: her gün ~16:00 (hafta sonu ve 1 Haziran öncesi atlanır).';
+}
+
+// ── WEEKLY SCHEDULE REMINDER (Sunday morning) ───────────────────────────────
+// Reminds every active user to enter their weekly tasks into the calendar.
+function weeklyScheduleReminder() {
+  var users = activeUsers(), sent = 0;
+  var sys = { ad: 'Sistem', username: 'system' };
+  for (var i = 0; i < users.length; i++) {
+    appendNotification(users[i], {
+      company: normalizeCompany(users[i].defaultCompany || 'fuwell'),
+      baslik: 'Haftalık görev planı',
+      mesaj: 'Yeni hafta başlıyor. Lütfen bu haftaki görevlerinizi Görev Takvimi sayfasından çizelgeye giriniz.',
+      tur: 'Hatırlatma',
+      sayfa: 'takvim',
+      sendEmail: true
+    }, sys);
+    sent++;
+  }
+  return { ok: true, sent: sent };
+}
+// Run this ONCE from the Apps Script editor to install the Sunday ~08:00 trigger.
+function setupWeeklyScheduleTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'weeklyScheduleReminder') ScriptApp.deleteTrigger(triggers[i]);
+  }
+  ScriptApp.newTrigger('weeklyScheduleReminder').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(8).nearMinute(0).create();
+  return 'Haftalık görev hatırlatıcı kuruldu: her Pazar ~08:00.';
 }
 
 function doGet(e) {
