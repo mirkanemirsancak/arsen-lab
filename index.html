@@ -2861,8 +2861,10 @@ function ganttSubPurchase(projectCode,ekipmanId){
   return {start:approval,end,tedarikci:win.tedarikci,fiyat:win.fiyat,paraBirimi:win.paraBirimi};
 }
 let _ganttOpenBodies={};
-function ganttToggleBody(b){_ganttOpenBodies[b]=!_ganttOpenBodies[b];if(_wsProject)projeWorkspace();}
-function projectGanttHtml(p){
+function ganttToggleBody(b){_ganttOpenBodies[b]=!_ganttOpenBodies[b];if(currentPage==='metod')gantt();else if(_wsProject)projeWorkspace();}
+function projectGanttHtml(p,opts){
+  opts=opts||{};
+  const embedded=!!opts.embedded;
   ganttEnsureSeed(p);
   const year=_ganttYear||new Date().getFullYear();
   const canEdit=ganttCanEdit(p);
@@ -2936,7 +2938,7 @@ function projectGanttHtml(p){
       <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">${todayLine}${cells}</div>
     </div>`;
   }).join('');
-  return `<div class="flex justify-between items-center mb-16" style="flex-wrap:wrap;gap:10px">
+  return `${embedded?'':`<div class="flex justify-between items-center mb-16" style="flex-wrap:wrap;gap:10px">
       <span class="card-title">Zaman Çizelgesi · ${year}</span>
       <div class="flex gap-8">
         <button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year-1};projeWorkspace()">← ${year-1}</button>
@@ -2951,7 +2953,8 @@ function projectGanttHtml(p){
       <span><span class="gantt-legend-dot" style="background:#2ecc71"></span>Alt-parça (Satın Alma + Üretim aynı renk)</span>
       <span><span class="gantt-legend-dot" style="background:#2ecc71;background-image:repeating-linear-gradient(135deg,transparent 0,transparent 3px,rgba(0,0,0,0.32) 3px,rgba(0,0,0,0.32) 6px)"></span>Üretim (taramalı)</span>
       <span style="color:var(--red)">— Bugün</span>
-    </div>
+    </div>`}
+    ${embedded&&canEdit?`<div class="mb-16"><button class="btn btn-primary btn-sm" onclick='ganttEditStage(${JSON.stringify(p.projectCode)},"ozel","","Özel Aşama")'>+ Aşama</button></div>`:''}
     <div class="gantt-wrap"><div class="gantt-scroll">
       <div class="gantt-header">
         <div class="gantt-row-label" style="background:var(--bg3)">Aşama</div>
@@ -2962,7 +2965,7 @@ function projectGanttHtml(p){
       </div>
       ${bodyRows}
     </div></div>
-    <div class="text-sm text-muted mt-16">${canEdit?'Bir çubuğa ya da "+ termin gir" düğmesine tıklayarak başlangıç/bitiş tarihlerini ayarlayın. Test+Montaj+Sevkiyat bloğu son terminden proje terminine kadar otomatik önerilir.':'Termin düzenleme yetkin yok; yalnızca görüntülüyorsun.'}</div>`;
+    ${embedded?'':`<div class="text-sm text-muted mt-16">${canEdit?'Bir çubuğa ya da "+ termin gir" düğmesine tıklayarak başlangıç/bitiş tarihlerini ayarlayın. Test+Montaj+Sevkiyat bloğu son terminden proje terminine kadar otomatik önerilir.':'Termin düzenleme yetkin yok; yalnızca görüntülüyorsun.'}</div>`}`;
 }
 function ganttEditableRow(p,tip,body,label,sub,canEdit,autoSuggest){
   const e=ganttFindEntry(p.projectCode,tip,body);
@@ -2998,7 +3001,7 @@ function ganttSaveUretimSub(projectCode,body,altParca){
   let e=ganttFindUretimSub(projectCode,body,altParca);
   if(e){e.baslangic=pur.end;e.bitis=bit;e.guncelleme=new Date().toISOString();}
   else{e={id:uid(),company:currentCompany,projectCode,tip:'uretim',body,baslik:altParca,baslangic:pur.end,bitis:bit,kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};C.Syn2_Gantt.push(e);}
-  closeModalDirect();projeWorkspace();
+  closeModalDirect();if(currentPage==='metod')gantt();else projeWorkspace();
   save('Syn2_Gantt').then(()=>toast('Üretim termini kaydedildi ✓')).catch(err=>toast('Hata: '+err.message,'err'));
 }
 function ganttEditStage(projectCode,tip,body,baslik){
@@ -3029,12 +3032,12 @@ function ganttSaveStage(projectCode,tip,body){
   let e=ganttFindEntry(projectCode,tip,tip==='ozel'?baslik:body);
   if(e){e.baslangic=bas;e.bitis=bit;e.baslik=baslik;e.guncelleme=new Date().toISOString();}
   else{e={id:uid(),company:currentCompany,projectCode,tip,body:tip==='ozel'?baslik:(body||''),baslik,baslangic:bas,bitis:bit,kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};C.Syn2_Gantt.push(e);}
-  closeModalDirect();projeWorkspace();
+  closeModalDirect();if(currentPage==='metod')gantt();else projeWorkspace();
   save('Syn2_Gantt').then(()=>toast('Termin kaydedildi ✓')).catch(err=>toast('Hata: '+err.message,'err'));
 }
 function ganttDeleteStage(id){
   C.Syn2_Gantt=(C.Syn2_Gantt||[]).filter(g=>g.id!==id);
-  closeModalDirect();projeWorkspace();
+  closeModalDirect();if(currentPage==='metod')gantt();else projeWorkspace();
   save('Syn2_Gantt').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
 }
 function ganttBarHtml(stage,year,editKey){
@@ -3086,58 +3089,41 @@ function ganttProjectFullStages(p){
   if(test&&test.baslangic&&test.bitis)stages.push({label:'T+M+S',klass:'sub-0 uretim-mark',start:test.baslangic,end:test.bitis,ongoing:false});
   return stages;
 }
+let _ganttExpanded={};
+function ganttToggleExpand(code){_ganttExpanded[code]=!_ganttExpanded[code];gantt();}
 function gantt(){
   const year=_ganttYear||new Date().getFullYear();_ganttYear=year;
   document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year-1};gantt()">← ${year-1}</button><strong style="padding:0 12px;font-family:var(--mono);color:var(--accent)">${year}</strong><button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year+1};gantt()">${year+1} →</button>`;
-  const allProjects=(C.Syn2_Projeler||[]).filter(p=>!['Taslak','İptal'].includes(p.durum));
-  const projects=allProjects.filter(p=>{
-    const st=ganttProjectFullStages(p);
-    return st.some(s=>{const c1=ganttDateToCol(s.start,year),c2=ganttDateToCol(s.end,year);return c1!==null&&c2!==null&&c1<=54&&c2>=1;});
-  }).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
-  const months=ganttMonthSpans(year);
-  const totalW=54*_ganttCellW;
-  const monthRow=months.map(m=>`<div class="gantt-month-cell" style="flex-basis:${m.weeks*_ganttCellW}px">${m.name}</div>`).join('');
-  const weekRow=Array.from({length:54},(_,i)=>`<div class="gantt-week-cell">${i+1}</div>`).join('');
-  const todayLine=ganttTodayLine(year);
-  const rows=projects.map(p=>{
-    const stages=ganttProjectFullStages(p);
-    return `<div class="gantt-row">
-      <div class="gantt-row-label" style="cursor:pointer" onclick="_wsProject='${p.projectCode}';_wsTab='gantt';projeYonetim()">
-        <div class="text-mono" style="color:var(--accent);font-weight:600;font-size:11px">${esc(p.projectCode)}</div>
-        <div style="font-size:11px;color:var(--text)">${esc(p.projeAdi||'')}</div>
-        <div style="font-size:10px;color:var(--text3)">${esc(p.musteri||'—')} · ${esc(p.durum||'')}</div>
-      </div>
-      <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">
-        ${todayLine}
-        ${stages.map(s=>ganttBarHtml(s,year)).join('')}
-      </div>
+  const projects=(C.Syn2_Projeler||[]).filter(p=>!['Taslak','İptal'].includes(p.durum)).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
+  const list=projects.map(p=>{
+    const expanded=!!_ganttExpanded[p.projectCode];
+    const meTermin=p.termin?synFmtDate(p.termin):'termin yok';
+    let detail='';
+    if(expanded){
+      // Render the same full project Gantt used in the project workspace.
+      // Set _wsProject so onclick handlers (and any subsequent edits) target this project.
+      _wsProject=p.projectCode;
+      detail=`<div style="padding:14px 18px;border-top:1px solid var(--border);background:var(--bg)">${projectGanttHtml(p,{embedded:true})}</div>`;
+    }
+    return `<div class="card mb-16" style="overflow:hidden">
+      <button class="card-header" style="width:100%;background:transparent;border:0;cursor:pointer;text-align:left;padding:14px 18px;margin:0" onclick="ganttToggleExpand(${JSON.stringify(p.projectCode).replace(/"/g,'&quot;')})">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap">
+          <span style="color:var(--accent);font-size:14px">${expanded?'▾':'▸'}</span>
+          <span class="text-mono" style="color:var(--accent);font-weight:600">${esc(p.projectCode)}</span>
+          <span class="card-title">${esc(p.projeAdi||'')}</span>
+          <span class="text-muted text-sm">· ${esc(p.musteri||'—')}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+          <span class="text-muted text-sm">Termin: ${meTermin}</span>
+          ${synProjectStatusBadge(p.durum)}
+        </div>
+      </button>
+      ${detail}
     </div>`;
   }).join('');
   document.getElementById('content').innerHTML=`
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">Proje Zaman Çizelgesi · ${year}</span>
-        <span class="gantt-legend">
-          <span><span class="gantt-legend-dot" style="background:#5aa6ff"></span>Proje</span>
-          <span><span class="gantt-legend-dot" style="background:#f5a623"></span>Mühendislik</span>
-          <span><span class="gantt-legend-dot" style="background:linear-gradient(90deg,rgba(0,188,212,0.55),rgba(0,188,212,0.35));border:1px dashed #00838f"></span>Gövde Zarfı</span>
-          <span><span class="gantt-legend-dot" style="background:#2ecc71;background-image:repeating-linear-gradient(135deg,transparent 0,transparent 3px,rgba(0,0,0,0.32) 3px,rgba(0,0,0,0.32) 6px)"></span>T+M+S</span>
-          <span style="color:var(--red)">— Bugün</span>
-        </span>
-      </div>
-      ${projects.length?`<div class="gantt-wrap"><div class="gantt-scroll">
-        <div class="gantt-header">
-          <div class="gantt-row-label">Proje</div>
-          <div class="gantt-header-cells" style="width:${totalW}px;--gw:${_ganttCellW}px">
-            <div class="gantt-months">${monthRow}</div>
-            <div class="gantt-weeks">${weekRow}</div>
-          </div>
-        </div>
-        ${rows}
-      </div></div>
-      <div class="text-sm text-muted mt-16">Her satır bir projedir. Proje sekmesinde mühendislik tamamlanınca, kazanan teklif seçilince, üretim/T+M+S terminleri girilince çubuklar otomatik güncellenir. Sol etikete tıklayarak projenin detay çizelgesine geçebilirsin.</div>
-      `:'<div class="empty-state"><div class="empty-icon">▦</div><div>'+year+' yılında aktif proje yok. Bir önceki/sonraki yıla geçebilir veya yeni proje açabilirsiniz.</div></div>'}
-    </div>`;
+    <div class="alert alert-blue mb-16" style="font-size:12px">Her satır bir projedir. Detay için satıra tıkla — projenin tam çizelgesi (gövdeler, alt-parçalar, satın alma + üretim + T+M+S) açılır ve burada düzenlenebilir.</div>
+    ${projects.length?list:'<div class="empty-state"><div class="empty-icon">▦</div><div>Aktif proje yok.</div></div>'}`;
 }
 
 // ── ÇIKTI ──
