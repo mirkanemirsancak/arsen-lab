@@ -1850,6 +1850,50 @@ function projeWorkspace(){
   else if(_wsTab==='gantt')body=projectGanttHtml(p);
   document.getElementById('content').innerHTML=head+tabBar+body;
 }
+function synProjeAuditCard(p){
+  const events=[];
+  events.push({icon:'▣',text:'Proje açıldı',by:synSorumluLabel(p.olusturan),at:p.olusturma});
+  events.push({icon:'◷',text:`Sorumluya atandı: <strong>${esc(synSorumluLabel(p.sorumlu))}</strong>`,at:p.olusturma,raw:true});
+  // Sorumlu onayı: durum 'Onay Bekliyor' değilse onaylanmış sayılır (mh ya da p.guncelleme zamanı)
+  const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===p.projectCode);
+  if(p.durum==='İptal'){
+    events.push({icon:'✗',text:'Proje reddedildi / iptal edildi',by:synSorumluLabel(p.sorumlu),at:p.guncelleme,color:'#e74c3c'});
+  } else if(p.durum!=='Onay Bekliyor'&&p.durum!=='Taslak'){
+    events.push({icon:'✓',text:'Sorumlu projeyi onayladı, mühendislik açıldı',by:synSorumluLabel(p.sorumlu),at:mh?.olusturma||p.guncelleme,color:'#3ecf8e'});
+  }
+  // Mühendislik kararları
+  if(mh){
+    let hist=[];try{hist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
+    hist.forEach(h=>{
+      const isOnay=h.karar==='Onaylandı',isRev=h.karar==='Revizyon İstendi',isGeri=h.karar==='Geri Alındı';
+      events.push({icon:isOnay?'✓':(isRev?'↺':(isGeri?'↶':'⚗')),text:`Mühendislik · ${esc(h.karar||'')}${h.not?': '+esc(h.not):''}`,by:synSorumluLabel(h.kullanici),at:h.tarih,color:isOnay?'#3ecf8e':(isRev?'#f5a623':(isGeri?'#9b59b6':null)),raw:true});
+    });
+    if(mh.satinalmaSorumlu)events.push({icon:'🛒',text:`Satın alma sorumlusu atandı: <strong>${esc(synSorumluLabel(mh.satinalmaSorumlu))}</strong>`,at:mh.guncelleme,raw:true});
+  }
+  // Satın alma kararları (kazanan teklifler + onay durumları)
+  const teklifs=(C.Syn2_Teklif||[]).filter(t=>t.projectCode===p.projectCode&&(t.kazanan==='true'||t.kazanan===true)).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
+  teklifs.forEach(t=>{
+    const eq=(C.Syn2_Ekipman||[]).find(e=>e.id===t.ekipmanId);
+    const altP=eq?.altParca||'';
+    if(t.onayDurumu==='onaylandı')events.push({icon:'✓',text:`Satın alma onaylandı: ${esc(altP)} · ${esc(t.tedarikci||'')}`,by:synSorumluLabel(t.onayKullanici),at:t.onayTarihi,note:t.onayNot,color:'#3ecf8e'});
+    else if(t.onayDurumu==='reddedildi')events.push({icon:'✗',text:`Satın alma reddedildi: ${esc(altP)} · ${esc(t.tedarikci||'')}`,by:synSorumluLabel(t.onayKullanici),at:t.onayTarihi,note:t.onayNot,color:'#e74c3c'});
+    else if(t.onayDurumu==='doğrudan')events.push({icon:'⚡',text:`Doğrudan satın alma (eşik altı): ${esc(altP)} · ${esc(t.tedarikci||'')}`,at:t.guncelleme});
+    else if(t.onayDurumu==='bekliyor')events.push({icon:'⏳',text:`Satın alma Arşen onayı bekliyor: ${esc(altP)} · ${esc(t.tedarikci||'')}`,at:t.guncelleme,color:'#f5a623'});
+  });
+  if(p.durum==='Tamamlandı')events.push({icon:'🟢',text:'Proje tamamlandı',at:p.guncelleme,color:'#3ecf8e'});
+  events.sort((a,b)=>new Date(a.at||0)-new Date(b.at||0));
+  return `<div class="card mt-16"><div class="card-header"><span class="card-title">Onay Akışı / Geçmiş</span><span class="text-muted text-sm">${events.length} olay</span></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${events.map(e=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid ${e.color||'var(--accent)'}">
+        <span style="font-size:14px;flex:0 0 auto">${e.icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text)">${e.raw?e.text:esc(e.text)}</div>
+          <div class="text-sm text-muted" style="margin-top:2px">${e.by?'<strong>'+esc(e.by)+'</strong>':''}${e.at?(e.by?' · ':'')+synFmtDate(e.at):''}${e.note?' · "'+esc(e.note)+'"':''}</div>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
 function projeBilgiBody(p){
   const sart=synParseFiles(p.sartnameDosyalar),tas=synParseFiles(p.tasarimDosyalar);
   const fileList=(arr,label)=>arr.length?arr.map(f=>`<div style="margin:4px 0"><a href="${esc(f.url)}" target="_blank">📎 ${esc(f.name)}</a> · <a href="${esc(f.downloadUrl||f.url)}" target="_blank" class="text-mono text-sm">indir ↓</a></div>`).join(''):`<span class="text-muted text-sm">${label} dosyası yok</span>`;
@@ -1865,7 +1909,8 @@ function projeBilgiBody(p){
       <div class="stat-card"><div class="stat-label">Termin</div><div class="stat-value" style="font-size:14px">${synFmtDate(p.termin)}</div></div>
       <div class="stat-card"><div class="stat-label">Son Güncelleme</div><div class="stat-value" style="font-size:14px">${synFmtDate(p.guncelleme)}</div></div>
     </div>
-  </div>`;
+  </div>
+  ${synProjeAuditCard(p)}`;
 }
 function proje(){
   const umb=isUmbrella();
