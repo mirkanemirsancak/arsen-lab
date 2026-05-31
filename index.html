@@ -360,6 +360,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
       <div class="nav-item" id="nav-genel" onclick="showPage('genel')" style="display:none"><span class="nav-icon">◉</span> Arşen Genel Bakış</div>
       <div class="nav-section">Modüller</div>
       <div class="nav-item" onclick="showPage('stok')"><span class="nav-icon">◉</span> <span id="nav-stok-label">Stok Takibi</span> <span class="nav-badge" id="stok-badge" style="display:none">0</span></div>
+      <div class="nav-item" id="nav-siparis" onclick="showPage('siparis')"><span class="nav-icon">▦</span> Sipariş Takibi</div>
       <div class="nav-item" onclick="showPage('analiz')"><span class="nav-icon">⌬</span> <span id="nav-analiz-label">Analiz Sonuçları</span></div>
       <div class="nav-item" onclick="showPage('ekipman')"><span class="nav-icon">⚙</span> <span id="nav-ekipman-label">Ekipman Takibi</span> <span class="nav-badge" id="ekip-badge" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('metod')"><span class="nav-icon">▥</span> <span id="nav-metod-label">Metodlar ve İzlekler</span></div>
@@ -407,7 +408,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 
 <script>
 const SCRIPT_URL='https://script.google.com/macros/s/AKfycbywgaqp0vIXqPj44IJV2kuomL1jTk_ZnPLiGRTCtrE_hXFBo4rgPmtYT-p3Ne3cbagj/exec';
-const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik','Syn2_Ekipman','Syn2_Teklif','Syn2_Gantt'];
+const SHEETS=['Users','Stok','StokHareketleri','Metodlar','Analiz','Ekipman','KalibTarihce','Temizlik','Gorevler','GunlukLog','IletisimKisileri','Bildirimler','DuzenlemeLoglari','SynProjeler','SynTimeline','SynSatinalma','SynMaliyet','SynRaporlar','Syn2_Projeler','Syn2_Muhendislik','Syn2_Ekipman','Syn2_Teklif','Syn2_Gantt','Fuw_Siparis','Fuw_Lot','Fuw_Yukleme','Fuw_Formulasyon','Fuw_Paketleme','Fuw_Gantt'];
 const SYN_GANTT_TYPES={muhendislik:{label:'Mühendislik',renk:'#f5a623',klass:'muh'},satinalma:{label:'Satın Alma',renk:'#5aa6ff',klass:'proje'},uretim:{label:'Üretim / İmalat',renk:'#9b59b6',klass:'uretim'},test:{label:'Test + Montaj + Sevkiyat',renk:'#3ecf8e',klass:'done'},ozel:{label:'Özel Aşama',renk:'#1abc9c',klass:'sa'}};
 const SYN_BODY_TEMPLATES={
   'Eşanjör':['Kondenser Gövde','Kondenser Ayna','Kondenser Boru Sabitleme Perforeleri','Kondenser Flanşlar','Kondenser Kepler','Kondenser İç Basınçlı Borular'],
@@ -468,9 +469,15 @@ const COLS={
   Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
   Syn2_Ekipman:['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','termin','uretimTermin','siraNo','kullanici','olusturma','guncelleme'],
   Syn2_Teklif:['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme'],
-  Syn2_Gantt:['id','company','projectCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme']
+  Syn2_Gantt:['id','company','projectCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme'],
+  Fuw_Siparis:['id','company','orderCode','musteri','musteriKisaltma','urun','hedefMiktar','birim','hedefSpek','baslangic','termin','durum','sorumlu','sartnameDosyalar','etiketDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
+  Fuw_Lot:['id','company','orderCode','lotNo','lotAdi','planlananMiktar','gerceklesenMiktar','birim','durum','sorumlu','baslangic','bitis','not','olusturan','olusturma','guncelleme'],
+  Fuw_Yukleme:['id','company','orderCode','lotId','yuklemeNo','methodId','methodAd','sicaklik','basinc','co2Akis','sure','hammadKutle','ciktiKutle','verim','sfeSnapshot','operator','baslangic','bitis','not','olusturma','guncelleme'],
+  Fuw_Formulasyon:['id','company','orderCode','tarih','lotIds','oranlar','hedefSpek','gerceklesenSpek','notalar','sorumlu','onayDurumu','onayKullanici','onayTarihi','onayNot','olusturma','guncelleme'],
+  Fuw_Paketleme:['id','company','orderCode','sku','siseTipi','hacim','adet','batchId','etiketDosya','sevkiyatTermini','gonderim','not','olusturan','olusturma','guncelleme'],
+  Fuw_Gantt:['id','company','orderCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme']
 };
-const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[],Syn2_Teklif:[],Syn2_Gantt:[]};
+const C={Users:[],Stok:[],StokHareketleri:[],Metodlar:[],Cikti:[],Analiz:[],Ekipman:[],KalibTarihce:[],Temizlik:[],Gorevler:[],GunlukLog:[],IletisimKisileri:[],Bildirimler:[],DuzenlemeLoglari:[],SynProjeler:[],SynTimeline:[],SynSatinalma:[],SynMaliyet:[],SynRaporlar:[],Syn2_Projeler:[],Syn2_Muhendislik:[],Syn2_Ekipman:[],Syn2_Teklif:[],Syn2_Gantt:[],Fuw_Siparis:[],Fuw_Lot:[],Fuw_Yukleme:[],Fuw_Formulasyon:[],Fuw_Paketleme:[],Fuw_Gantt:[]};
 let currentUser=null,currentPage=null,currentCompany='fuwell',syncTimer=null,authToken=null,notifReady=false,knownNotifIds=new Set(),saveQueues={},dirtySheets=new Set(),goalScopeFilter='';
 function applyTheme(t){const root=document.documentElement;root.setAttribute('data-theme',t);const ic=t==='light'?'☀':'☾';const lt=document.getElementById('login-theme-icon');if(lt)lt.textContent=ic;const st=document.getElementById('sidebar-theme-icon');if(st)st.textContent=ic;const sl=document.getElementById('sidebar-theme-label');if(sl)sl.textContent=t==='light'?'Aydınlık':'Karanlık';document.querySelectorAll('.theme-toggle').forEach(b=>b.setAttribute('data-mode',t));}
 function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';const next=cur==='light'?'dark':'light';try{localStorage.setItem('arsenTheme',next);}catch(e){}applyTheme(next);}
@@ -830,6 +837,8 @@ function updateCompanyUI(){
   const navSA=document.getElementById('nav-ekipman-label')?.closest('.nav-item');
   if(navMuh)navMuh.style.display=syn?'none':'';
   if(navSA)navSA.style.display=syn?'none':'';
+  // Sipariş Takibi sadece Fuwell modunda görünür (Syntegra'nın eşdeğeri Proje Girişi).
+  const navSip=document.getElementById('nav-siparis');if(navSip)navSip.style.display=syn?'none':'';
   const badge=document.getElementById('company-badge');
   if(badge){
     const cfg=COMPANIES[currentCompany];
@@ -878,15 +887,15 @@ function showPage(page,silent=false){
   currentPage=page;
   closeSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const map=['dashboard','genel','stok','analiz','ekipman','metod','sfe','gunluk','bildirim','takvim','mesai','iletisim','dosyalar','rapor','admin','audit'];
+  const map=['dashboard','genel','stok','siparis','analiz','ekipman','metod','sfe','gunluk','bildirim','takvim','mesai','iletisim','dosyalar','rapor','admin','audit'];
   const items=document.querySelectorAll('.nav-item');
   const idx=map.indexOf(page);if(idx>=0&&items[idx])items[idx].classList.add('active');
   const syn=currentCompany==='syntegra';
-  const titles={dashboard:'Dashboard',genel:'Arşen Genel Bakış',stok:syn?'Proje Girişi':'Stok Takibi',analiz:syn?'Mühendislik':'Analiz Sonuçları',ekipman:syn?'Satın Alma':'Ekipman Takibi',metod:syn?'Timetable':'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:syn?'Görevler':'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:syn?'Üretim Log':'Günlük Log',rapor:syn?'Proje Raporları':'Raporlama',admin:'Kullanıcı Yönetimi',audit:'Düzenleme Geçmişi'};
+  const titles={dashboard:'Dashboard',genel:'Arşen Genel Bakış',stok:syn?'Proje Girişi':'Stok Takibi',siparis:'Sipariş Takibi',analiz:syn?'Mühendislik':'Analiz Sonuçları',ekipman:syn?'Satın Alma':'Ekipman Takibi',metod:syn?'Timetable':'Metodlar ve İzlekler',sfe:'Süperkritik CO₂ Hesaplayıcı',bildirim:'Bildirimler',takvim:syn?'Görevler':'Görev Takvimi',mesai:'Ekstra Mesai',iletisim:'İletişimde Olunan Kişiler',dosyalar:'Dosya Depolama',gunluk:syn?'Üretim Log':'Günlük Log',rapor:syn?'Proje Raporları':'Raporlama',admin:'Kullanıcı Yönetimi',audit:'Düzenleme Geçmişi'};
   document.getElementById('page-title').textContent=titles[page]||page;
   document.getElementById('topbar-actions').innerHTML='';
   if(syn&&({stok:projeYonetim,analiz:muhendislik,ekipman:satinalma,metod:gantt})[page])return ({stok:projeYonetim,analiz:muhendislik,ekipman:satinalma,metod:gantt})[page]();
-  ({dashboard,genel:genelBakis,stok,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin,audit:auditLog})[page]?.();
+  ({dashboard,genel:genelBakis,stok,siparis:siparisYonetim,analiz,ekipman,temizlik,metod,sfe,bildirim,takvim,mesai,iletisim,dosyalar,gunluk,rapor,admin,audit:auditLog})[page]?.();
 }
 function updateBadges(){
   const k=C.Stok.filter(s=>s.miktar<=(s.kritikSeviye||0)).length;
@@ -3561,6 +3570,180 @@ async function iletisimKaydet(){const v=iletisimOku();if(!v)return;C.IletisimKis
 function iletisimDuzenle(id){const r=C.IletisimKisileri.find(x=>x.id===id);if(!r)return;showModal('İletişim Kaydı Düzenle',iletisimForm(r),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="iletisimGuncelle('${id}')">Güncelle</button>`);}
 async function iletisimGuncelle(id){const v=iletisimOku();if(!v)return;const idx=C.IletisimKisileri.findIndex(x=>x.id===id);C.IletisimKisileri[idx]={...C.IletisimKisileri[idx],...v};closeModalDirect();renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Kişi güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));}
 async function iletisimSil(id){if(!canDelete()){toast('Kişi silmek için admin yetkisi gerekli.','err');return;}if(!await confirmDialog('Bu iletişim kaydı silinsin mi?'))return;C.IletisimKisileri=C.IletisimKisileri.filter(x=>x.id!==id);renderIletisim(iAra,iKat);save('IletisimKisileri').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));}
+
+// ── FUWELL: SİPARİŞ TAKİBİ (4 sekme — Sipariş / Lotlar / Formülasyon & Paketleme / Çizelge) ──
+// Faz 1: iskelet (sipariş açma + workspace iskeleti). Lot/Yükleme/Formülasyon/Çizelge sonraki fazlarda.
+let _siparisActive=null;        // workspace açıkken sipariş kodu
+let _siparisTab='siparis';      // aktif sekme: siparis | lotlar | formul | cizelge
+let _siparisDraftCode=null;     // yeni sipariş açma sırasında ön rezerve kod
+let _siparisDraftFiles={Sartname:[],Etiket:[]};
+
+function fuwSorumluLabel(username){return synSorumluLabel(username);}
+function fuwFmtDate(s){return synFmtDate(s);}
+function fuwUsersFuwell(){return C.Users.filter(u=>(u.active===true||u.active==='true')&&companyAccess(u).includes('fuwell'));}
+function fuwStatusBadge(d){const map={'Taslak':'badge-gray','Onay Bekliyor':'badge-amber','Üretim Planlandı':'badge-blue','Lot Üretimi':'badge-teal','Formülasyon':'badge-purple','Paketleme':'badge-amber','Teslim Edildi':'badge-green','İptal':'badge-red'};return `<span class="badge ${map[d]||'badge-gray'}">${esc(d||'—')}</span>`;}
+
+function siparisYonetim(){
+  if(currentCompany==='syntegra'){toast('Sipariş Takibi sadece Fuwell tarafındadır.','err');showPage('dashboard');return;}
+  if(_siparisActive){const o=(C.Fuw_Siparis||[]).find(x=>x.orderCode===_siparisActive);if(o)return siparisWorkspace(o);_siparisActive=null;}
+  siparisListesi();
+}
+function siparisListesi(){
+  const umb=isUmbrella()||isAdmin();
+  document.getElementById('topbar-actions').innerHTML=`${umb?'<button class="btn btn-primary btn-sm" onclick="siparisYeni()">+ Yeni Sipariş</button>':''}`;
+  const rows=[...(C.Fuw_Siparis||[])].sort((a,b)=>new Date(b.olusturma||0)-new Date(a.olusturma||0));
+  document.getElementById('content').innerHTML=`
+    <div class="alert alert-blue mb-16" style="font-size:12px">Fuwell sipariş + üretim takibi. Bir sipariş açıldığında lot üretimi, analizler, formülasyon ve paketleme tek bir workspace üzerinden ilerler.</div>
+    ${rows.length?`<div class="table-wrap"><table>
+      <thead><tr><th>Kod</th><th>Müşteri</th><th>Ürün</th><th>Hedef</th><th>Termin</th><th>Sorumlu</th><th>Durum</th><th></th></tr></thead>
+      <tbody>${rows.map(o=>`<tr style="cursor:pointer" onclick="event.target.closest('button')||(_siparisActive='${o.orderCode}',_siparisTab='siparis',siparisYonetim())">
+        <td class="text-mono text-sm" style="color:var(--accent)">${esc(o.orderCode||'—')}</td>
+        <td class="td-main">${esc(o.musteri||'—')}</td>
+        <td>${esc(o.urun||'—')}</td>
+        <td class="text-mono text-sm">${esc(o.hedefMiktar||'—')} ${esc(o.birim||'')}</td>
+        <td class="text-mono text-sm">${fuwFmtDate(o.termin)}</td>
+        <td>${esc(fuwSorumluLabel(o.sorumlu))}</td>
+        <td>${fuwStatusBadge(o.durum)}</td>
+        <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="_siparisActive='${o.orderCode}';_siparisTab='siparis';siparisYonetim()">Aç →</button>${isAdmin()?`<button class="btn btn-danger btn-sm" onclick="siparisSil('${o.id}')">Sil</button>`:''}</td>
+      </tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><div class="empty-icon">▦</div><div>Henüz sipariş yok.</div></div>'}`;
+}
+function siparisWorkspace(o){
+  const tabs=[{k:'siparis',l:'Sipariş'},{k:'lotlar',l:'Lotlar'},{k:'formul',l:'Formülasyon & Paketleme'},{k:'cizelge',l:'Zaman Çizelgesi'}];
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_siparisActive=null;_siparisTab='siparis';siparisYonetim()">← Liste</button>`;
+  const head=`<div class="card mb-16">
+    <div class="card-header" style="flex-wrap:wrap;gap:10px">
+      <div style="min-width:0">
+        <div class="text-mono text-sm" style="color:var(--accent);font-weight:600">${esc(o.orderCode)}</div>
+        <div class="card-title" style="margin-top:4px">${esc(o.urun||'—')} <span class="text-muted" style="font-weight:400">· ${esc(o.musteri||'—')}</span></div>
+        <div class="text-sm text-muted" style="margin-top:4px">Sorumlu: ${esc(fuwSorumluLabel(o.sorumlu))} · Hedef: ${esc(o.hedefMiktar||'—')} ${esc(o.birim||'')} · Termin: ${fuwFmtDate(o.termin)}</div>
+      </div>
+      <div style="text-align:right">${fuwStatusBadge(o.durum)}</div>
+    </div>
+  </div>`;
+  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:6px;overflow-x:auto">${tabs.map(t=>`<button class="filter-btn ${_siparisTab===t.k?'active':''}" onclick="_siparisTab='${t.k}';siparisYonetim()">${esc(t.l)}</button>`).join('')}</div>`;
+  let body='';
+  if(_siparisTab==='siparis')body=siparisBilgiBody(o);
+  else if(_siparisTab==='lotlar')body=`<div class="card"><div class="empty-state"><div class="empty-icon">🧪</div><div style="margin-top:8px"><strong>Lotlar — Faz 2'de gelecek.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">Lot kartları, yüklemeler ve lot durum akışı bu sekmede yer alacak.</div></div></div>`;
+  else if(_siparisTab==='formul')body=`<div class="card"><div class="empty-state"><div class="empty-icon">⚗</div><div style="margin-top:8px"><strong>Formülasyon & Paketleme — Faz 3'te gelecek.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">Lot karışımı, Arşen onayı ve çoklu SKU paketleme burada olacak.</div></div></div>`;
+  else if(_siparisTab==='cizelge')body=`<div class="card"><div class="empty-state"><div class="empty-icon">▦</div><div style="margin-top:8px"><strong>Zaman Çizelgesi — Faz 4'te gelecek.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">Üretim planı → Lotlar → Formülasyon → Paketleme → Teslim Gantt'ı burada olacak.</div></div></div>`;
+  document.getElementById('content').innerHTML=head+tabBar+body;
+}
+function siparisBilgiBody(o){
+  const sart=synParseFiles(o.sartnameDosyalar),etk=synParseFiles(o.etiketDosyalar);
+  const fileList=(arr,label)=>arr.length?arr.map(f=>`<div style="margin:4px 0"><a href="${esc(f.url)}" target="_blank">📎 ${esc(f.name)}</a> · <a href="${esc(f.downloadUrl||f.url)}" target="_blank" class="text-mono text-sm">indir ↓</a></div>`).join(''):`<span class="text-muted text-sm">${label} dosyası yok</span>`;
+  let spek={};try{spek=JSON.parse(o.hedefSpek||'{}')||{};}catch(e){}
+  const spekRows=Object.keys(spek).length?Object.entries(spek).map(([k,v])=>`<tr><td class="text-mono text-sm">${esc(k)}</td><td>${esc(String(v))}</td></tr>`).join(''):'<tr><td colspan="2" class="text-muted">Hedef spek girilmemiş.</td></tr>';
+  return `<div class="grid-2 gap-16">
+    <div class="card"><div class="card-header"><span class="card-title">Şartname Dosyaları</span><span class="text-muted text-sm">${sart.length} dosya</span></div>${fileList(sart,'Şartname')}</div>
+    <div class="card"><div class="card-header"><span class="card-title">Etiket Dosyaları</span><span class="text-muted text-sm">${etk.length} dosya</span></div>${fileList(etk,'Etiket')}</div>
+  </div>
+  <div class="card mt-16"><div class="card-header"><span class="card-title">Hedef Spesifikasyon</span></div>
+    <div class="table-wrap"><table style="font-size:13px"><thead><tr><th>Parametre</th><th>Hedef Değer</th></tr></thead><tbody>${spekRows}</tbody></table></div>
+  </div>
+  ${o.aciklama?`<div class="card mt-16"><div class="card-header"><span class="card-title">Açıklama</span></div><div style="white-space:pre-wrap">${esc(o.aciklama)}</div></div>`:''}
+  <div class="card mt-16"><div class="card-header"><span class="card-title">Zaman Bilgisi</span></div>
+    <div class="grid-4">
+      <div class="stat-card"><div class="stat-label">Oluşturma</div><div class="stat-value" style="font-size:14px">${fuwFmtDate(o.olusturma)}</div></div>
+      <div class="stat-card"><div class="stat-label">Başlangıç</div><div class="stat-value" style="font-size:14px">${fuwFmtDate(o.baslangic)}</div></div>
+      <div class="stat-card"><div class="stat-label">Termin</div><div class="stat-value" style="font-size:14px">${fuwFmtDate(o.termin)}</div></div>
+      <div class="stat-card"><div class="stat-label">Son Güncelleme</div><div class="stat-value" style="font-size:14px">${fuwFmtDate(o.guncelleme)}</div></div>
+    </div>
+  </div>`;
+}
+async function siparisYeni(){
+  if(!isAdmin()&&!isUmbrella()){toast('Sipariş açma yetkisi yok.','err');return;}
+  _siparisDraftCode=null;_siparisDraftFiles={Sartname:[],Etiket:[]};
+  const userOpts=fuwUsersFuwell().map(u=>`<option value="${u.username}">${esc(u.ad||u.username)} (${esc(u.username)})</option>`).join('');
+  showModal('Yeni Sipariş',`
+    <div class="form-row">
+      <div class="form-group"><label>Müşteri *</label><input type="text" id="fs-musteri" oninput="siparisKodPreview()" placeholder="ör: ABC Gıda"></div>
+      <div class="form-group"><label>Ürün *</label><input type="text" id="fs-urun" placeholder="ör: Sızma zeytinyağı"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Hedef Miktar *</label><input type="number" id="fs-miktar" step="any" min="0" placeholder="0"></div>
+      <div class="form-group"><label>Birim</label><select id="fs-birim"><option>kg</option><option>L</option><option>ton</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Başlangıç</label><input type="date" id="fs-bas" value="${today()}"></div>
+      <div class="form-group"><label>Termin *</label><input type="date" id="fs-ter"></div>
+    </div>
+    <div class="form-group"><label>Sorumlu *</label><select id="fs-sor"><option value="">— seçin —</option>${userOpts}</select></div>
+    <div class="form-group"><label>Sipariş Kodu (otomatik)</label><input type="text" id="fs-kod" readonly placeholder="müşteri girince üretilir" style="background:var(--bg3);font-family:var(--mono);color:var(--accent)"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Şartname Dosyaları</label><input type="file" id="fs-sart-inp" multiple onchange="siparisDraftUpload(this,'Sartname')"></div>
+      <div class="form-group"><label>Etiket Dosyaları</label><input type="file" id="fs-etk-inp" multiple onchange="siparisDraftUpload(this,'Etiket')"></div>
+    </div>
+    <div id="fs-sart-list" class="text-sm" style="margin:-6px 0 4px">${siparisDraftRenderList('Sartname')}</div>
+    <div id="fs-etk-list" class="text-sm" style="margin:-6px 0 4px">${siparisDraftRenderList('Etiket')}</div>
+    <div class="form-group"><label>Açıklama / Notlar</label><textarea id="fs-not" style="min-height:80px"></textarea></div>
+    <div class="alert alert-amber" style="font-size:12px">Kayıt → Onaya Gönder dediğinde seçilen sorumluya bildirim gider; Hedef Spek sonradan Sipariş sekmesinden eklenir.</div>
+  `,
+  `<button class="btn btn-ghost" onclick="siparisIptal()">İptal</button><button class="btn btn-primary" onclick="siparisKaydet()">Kaydet → Onaya Gönder</button>`);
+}
+async function siparisKodPreview(){
+  const m=document.getElementById('fs-musteri')?.value.trim();if(!m){const el=document.getElementById('fs-kod');if(el)el.value='';return;}
+  try{const r=await driveApi('previewOrderCode',{customer:m});const el=document.getElementById('fs-kod');if(el)el.value=r.code;}catch(e){}
+}
+function siparisDraftRenderList(bucket){
+  const arr=_siparisDraftFiles[bucket]||[];if(!arr.length)return `<span class="text-muted text-sm">${bucket} dosyası yok</span>`;
+  return arr.map((f,i)=>synFileChip(f,true,`siparisDraftRemove('${bucket}',${i})`)).join('');
+}
+async function siparisDraftUpload(input,bucket){
+  const files=[...input.files||[]];if(!files.length)return;
+  if(!_siparisDraftCode){const m=document.getElementById('fs-musteri').value.trim();if(!m){toast('Önce müşteri adı girin.','err');input.value='';return;}try{const r=await driveApi('nextOrderCode',{customer:m});_siparisDraftCode=r.code;document.getElementById('fs-kod').value=r.code;}catch(e){toast('Kod alınamadı: '+e.message,'err');input.value='';return;}}
+  loading(true,'Dosya yükleniyor...');
+  for(const f of files){
+    try{const b64=await fileToBase64(f);const res=await driveApi('uploadOrderFile',{orderCode:_siparisDraftCode,subfolder:bucket,name:f.name,mimeType:f.type||'application/octet-stream',base64:b64});_siparisDraftFiles[bucket].push(res.file);}catch(e){toast('Dosya hatası: '+e.message,'err');}
+  }
+  loading(false);input.value='';
+  const listEl=document.getElementById('fs-'+(bucket==='Sartname'?'sart':'etk')+'-list');if(listEl)listEl.innerHTML=siparisDraftRenderList(bucket);
+}
+async function siparisDraftRemove(bucket,i){
+  const f=_siparisDraftFiles[bucket][i];if(!f)return;
+  try{await driveApi('deleteOrderFile',{fileId:f.id});}catch(e){toast('Drive silme hatası: '+e.message,'err');}
+  _siparisDraftFiles[bucket].splice(i,1);
+  const listEl=document.getElementById('fs-'+(bucket==='Sartname'?'sart':'etk')+'-list');if(listEl)listEl.innerHTML=siparisDraftRenderList(bucket);
+}
+async function siparisIptal(){
+  if(_siparisDraftCode){
+    const all=[..._siparisDraftFiles.Sartname,..._siparisDraftFiles.Etiket];
+    for(const f of all){try{await driveApi('deleteOrderFile',{fileId:f.id});}catch(e){}}
+    try{await driveApi('deleteOrderFolder',{orderCode:_siparisDraftCode});}catch(e){}
+  }
+  _siparisDraftCode=null;_siparisDraftFiles={Sartname:[],Etiket:[]};closeModalDirect();
+}
+async function siparisKaydet(){
+  const musteri=document.getElementById('fs-musteri').value.trim();
+  const urun=document.getElementById('fs-urun').value.trim();
+  const miktar=document.getElementById('fs-miktar').value.trim();
+  const birim=document.getElementById('fs-birim').value;
+  const baslangic=document.getElementById('fs-bas').value;
+  const termin=document.getElementById('fs-ter').value;
+  const sorumlu=document.getElementById('fs-sor').value;
+  const aciklama=document.getElementById('fs-not').value;
+  if(!musteri||!urun||!miktar||!termin||!sorumlu){toast('Müşteri, ürün, miktar, termin ve sorumlu zorunlu.','err');return;}
+  if(!_siparisDraftCode){try{const r=await driveApi('nextOrderCode',{customer:musteri});_siparisDraftCode=r.code;}catch(e){toast('Sipariş kodu alınamadı: '+e.message,'err');return;}}
+  const now=new Date().toISOString();
+  const row={id:uid(),company:'fuwell',orderCode:_siparisDraftCode,musteri,musteriKisaltma:_siparisDraftCode.split('-').pop(),urun,hedefMiktar:miktar,birim,hedefSpek:'{}',baslangic,termin,durum:'Onay Bekliyor',sorumlu,sartnameDosyalar:JSON.stringify(_siparisDraftFiles.Sartname),etiketDosyalar:JSON.stringify(_siparisDraftFiles.Etiket),driveFolderId:'',aciklama,olusturan:currentUser.username,olusturma:now,guncelleme:now};
+  C.Fuw_Siparis.push(row);
+  const draftCode=_siparisDraftCode;
+  _siparisDraftCode=null;_siparisDraftFiles={Sartname:[],Etiket:[]};
+  closeModalDirect();_siparisActive=draftCode;_siparisTab='siparis';siparisYonetim();
+  save('Fuw_Siparis').then(()=>{
+    toast('Sipariş açıldı · sorumluya bildirim gönderiliyor');
+    notifyApi({recipients:[sorumlu],baslik:'Yeni sipariş atandı: '+draftCode,mesaj:`${urun}\nMüşteri: ${musteri}\nHedef: ${miktar} ${birim}\nTermin: ${fuwFmtDate(termin)||'belirsiz'}\n\nLütfen Sipariş Takibi sekmesinden açıp üretim planına geçin.`,tur:'Sipariş',sayfa:'siparis',kayitId:row.id,sendEmail:true}).catch(e=>toast('Bildirim gönderilemedi: '+e.message,'err'));
+  }).catch(e=>toast('Kayıt hatası: '+e.message,'err'));
+}
+async function siparisSil(id){
+  if(!isAdmin()){toast('Silmek için admin yetkisi gerekli.','err');return;}
+  const o=C.Fuw_Siparis.find(x=>x.id===id);if(!o)return;
+  if(!await confirmDialog(`${o.orderCode} silinsin mi? İlgili Drive klasörü ve tüm alt kayıtlar da kaldırılır.`))return;
+  try{await driveApi('deleteOrderFolder',{orderCode:o.orderCode});}catch(e){}
+  ['Fuw_Lot','Fuw_Yukleme','Fuw_Formulasyon','Fuw_Paketleme','Fuw_Gantt'].forEach(s=>{C[s]=(C[s]||[]).filter(r=>r.orderCode!==o.orderCode);save(s).catch(()=>{});});
+  C.Fuw_Siparis=C.Fuw_Siparis.filter(x=>x.id!==id);
+  _siparisActive=null;siparisYonetim();
+  save('Fuw_Siparis').then(()=>toast('Sipariş silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+}
 
 // ── DOSYA DEPOLAMA ──
 let fileTree={folders:[],files:[],breadcrumb:[],folderId:'root',rootId:''},fileSearch='',fileSort='new';

@@ -30,7 +30,14 @@ var DEFAULT_SHEET_HEADERS = {
   Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','olusturan','olusturma','guncelleme'],
   Syn2_Ekipman: ['id','company','projectCode','body','altParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','termin','uretimTermin','siraNo','kullanici','olusturma','guncelleme'],
   Syn2_Teklif: ['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme'],
-  Syn2_Gantt: ['id','company','projectCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme']
+  Syn2_Gantt: ['id','company','projectCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme'],
+  // Fuwell üretim takibi (Sipariş → Lot → Yükleme/Analiz → Formülasyon → Paketleme → Çizelge)
+  Fuw_Siparis: ['id','company','orderCode','musteri','musteriKisaltma','urun','hedefMiktar','birim','hedefSpek','baslangic','termin','durum','sorumlu','sartnameDosyalar','etiketDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
+  Fuw_Lot: ['id','company','orderCode','lotNo','lotAdi','planlananMiktar','gerceklesenMiktar','birim','durum','sorumlu','baslangic','bitis','not','olusturan','olusturma','guncelleme'],
+  Fuw_Yukleme: ['id','company','orderCode','lotId','yuklemeNo','methodId','methodAd','sicaklik','basinc','co2Akis','sure','hammadKutle','ciktiKutle','verim','sfeSnapshot','operator','baslangic','bitis','not','olusturma','guncelleme'],
+  Fuw_Formulasyon: ['id','company','orderCode','tarih','lotIds','oranlar','hedefSpek','gerceklesenSpek','notalar','sorumlu','onayDurumu','onayKullanici','onayTarihi','onayNot','olusturma','guncelleme'],
+  Fuw_Paketleme: ['id','company','orderCode','sku','siseTipi','hacim','adet','batchId','etiketDosya','sevkiyatTermini','gonderim','not','olusturan','olusturma','guncelleme'],
+  Fuw_Gantt: ['id','company','orderCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme']
 };
 
 function json(result) {
@@ -620,6 +627,62 @@ function deleteProjectFile(data, user) {
   try { DriveApp.getFileById(data.fileId).setTrashed(true); } catch (e) { throw new Error('Dosya silinemedi: ' + e.message); }
   return { ok: true };
 }
+// ── Fuwell order helpers (FUW-YYYY-NNN-X numbering + per-order Drive folder) ──
+function _orderCounterKey(year) { return 'FUW_ORD_CTR_' + year; }
+function nextOrderCodePreview(customer) {
+  var initial = String(customer || 'X').trim().toUpperCase().replace(/[^A-ZÇĞİÖŞÜ]/g, '').charAt(0) || 'X';
+  var year = new Date().getFullYear();
+  var props = PropertiesService.getScriptProperties();
+  var cur = parseInt(props.getProperty(_orderCounterKey(year)) || '0', 10) + 1;
+  return { code: 'FUW-' + year + '-' + ('000' + cur).slice(-3) + '-' + initial, year: year, counter: cur, initial: initial };
+}
+function nextOrderCode(customer) {
+  var initial = String(customer || 'X').trim().toUpperCase().replace(/[^A-ZÇĞİÖŞÜ]/g, '').charAt(0) || 'X';
+  var year = new Date().getFullYear();
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(8000); } catch (e) { throw new Error('Sistem yogun, lütfen tekrar deneyin.'); }
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var key = _orderCounterKey(year);
+    var cur = parseInt(props.getProperty(key) || '0', 10) + 1;
+    props.setProperty(key, String(cur));
+    return { code: 'FUW-' + year + '-' + ('000' + cur).slice(-3) + '-' + initial, year: year, counter: cur, initial: initial };
+  } finally { lock.releaseLock(); }
+}
+function getOrCreateOrderFolder(orderCode) {
+  var root = rootFolder();
+  var ex = root.getFoldersByName(orderCode);
+  if (ex.hasNext()) return ex.next();
+  var f = root.createFolder(orderCode);
+  try { f.setDescription('Arsen Lab sipariş klasörü\nOrderCode: ' + orderCode + '\nOlusturma: ' + new Date().toISOString()); } catch (ignored) {}
+  return f;
+}
+function uploadOrderFile(data, user) {
+  if (!data.orderCode || !data.base64 || !data.name) throw new Error('Sipariş dosya bilgisi eksik.');
+  var pf = getOrCreateOrderFolder(data.orderCode);
+  var target = data.subfolder ? getOrCreateSubfolder(pf, data.subfolder) : pf;
+  var blob = Utilities.newBlob(Utilities.base64Decode(data.base64), data.mimeType || 'application/octet-stream', data.name);
+  var file = target.createFile(blob);
+  var desc = 'OrderCode: ' + data.orderCode + '\nSubfolder: ' + (data.subfolder || '-') + '\nYukleyen: ' + (user.ad || user.username || 'Bilinmiyor') + '\nYuklemeTarihi: ' + new Date().toISOString();
+  file.setDescription(desc);
+  return { ok: true, file: { id: file.getId(), name: file.getName(), url: file.getUrl(), downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId(), folder: target.getName(), size: file.getSize(), mimeType: file.getMimeType(), uploadedAt: new Date().toISOString(), uploadedBy: user.ad || user.username || '' } };
+}
+function deleteOrderFile(data, user) {
+  if (!data.fileId) throw new Error('Dosya kimligi eksik.');
+  try { DriveApp.getFileById(data.fileId).setTrashed(true); } catch (e) { throw new Error('Dosya silinemedi: ' + e.message); }
+  return { ok: true };
+}
+function deleteOrderFolder(data, user) {
+  if (!data.orderCode) throw new Error('Sipariş kodu eksik.');
+  if (!isArsenAdmin(user)) throw new Error('Sipariş klasörü silmek için Arşen admin yetkisi gerekli.');
+  try {
+    var root = rootFolder();
+    var ex = root.getFoldersByName(data.orderCode);
+    if (ex.hasNext()) ex.next().setTrashed(true);
+  } catch (e) { throw new Error('Klasör silinemedi: ' + e.message); }
+  return { ok: true };
+}
+
 function deleteProjectFolder(data, user) {
   if (!data.projectCode) throw new Error('Proje kodu eksik.');
   if (user.role !== 'admin') throw new Error('Klasor silmek icin admin yetkisi gerekli.');
@@ -947,6 +1010,11 @@ function doPost(e) {
       else if (data.action === 'createTreeFolder') result = createTreeFolder(user, data.company, data.parentId, data.name);
       else if (data.action === 'uploadTreeFile') result = uploadTreeFile(user, data.company, data.folderId, data.name, data.base64, data.mimeType, data.description);
       else if (data.action === 'deleteTreeItem') result = deleteTreeItem(user, data.company, data.id, data.isFolder);
+      else if (data.action === 'nextOrderCode') result = nextOrderCode(data.customer);
+      else if (data.action === 'previewOrderCode') result = nextOrderCodePreview(data.customer);
+      else if (data.action === 'uploadOrderFile') result = uploadOrderFile(data, user);
+      else if (data.action === 'deleteOrderFile') result = deleteOrderFile(data, user);
+      else if (data.action === 'deleteOrderFolder') result = deleteOrderFolder(data, user);
       else result = { error: 'Bilinmeyen istek.' };
     }
   } catch (err) {
