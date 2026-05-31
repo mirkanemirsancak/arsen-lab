@@ -316,6 +316,16 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   .stat-value{font-size:22px;}
   .content{padding:14px 12px;}
   .card{padding:16px;}
+  /* Gantt: telefonda sol etiket sütununu daraltıp zaman çizgisine yer aç */
+  .gantt-row-label{flex:0 0 150px;padding:6px 8px;font-size:11px;}
+  .gantt-header .gantt-row-label{font-size:10px;}
+  /* Tablolar telefonda daha kompakt — zaten table-wrap içinde yatay kayar */
+  th,td{padding:6px 8px;font-size:11px;}
+  .btn-sm{padding:6px 9px;font-size:11px;min-height:30px;}
+  /* Modallarda dikey scroll için */
+  .modal{max-height:92vh;overflow-y:auto;}
+  /* Sipariş/proje header yazıları kelime kıralım */
+  .card-header .text-mono,.card-header .card-title{word-break:break-word;}
 }
 @supports(padding:max(0px)){
   body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
