@@ -3625,8 +3625,36 @@ function siparisWorkspace(o){
   if(_siparisTab==='siparis')body=siparisBilgiBody(o);
   else if(_siparisTab==='lotlar')body=siparisLotlarBody(o);
   else if(_siparisTab==='formul')body=siparisFormulBody(o);
-  else if(_siparisTab==='cizelge')body=`<div class="card"><div class="empty-state"><div class="empty-icon">▦</div><div style="margin-top:8px"><strong>Zaman Çizelgesi — Faz 4'te gelecek.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">Üretim planı → Lotlar → Formülasyon → Paketleme → Teslim Gantt'ı burada olacak.</div></div></div>`;
+  else if(_siparisTab==='cizelge')body=fuwOrderGanttHtml(o);
   document.getElementById('content').innerHTML=head+tabBar+body;
+}
+function fuwOrderAuditCard(o){
+  const events=[];
+  events.push({icon:'▣',text:'Sipariş açıldı',by:fuwSorumluLabel(o.olusturan),at:o.olusturma});
+  events.push({icon:'◷',text:`Sorumluya atandı: <strong>${esc(fuwSorumluLabel(o.sorumlu))}</strong>`,at:o.olusturma,raw:true});
+  const lots=fuwLotsFor(o.orderCode).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
+  if(lots.length)events.push({icon:'✓',text:`Üretime başlandı (Lot ${esc(lots[0].lotNo||'')} eklendi)`,by:fuwSorumluLabel(lots[0].olusturan),at:lots[0].olusturma});
+  lots.filter(l=>l.durum==='Tamamlandı').forEach(l=>{events.push({icon:'🟢',text:`Lot ${esc(l.lotNo||'')} tamamlandı`,at:l.bitis||l.guncelleme});});
+  const f=fuwFormulFor(o.orderCode);
+  if(f){
+    events.push({icon:'⚗',text:'Formülasyon hazırlandı',by:fuwSorumluLabel(f.sorumlu),at:f.olusturma});
+    if(f.onayDurumu==='Bekliyor')events.push({icon:'📤',text:'Arşen onayına gönderildi',at:f.guncelleme});
+    if(f.onayDurumu==='onaylandı')events.push({icon:'✓',text:'Arşen onayladı',by:fuwSorumluLabel(f.onayKullanici),at:f.onayTarihi,note:f.onayNot,color:'#3ecf8e'});
+    if(f.onayDurumu==='reddedildi')events.push({icon:'✗',text:'Arşen reddetti',by:fuwSorumluLabel(f.onayKullanici),at:f.onayTarihi,note:f.onayNot,color:'#e74c3c'});
+  }
+  const skus=fuwPaketlemelerFor(o.orderCode).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
+  if(skus.length)events.push({icon:'📦',text:`Paketleme başladı (${skus.length} SKU)`,by:fuwSorumluLabel(skus[0].olusturan),at:skus[0].olusturma});
+  return `<div class="card mt-16"><div class="card-header"><span class="card-title">Onay Akışı / Geçmiş</span><span class="text-muted text-sm">${events.length} olay</span></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${events.map(e=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 12px;background:var(--bg2);border-radius:6px;border-left:3px solid ${e.color||'var(--accent)'}">
+        <span style="font-size:14px;flex:0 0 auto">${e.icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text)">${e.raw?e.text:esc(e.text)}</div>
+          <div class="text-sm text-muted" style="margin-top:2px">${e.by?'<strong>'+esc(e.by)+'</strong>':''}${e.at?(e.by?' · ':'')+fuwFmtDate(e.at):''}${e.note?' · "'+esc(e.note)+'"':''}</div>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
 }
 function siparisBilgiBody(o){
   const sart=synParseFiles(o.sartnameDosyalar),etk=synParseFiles(o.etiketDosyalar);
@@ -3648,7 +3676,8 @@ function siparisBilgiBody(o){
       <div class="stat-card"><div class="stat-label">Termin</div><div class="stat-value" style="font-size:14px">${fuwFmtDate(o.termin)}</div></div>
       <div class="stat-card"><div class="stat-label">Son Güncelleme</div><div class="stat-value" style="font-size:14px">${fuwFmtDate(o.guncelleme)}</div></div>
     </div>
-  </div>`;
+  </div>
+  ${fuwOrderAuditCard(o)}`;
 }
 // ── Lotlar (Tab 2) — paralel lot üretimi + yüklemeler ──
 function fuwLotDurumBadge(d){const map={'Aktif':'badge-blue','Analiz Bekliyor':'badge-amber','Tamamlandı':'badge-green','İptal':'badge-red'};return `<span class="badge ${map[d]||'badge-gray'}">${esc(d||'Aktif')}</span>`;}
@@ -4177,6 +4206,113 @@ async function paketSil(id){
   C.Fuw_Paketleme=C.Fuw_Paketleme.filter(x=>x.id!==id);
   siparisYonetim();
   save('Fuw_Paketleme').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+
+// ── Zaman Çizelgesi (Tab 4) — sipariş Gantt'ı (Sipariş / Üretim Planı / Lotlar+Yüklemeler / Formülasyon / Paketleme) ──
+let _fuwGanttOpenLots={};
+function fuwGanttToggleLot(lotId){_fuwGanttOpenLots[lotId]=!_fuwGanttOpenLots[lotId];siparisYonetim();}
+function fuwOrderGanttRows(o){
+  const rows=[];
+  const now=new Date().toISOString();
+  const oStart=o.olusturma||o.baslangic;
+  const oEnd=o.termin||(o.durum==='Teslim Edildi'?o.guncelleme:now);
+  if(oStart&&oEnd)rows.push({label:'SİPARİŞ',sub:o.orderCode,stages:[{label:'Onay → Termin',klass:'proje',start:oStart,end:oEnd,ongoing:!o.termin}],readonly:true});
+  const lots=fuwLotsFor(o.orderCode);
+  if(lots.length){
+    const lotStarts=lots.map(l=>l.baslangic||l.olusturma).filter(Boolean).sort();
+    const lotEnds=lots.map(l=>l.bitis||l.guncelleme).filter(Boolean).sort();
+    if(lotStarts.length){
+      const ongoing=lots.some(l=>l.durum!=='Tamamlandı'&&l.durum!=='İptal');
+      rows.push({label:'ÜRETİM PLANI',sub:`${lots.length} lot · ${lots.filter(l=>l.durum==='Tamamlandı').length} tamam`,stages:[{label:'Üretim Aralığı',klass:'muh',start:lotStarts[0],end:lotEnds[lotEnds.length-1]||lotStarts[0],ongoing}],readonly:true});
+    }
+  }
+  lots.forEach((l,i)=>{
+    const yuks=fuwYuklemelerFor(l.id);
+    const allStarts=[],allEnds=[];
+    yuks.forEach(y=>{const s=y.baslangic||y.bitis||y.olusturma;const e=y.bitis||y.baslangic||y.olusturma;if(s)allStarts.push(s);if(e)allEnds.push(e);});
+    if(l.baslangic)allStarts.push(l.baslangic);
+    if(l.bitis)allEnds.push(l.bitis);
+    const open=!!_fuwGanttOpenLots[l.id];
+    const envStages=allStarts.length?[{label:`Lot ${l.lotNo||''}`,klass:'body-envelope',start:allStarts.sort()[0],end:allEnds.sort().pop()||allStarts[0],ongoing:l.durum!=='Tamamlandı'}]:[];
+    rows.push({label:`LOT ${(l.lotNo||'').toString().toUpperCase()}${l.lotAdi?' · '+l.lotAdi:''}`,sub:`${yuks.length} yükleme · ${esc(fuwSorumluLabel(l.sorumlu))} · ${l.durum||'Aktif'} · tıklayın`,stages:envStages,readonly:true,bodyHeader:l.id,bodyOpen:open,subRaw:true});
+    if(!open)return;
+    yuks.forEach((y,yi)=>{
+      const colorClass='sub-'+((i*3+yi)%8);
+      const yStart=y.baslangic||y.bitis||y.olusturma;
+      const yEnd=y.bitis||y.baslangic||y.olusturma;
+      const stages=yStart?[{label:`#${y.yuklemeNo||''}${y.methodAd?' · '+y.methodAd:''}`,klass:colorClass,start:yStart,end:yEnd||yStart,ongoing:false}]:[];
+      rows.push({label:`  Yükleme #${y.yuklemeNo||''}`,sub:`${y.methodAd?y.methodAd+' · ':''}op: ${esc(fuwSorumluLabel(y.operator))} · verim ${y.verim||'—'}${y.verim?'%':''}`,stages,readonly:true,subRow:true,subRaw:true});
+    });
+  });
+  const f=fuwFormulFor(o.orderCode);
+  if(f){
+    const fStart=f.tarih||f.olusturma;
+    const fEnd=f.onayTarihi||f.guncelleme||fStart;
+    const klass=f.onayDurumu==='reddedildi'?'sub-3':'muh';
+    rows.push({label:'FORMÜLASYON',sub:`${f.onayDurumu||'Taslak'} · ${esc(fuwSorumluLabel(f.sorumlu))}`,stages:fStart?[{label:'Formülasyon',klass,start:fStart,end:fEnd,ongoing:f.onayDurumu!=='onaylandı'&&f.onayDurumu!=='reddedildi'}]:[],readonly:true,subRaw:true});
+  }
+  const skus=fuwPaketlemelerFor(o.orderCode);
+  if(skus.length){
+    const pakStart=f?.onayTarihi||skus[0].olusturma;
+    const sevks=skus.map(p=>p.sevkiyatTermini).filter(Boolean).sort();
+    const pakEnd=sevks.length?sevks[sevks.length-1]:(o.termin||now);
+    const ongoing=skus.some(p=>p.gonderim!=='Sevk Edildi'&&p.gonderim!=='Teslim Edildi');
+    rows.push({label:'PAKETLEME',sub:`${skus.length} SKU`,stages:pakStart?[{label:'Paketleme',klass:'body-envelope',start:pakStart,end:pakEnd,ongoing}]:[],readonly:true,subRaw:true});
+    skus.forEach((p,pi)=>{
+      if(!p.sevkiyatTermini)return;
+      const colorClass='sub-'+((pi+5)%8);
+      rows.push({label:`  ${esc(p.sku||'SKU')}`,sub:`${p.adet||'?'} ${p.siseTipi||''} · ${p.gonderim||''}`,stages:[{label:`${p.sku||''}`,klass:colorClass+' uretim-mark',start:p.sevkiyatTermini,end:p.sevkiyatTermini,ongoing:false}],readonly:true,subRow:true,subRaw:true});
+    });
+  }
+  return rows;
+}
+function fuwOrderGanttHtml(o){
+  const year=_ganttYear||new Date().getFullYear();
+  const rows=fuwOrderGanttRows(o);
+  const months=ganttMonthSpans(year);
+  const totalW=54*_ganttCellW;
+  const monthRow=months.map(m=>`<div class="gantt-month-cell" style="flex-basis:${m.weeks*_ganttCellW}px">${m.name}</div>`).join('');
+  const weekRow=Array.from({length:54},(_,i)=>`<div class="gantt-week-cell">${i+1}</div>`).join('');
+  const todayLine=ganttTodayLine(year);
+  const bodyRows=rows.map(r=>{
+    const cells=r.stages&&r.stages.length?r.stages.map(s=>ganttBarHtml(s,year)).join(''):'';
+    const labelStyle=r.subRow?'color:var(--text2);font-weight:500;font-size:11px':'color:var(--accent);font-weight:600;font-size:11px';
+    const labelOnclick=r.bodyHeader?` style="cursor:pointer" onclick="fuwGanttToggleLot('${r.bodyHeader}')"`:'';
+    const indicator=r.bodyHeader?`<span style="color:var(--accent);margin-right:4px">${r.bodyOpen?'▾':'▸'}</span>`:'';
+    return `<div class="gantt-row"${r.bodyHeader?' style="background:var(--bg2)"':''}>
+      <div class="gantt-row-label"${labelOnclick}>
+        <div class="text-mono" style="${labelStyle}">${indicator}${esc(r.label)}</div>
+        <div style="font-size:10px;color:var(--text3)">${r.subRaw?(r.sub||''):esc(r.sub||'')}</div>
+      </div>
+      <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">${todayLine}${cells}</div>
+    </div>`;
+  }).join('');
+  return `<div class="flex justify-between items-center mb-16" style="flex-wrap:wrap;gap:10px">
+      <span class="card-title">Zaman Çizelgesi · ${year}</span>
+      <div class="flex gap-8">
+        <button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year-1};siparisYonetim()">← ${year-1}</button>
+        <button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year+1};siparisYonetim()">${year+1} →</button>
+      </div>
+    </div>
+    <div class="gantt-legend mb-16">
+      <span><span class="gantt-legend-dot" style="background:#5aa6ff"></span>Sipariş</span>
+      <span><span class="gantt-legend-dot" style="background:#f5a623"></span>Üretim Planı / Formülasyon</span>
+      <span><span class="gantt-legend-dot" style="background:linear-gradient(90deg,rgba(0,188,212,0.55),rgba(0,188,212,0.35));border:1px dashed #00838f"></span>Lot Zarfı / Paketleme</span>
+      <span><span class="gantt-legend-dot" style="background:#2ecc71"></span>Yükleme (lot içi)</span>
+      <span><span class="gantt-legend-dot" style="background:#2ecc71;background-image:repeating-linear-gradient(135deg,transparent 0,transparent 3px,rgba(0,0,0,0.32) 3px,rgba(0,0,0,0.32) 6px)"></span>SKU Sevkiyatı</span>
+      <span style="color:var(--red)">— Bugün</span>
+    </div>
+    ${rows.length?`<div class="gantt-wrap"><div class="gantt-scroll">
+      <div class="gantt-header">
+        <div class="gantt-row-label" style="background:var(--bg3)">Aşama</div>
+        <div class="gantt-header-cells" style="width:${totalW}px;--gw:${_ganttCellW}px">
+          <div class="gantt-months">${monthRow}</div>
+          <div class="gantt-weeks">${weekRow}</div>
+        </div>
+      </div>
+      ${bodyRows}
+    </div></div>
+    <div class="text-sm text-muted mt-16">Çizelge tüm verilerden otomatik türetilir: lot tarihleri, yükleme tarihleri, formülasyon onay tarihi ve SKU sevkiyat termini. Bu sekmede düzenleme yapılmaz — Lotlar / Formülasyon & Paketleme sekmelerinden değiştirdiğin her şey buraya otomatik yansır. Lot satırlarına tıklayarak yüklemelerini açabilirsin.</div>`:'<div class="empty-state"><div class="empty-icon">▦</div><div>Çizelgede gösterilecek veri yok. Önce lot/yükleme/formülasyon ekleyin.</div></div>'}`;
 }
 
 async function siparisYeni(){
