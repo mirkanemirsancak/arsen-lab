@@ -1857,7 +1857,8 @@ function renderProjeListesi(){
       <tbody>${shown.map(p=>{
         const sart=synParseFiles(p.sartnameDosyalar).length,tas=synParseFiles(p.tasarimDosyalar).length;
         const meSorumlu=p.sorumlu===currentUser.username;
-        const canApprove=meSorumlu&&p.durum==='Onay Bekliyor';
+        const canApprove=(meSorumlu||isAdmin())&&p.durum==='Onay Bekliyor';
+        const canUndo=isAdmin()&&p.durum!=='Onay Bekliyor'&&p.durum!=='Taslak';
         return `<tr style="cursor:pointer" onclick="event.target.closest('button')||(_wsProject='${p.projectCode}',_wsTab='proje',projeYonetim())">
           <td class="text-mono text-sm" style="color:var(--accent)">${esc(p.projectCode||'—')}</td>
           <td class="td-main">${esc(p.projeAdi||'—')}</td>
@@ -1868,6 +1869,7 @@ function renderProjeListesi(){
           <td class="text-mono text-sm">${sart} şart · ${tas} tas</td>
           <td style="white-space:nowrap" onclick="event.stopPropagation()">
             ${canApprove?`<button class="btn btn-success btn-sm" onclick="projeOnayla('${p.id}')">Onayla</button><button class="btn btn-danger btn-sm" onclick="projeReddet('${p.id}')">Reddet</button>`:''}
+            ${canUndo?`<button class="btn btn-ghost btn-sm" onclick="projeOnayGeri('${p.id}')" title="Onayı/kararı geri al">↺ Geri Al</button>`:''}
             ${canDelete()?`<button class="btn btn-danger btn-sm" onclick="projeSil('${p.id}')">Sil</button>`:''}
           </td>
         </tr>`;}).join('')}</tbody>
@@ -2038,7 +2040,8 @@ function projeDetayRender(id,editMode){
   `:`
     <button class="btn btn-ghost" onclick="closeModalDirect()">Kapat</button>
     ${canEditAll?`<button class="btn btn-amber" onclick="projeDetayEdit('${id}')">✎ Düzenle</button>`:''}
-    ${meSorumlu&&p.durum==='Onay Bekliyor'?`<button class="btn btn-danger" onclick="closeModalDirect();projeReddet('${id}')">Reddet</button><button class="btn btn-success" onclick="closeModalDirect();projeOnayla('${id}')">Onayla</button>`:''}
+    ${(meSorumlu||isAdmin())&&p.durum==='Onay Bekliyor'?`<button class="btn btn-danger" onclick="closeModalDirect();projeReddet('${id}')">Reddet</button><button class="btn btn-success" onclick="closeModalDirect();projeOnayla('${id}')">Onayla</button>`:''}
+    ${isAdmin()&&p.durum!=='Onay Bekliyor'&&p.durum!=='Taslak'?`<button class="btn btn-ghost" onclick="closeModalDirect();projeOnayGeri('${id}')" title="Onayı/kararı geri al">↺ Geri Al</button>`:''}
     ${canDelete()?`<button class="btn btn-danger" onclick="closeModalDirect();projeSil('${id}')">Sil</button>`:''}`;
   showModal(p.projectCode+' · '+p.projeAdi,body,footer);
 }
@@ -2066,7 +2069,7 @@ async function projeDetayKaydet(id){
 }
 async function projeOnayla(id){
   const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
-  if(p.sorumlu!==currentUser.username){toast('Sadece atanan sorumlu onaylayabilir.','err');return;}
+  if(p.sorumlu!==currentUser.username&&!isAdmin()){toast('Yalnız atanan sorumlu veya admin onaylayabilir.','err');return;}
   p.durum='Mühendislik Sürecinde';p.guncelleme=new Date().toISOString();
   renderProjeListesi();
   save('Syn2_Projeler').then(()=>{
@@ -2076,7 +2079,7 @@ async function projeOnayla(id){
 }
 async function projeReddet(id){
   const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
-  if(p.sorumlu!==currentUser.username){toast('Sadece atanan sorumlu reddedebilir.','err');return;}
+  if(p.sorumlu!==currentUser.username&&!isAdmin()){toast('Yalnız atanan sorumlu veya admin reddedebilir.','err');return;}
   const sebep=await promptDialog('Reddetme sebebi:','','Projeyi Reddet');if(sebep===null)return;
   p.durum='İptal';p.aciklama=(p.aciklama?p.aciklama+'\n\n':'')+'[Reddedildi] '+(sebep||'');p.guncelleme=new Date().toISOString();
   renderProjeListesi();
@@ -2084,6 +2087,15 @@ async function projeReddet(id){
     toast('Proje reddedildi.');
     notifyApi({recipients:[p.olusturan],baslik:'Proje reddedildi: '+p.projectCode,mesaj:`${p.projeAdi}\nSebep: ${sebep||'-'}`,tur:'Proje',sayfa:'stok',kayitId:p.id,sendEmail:true}).catch(()=>{});
   }).catch(e=>toast('Kaydetme hatası: '+e.message,'err'));
+}
+// Admin-only: revert any project decision back to "Onay Bekliyor" (undo approval/rejection).
+async function projeOnayGeri(id){
+  if(!isAdmin()){toast('Onayı yalnız admin geri alabilir.','err');return;}
+  const p=C.Syn2_Projeler.find(x=>x.id===id);if(!p)return;
+  if(!await confirmDialog(`${p.projectCode} için onay/karar geri alınsın ve durum "Onay Bekliyor"a dönsün mü?`,'Geri Al',false))return;
+  p.durum='Onay Bekliyor';p.guncelleme=new Date().toISOString();
+  renderProjeListesi();
+  save('Syn2_Projeler').then(()=>{toast('Karar geri alındı, proje yeniden onay bekliyor.');notifyApi({recipients:[p.sorumlu],baslik:'Onay geri alındı: '+p.projectCode,mesaj:`${p.projeAdi}\nKararı admin geri aldı; proje tekrar onay bekliyor.`,tur:'Proje',sayfa:'stok',kayitId:p.id,sendEmail:true}).catch(()=>{});}).catch(e=>toast('Hata: '+e.message,'err'));
 }
 async function projeSil(id){
   if(!canDelete()){toast('Admin yetkisi gerekli.','err');return;}
@@ -2196,9 +2208,10 @@ function muhCizimSection(p,mh,revGecmisi){
   const meEng=p.sorumlu===currentUser.username;
   const meOwner=p.olusturan===currentUser.username||isUmbrella();
   const durum=mh.durum||'Taslak';
-  const canEdit=meEng&&(durum==='Taslak'||durum==='Revizyon İstendi');
+  const canEdit=(meEng||isAdmin())&&(durum==='Taslak'||durum==='Revizyon İstendi');
   const canSubmit=meEng&&(durum==='Taslak'||durum==='Revizyon İstendi')&&(pid.length>0||cizim.length>0);
-  const canDecide=meOwner&&durum==='Onay Bekliyor';
+  const canDecide=(meOwner||isAdmin())&&durum==='Onay Bekliyor';
+  const canUndoMuh=isAdmin()&&(durum==='Onaylandı'||durum==='Revizyon İstendi');
   return `
     <div class="grid-2 gap-16">
       <div class="card">
@@ -2219,7 +2232,8 @@ function muhCizimSection(p,mh,revGecmisi){
     <div class="card mt-16" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       ${canSubmit?`<button class="btn btn-primary" onclick="muhOnayaGonder()">📨 Onaya Gönder (Arşen)</button>`:''}
       ${canDecide?`<button class="btn btn-success" onclick="muhOnayla()">✓ Onayla</button><button class="btn btn-danger" onclick="muhRevizyonIste()">↺ Revizyon İste</button>`:''}
-      ${!canEdit&&!canDecide?`<span class="text-muted text-sm">${durum==='Onay Bekliyor'?'Arşen kararı bekleniyor.':(durum==='Onaylandı'?'Çizimler onaylandı, ekipman sekmelerine geçebilirsiniz.':'Düzenleme yetkin yok.')}</span>`:''}
+      ${canUndoMuh?`<button class="btn btn-ghost" onclick="muhKararGeri()" title="Mühendislik kararını geri al">↺ Geri Al</button>`:''}
+      ${!canEdit&&!canDecide&&!canUndoMuh?`<span class="text-muted text-sm">${durum==='Onay Bekliyor'?'Arşen kararı bekleniyor.':(durum==='Onaylandı'?'Çizimler onaylandı, ekipman sekmelerine geçebilirsiniz.':'Düzenleme yetkin yok.')}</span>`:''}
     </div>`;
 }
 function muhBodyDraftKey(projectCode,body){return projectCode+'|'+body;}
@@ -2438,6 +2452,22 @@ async function muhRevizyonIste(){
     notifyApi({recipients:[p.sorumlu],baslik:'Revizyon istendi: '+p.projectCode,mesaj:`${p.projeAdi}\n${not.trim()}\n\nMühendislik sekmesinden dosyaları güncelleyip tekrar onaya gönderin.`,tur:'Mühendislik',sayfa:'analiz',kayitId:mh.id,sendEmail:true}).catch(()=>{});
   }).catch(e=>toast('Hata: '+e.message,'err'));
 }
+// Admin-only: revert an engineering decision (Onaylandı / Revizyon İstendi) back to Onay Bekliyor.
+async function muhKararGeri(){
+  if(!isAdmin()){toast('Onayı yalnız admin geri alabilir.','err');return;}
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
+  if(!await confirmDialog(`${p.projectCode} mühendislik kararı geri alınsın ve durum "Onay Bekliyor"a dönsün mü?`,'Geri Al',false))return;
+  const prev=mh.durum;
+  mh.durum='Onay Bekliyor';mh.sonKararKullanici=currentUser.username;mh.sonKararTarih=new Date().toISOString();mh.guncelleme=mh.sonKararTarih;
+  let hist=[];try{hist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
+  hist.push({karar:'Geri Alındı',not:'Önceki: '+prev,kullanici:currentUser.username,tarih:mh.sonKararTarih});
+  mh.revizyonGecmisi=JSON.stringify(hist);
+  if(p.durum==='Mühendislik Tamamlandı')p.durum='Mühendislik Sürecinde';
+  p.guncelleme=mh.sonKararTarih;
+  muhWorkspace(_muhSelectedProjectCode);
+  Promise.all([save('Syn2_Muhendislik'),save('Syn2_Projeler')]).then(()=>{toast('Mühendislik kararı geri alındı.');notifyApi({recipients:[p.sorumlu],baslik:'Mühendislik kararı geri alındı: '+p.projectCode,mesaj:`${p.projeAdi}\nAdmin kararı geri aldı; mühendislik tekrar onay bekliyor.`,tur:'Mühendislik',sayfa:'analiz',kayitId:mh.id,sendEmail:true}).catch(()=>{});}).catch(e=>toast('Hata: '+e.message,'err'));
+}
 // ── Satın Alma (Tab 3) ──
 let _saSelectedProjectCode=null;
 let _saOpenBodies={};
@@ -2541,7 +2571,7 @@ function saEkipmanCard(e,meSA,meOwner,projectCode){
         <td>${isWinner?saApprovalBadge(t.onayDurumu):''}</td>
         <td>${isWinner&&t.onayDurumu!=='bekliyor'&&t.onayDurumu!=='reddedildi'?(meSA?`<select onchange="saTeklifDurum('${t.id}',this.value)" style="background:var(--bg3);border:1px solid var(--border);padding:4px 6px;border-radius:5px;color:var(--text);font-size:11px"><option value="">—</option>${SYN_PURCHASE_STATUS.map(s=>`<option value="${s}" ${t.durum===s?'selected':''}>${s}</option>`).join('')}</select>`:saStatusBadge(t.durum)):''}</td>
         <td>${isWinner?'<span class="badge badge-green">✓ Kazanan</span>':(meSA&&!kazananVar?`<button class="btn btn-success btn-sm" onclick="saKazanan('${t.id}')">Kazanan</button>`:'')}</td>
-        ${meSA||meOwner?`<td>${meSA&&!isWinner?`<button class="btn btn-ghost btn-sm" onclick="saTeklifSil('${t.id}')" style="color:var(--red)">×</button>`:''}${meOwner&&isWinner&&t.onayDurumu==='bekliyor'?`<button class="btn btn-success btn-sm" onclick="saKararVer('${t.id}','onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="saKararVer('${t.id}','reddedildi')">Reddet</button>`:''}</td>`:''}
+        ${meSA||meOwner||isAdmin()?`<td>${meSA&&!isWinner?`<button class="btn btn-ghost btn-sm" onclick="saTeklifSil('${t.id}')" style="color:var(--red)">×</button>`:''}${(meOwner||isAdmin())&&isWinner&&t.onayDurumu==='bekliyor'?`<button class="btn btn-success btn-sm" onclick="saKararVer('${t.id}','onaylandı')">Onayla</button><button class="btn btn-danger btn-sm" onclick="saKararVer('${t.id}','reddedildi')">Reddet</button>`:''}${isAdmin()&&isWinner&&(t.onayDurumu==='onaylandı'||t.onayDurumu==='reddedildi')?`<button class="btn btn-ghost btn-sm" onclick="saKararGeri('${t.id}')" title="Karar geri al">↺ Geri Al</button>`:''}</td>`:''}
       </tr>`;}).join('')}</tbody>
     </table></div>`:'<div class="text-muted text-sm" style="margin-top:8px">Henüz teklif yok.</div>'}
   </div>`;
@@ -2640,6 +2670,17 @@ async function saKararVer(id,karar){
       notifyApi({recipients:[mh.satinalmaSorumlu],baslik:`Satın alma ${karar}: `+t.projectCode,mesaj:`${p.projeAdi}\n${t.tedarikci} · ${saFmtMoney(t.fiyat,t.paraBirimi)}\n${karar==='onaylandı'?'Arşen onayladı, satın almaya devam edebilirsiniz.':'Arşen reddetti, başka teklif seçmelisiniz.'}\n${not?'Not: '+not:''}`,tur:'Satın Alma',sayfa:'ekipman',kayitId:t.id,sendEmail:true}).catch(()=>{});
     }
   }).catch(e=>toast('Hata: '+e.message,'err'));
+}
+// Admin-only: revert a purchase decision (onaylandı/reddedildi) back to "bekliyor".
+async function saKararGeri(id){
+  if(!isAdmin()){toast('Onayı yalnız admin geri alabilir.','err');return;}
+  const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
+  if(!await confirmDialog(`${t.tedarikci} · ${saFmtMoney(t.fiyat,t.paraBirimi)} kararı geri alınsın ve tekrar onay beklesin mi?`,'Geri Al',false))return;
+  const prev=t.onayDurumu;
+  t.onayDurumu='bekliyor';t.onayKullanici=currentUser.username;t.onayTarihi=new Date().toISOString();t.onayNot='Geri alındı (önceki: '+prev+')';t.guncelleme=t.onayTarihi;
+  if(prev==='reddedildi'){t.kazanan='true';}
+  saWorkspace(_saSelectedProjectCode);
+  save('Syn2_Teklif').then(()=>{toast('Karar geri alındı.');const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===t.projectCode);if(mh?.satinalmaSorumlu){notifyApi({recipients:[mh.satinalmaSorumlu],baslik:'Satın alma kararı geri alındı: '+t.projectCode,mesaj:`${t.tedarikci} · ${saFmtMoney(t.fiyat,t.paraBirimi)}\nAdmin kararı geri aldı; teklif tekrar onay bekliyor.`,tur:'Satın Alma',sayfa:'ekipman',kayitId:t.id,sendEmail:true}).catch(()=>{});}}).catch(e=>toast('Hata: '+e.message,'err'));
 }
 async function saTeklifDurum(id,durum){
   const t=C.Syn2_Teklif.find(x=>x.id===id);if(!t)return;
