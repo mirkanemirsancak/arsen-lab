@@ -315,7 +315,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   .topbar-title{display:none;}
   .stat-value{font-size:22px;}
   .content{padding:14px 12px;}
-  .card{padding:16px;}
+  .card{padding:14px;}
   /* Gantt: telefonda sol etiket sütununu daraltıp zaman çizgisine yer aç */
   .gantt-row-label{flex:0 0 150px;padding:6px 8px;font-size:11px;}
   .gantt-header .gantt-row-label{font-size:10px;}
@@ -326,6 +326,18 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
   .modal{max-height:92vh;overflow-y:auto;}
   /* Sipariş/proje header yazıları kelime kıralım */
   .card-header .text-mono,.card-header .card-title{word-break:break-word;}
+  /* Geniş savunma: kart içindeki tüm flex çocukları küçülebilsin */
+  .card>*,.card-header>*{min-width:0;}
+  /* Form girdileri telefonda tam genişlik — type=date'in iOS varsayılan genişliği taşma yapıyordu */
+  input,select,textarea{max-width:100%;min-width:0;box-sizing:border-box;width:100%;}
+  /* Uzun yazılar (sorumlu, müşteri, açıklama) sınırı aşmasın */
+  .text-sm,.text-muted,.td-main,.alert,.empty-state{overflow-wrap:anywhere;}
+  /* Onay Akışı / Geçmiş kartındaki event satırları */
+  .card div[style*="border-left:3px solid"] *{min-width:0;overflow-wrap:anywhere;}
+  /* Sipariş workspace head'inin sağ buton kümesi tablete sığmazsa alt satıra geçsin */
+  .card-header>div:last-child{justify-content:flex-end;gap:6px;flex-wrap:wrap;}
+  /* Filter butonları (Aşama/Sekme barı) tek satırda kalsın, gerek varsa horizontal scroll çalışsın */
+  .filter-btn{white-space:nowrap;flex-shrink:0;}
 }
 @supports(padding:max(0px)){
   body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
