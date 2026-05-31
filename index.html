@@ -246,7 +246,20 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .gantt-bar.sa{background:#3ecf8e;color:#0a2a1e;}
 .gantt-bar.done{background:#16a571;}
 .gantt-bar.uretim{background:#9b59b6;}
-.gantt-bar.body-envelope{background:rgba(90,166,255,0.18);border:1px dashed rgba(90,166,255,0.55);color:var(--text2);font-style:italic;}
+/* Body envelope — a distinct standalone summary bar across the body's sub-parts. */
+.gantt-bar.body-envelope{background:linear-gradient(90deg,rgba(0,188,212,0.40),rgba(0,188,212,0.28));border:2px dashed #00838f;color:#e0f7fa;font-weight:600;font-style:italic;}
+/* Sub-part palette: each sub-part of a body picks one of these colors. Its Satın
+   Alma and Üretim bars share that color so the eye pairs them. Üretim is also
+   marked with diagonal hatching so the two roles stay distinguishable. */
+.gantt-bar.sub-0{background-color:#2ecc71;color:#0a2a1e;}
+.gantt-bar.sub-1{background-color:#3498db;color:#fff;}
+.gantt-bar.sub-2{background-color:#e67e22;color:#2a1500;}
+.gantt-bar.sub-3{background-color:#e74c3c;color:#fff;}
+.gantt-bar.sub-4{background-color:#9b59b6;color:#fff;}
+.gantt-bar.sub-5{background-color:#1abc9c;color:#0a2a1e;}
+.gantt-bar.sub-6{background-color:#f39c12;color:#2a1700;}
+.gantt-bar.sub-7{background-color:#ec407a;color:#fff;}
+.gantt-bar.uretim-mark{background-image:repeating-linear-gradient(135deg,transparent 0,transparent 5px,rgba(0,0,0,0.32) 5px,rgba(0,0,0,0.32) 9px);}
 .gantt-bar.editable{cursor:pointer;}
 .gantt-bar.editable:hover{filter:brightness(1.1);box-shadow:0 0 0 2px rgba(255,255,255,0.4);}
 .gantt-empty-cell{position:absolute;top:50%;transform:translateY(-50%);height:16px;left:2px;display:flex;align-items:center;}
@@ -2798,11 +2811,18 @@ function ganttApprovalDate(p){
 function ganttEnsureSeed(p){
   if(['Taslak','Onay Bekliyor','İptal'].includes(p.durum))return; // not started yet
   let changed=false;
-  // Mühendislik 4-week block, seeded once
+  // Mühendislik — 4-week block at the start, seeded once.
   if(!ganttFindEntry(p.projectCode,'muhendislik','')){
     const start=(ganttApprovalDate(p)||new Date().toISOString()).slice(0,10);
     const end=new Date(new Date(start).getTime()+28*86400000).toISOString().slice(0,10);
     C.Syn2_Gantt.push({id:uid(),company:currentCompany,projectCode:p.projectCode,tip:'muhendislik',body:'',baslik:'Mühendislik (4 hafta)',baslangic:start,bitis:end,kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()});
+    changed=true;
+  }
+  // Test+Montaj+Sevkiyat — last 4 weeks before the project termin, seeded once.
+  if(p.termin&&!ganttFindEntry(p.projectCode,'test','')){
+    const end=String(p.termin).slice(0,10);
+    const start=new Date(new Date(end).getTime()-28*86400000).toISOString().slice(0,10);
+    C.Syn2_Gantt.push({id:uid(),company:currentCompany,projectCode:p.projectCode,tip:'test',body:'',baslik:'Test+Montaj+Sevkiyat',baslangic:start,bitis:end,kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()});
     changed=true;
   }
   if(changed)save('Syn2_Gantt').catch(()=>{});
@@ -2859,18 +2879,19 @@ function projectGanttHtml(p){
       if(pur&&ur&&ur.bitis){allStarts.push(pur.end);allEnds.push(String(ur.bitis).slice(0,10));}
     });
     const open=!!_ganttOpenBodies[b];
-    const envStages=allStarts.length?[{label:b+' (zarf)',klass:'body-envelope',start:allStarts.sort()[0],end:allEnds.sort().pop(),ongoing:false}]:[];
+    const envStages=allStarts.length?[{label:b,klass:'body-envelope',start:allStarts.sort()[0],end:allEnds.sort().pop(),ongoing:false}]:[];
     rows.push({label:b.toUpperCase(),sub:`${subs.length} alt-parça · tıklayın`,stages:envStages,readonly:true,bodyHeader:b,bodyOpen:open});
     if(!open)return;
-    subs.forEach(sub=>{
+    subs.forEach((sub,i)=>{
+      const colorClass='sub-'+(i%8);
       const pur=ganttSubPurchase(p.projectCode,sub.id);
-      const purStages=pur?[{label:'Satın Alma · '+(pur.tedarikci||''),klass:'sa',start:pur.start,end:pur.end,ongoing:false}]:[];
+      const purStages=pur?[{label:'Satın Alma · '+(pur.tedarikci||''),klass:colorClass,start:pur.start,end:pur.end,ongoing:false}]:[];
       rows.push({label:'  · '+sub.altParca,sub:pur?`tedarik: ${pur.tedarikci||'—'}`:'kazanan teklif yok',stages:purStages,readonly:true,subRow:true});
       const ur=ganttFindUretimSub(p.projectCode,b,sub.altParca);
       let urStages=[];
-      if(pur&&ur&&ur.bitis){urStages=[{label:'Üretim',klass:'uretim',start:pur.end,end:String(ur.bitis).slice(0,10),ongoing:false}];}
+      if(pur&&ur&&ur.bitis){urStages=[{label:'Üretim · '+sub.altParca,klass:colorClass+' uretim-mark',start:pur.end,end:String(ur.bitis).slice(0,10),ongoing:false}];}
       const editKey=pur?{tip:'uretim',body:b,baslik:sub.altParca,ekipmanId:sub.id,subPart:true}:null;
-      rows.push({label:'    Üretim',sub:ur?.bitis?'termin: '+ganttFmt(ur.bitis):(pur?'termin gir':'satın alma onayını bekliyor'),stages:urStages,editKey:canEdit?editKey:null,canEdit,subRow:true});
+      rows.push({label:'    Üretim · '+sub.altParca,sub:ur?.bitis?'termin: '+ganttFmt(ur.bitis):(pur?'termin gir':'satın alma onayını bekliyor'),stages:urStages,editKey:canEdit?editKey:null,canEdit,subRow:true});
     });
   });
   // 4) custom (ozel) entries
@@ -2916,10 +2937,11 @@ function projectGanttHtml(p){
       </div>
     </div>
     <div class="gantt-legend mb-16">
+      <span><span class="gantt-legend-dot" style="background:#5aa6ff"></span>Proje</span>
       <span><span class="gantt-legend-dot" style="background:#f5a623"></span>Mühendislik</span>
-      <span><span class="gantt-legend-dot" style="background:#5aa6ff"></span>Satın Alma</span>
-      <span><span class="gantt-legend-dot" style="background:#9b59b6"></span>Üretim/İmalat</span>
-      <span><span class="gantt-legend-dot" style="background:#3ecf8e"></span>Test+Montaj+Sevkiyat</span>
+      <span><span class="gantt-legend-dot" style="background:linear-gradient(90deg,rgba(0,188,212,0.55),rgba(0,188,212,0.35));border:1px dashed #00838f"></span>Gövde Zarfı (özet)</span>
+      <span><span class="gantt-legend-dot" style="background:#2ecc71"></span>Alt-parça (Satın Alma + Üretim aynı renk)</span>
+      <span><span class="gantt-legend-dot" style="background:#2ecc71;background-image:repeating-linear-gradient(135deg,transparent 0,transparent 3px,rgba(0,0,0,0.32) 3px,rgba(0,0,0,0.32) 6px)"></span>Üretim (taramalı)</span>
       <span style="color:var(--red)">— Bugün</span>
     </div>
     <div class="gantt-wrap"><div class="gantt-scroll">
