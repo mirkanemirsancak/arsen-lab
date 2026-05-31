@@ -35,7 +35,7 @@ var DEFAULT_SHEET_HEADERS = {
   Fuw_Siparis: ['id','company','orderCode','musteri','musteriKisaltma','urun','hedefMiktar','birim','hedefSpek','baslangic','termin','durum','sorumlu','sartnameDosyalar','etiketDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
   Fuw_Lot: ['id','company','orderCode','lotNo','lotAdi','planlananMiktar','gerceklesenMiktar','birim','durum','sorumlu','baslangic','bitis','not','olusturan','olusturma','guncelleme'],
   Fuw_Yukleme: ['id','company','orderCode','lotId','yuklemeNo','methodId','methodAd','sicaklik','basinc','co2Akis','sure','hammadKutle','ciktiKutle','verim','sfeSnapshot','operator','baslangic','bitis','not','olusturma','guncelleme'],
-  Fuw_Formulasyon: ['id','company','orderCode','tarih','lotIds','oranlar','hedefSpek','gerceklesenSpek','notalar','sorumlu','onayDurumu','onayKullanici','onayTarihi','onayNot','olusturma','guncelleme'],
+  Fuw_Formulasyon: ['id','company','orderCode','tarih','lotIds','oranlar','hedefSpek','gerceklesenSpek','notalar','sorumlu','planlananBitis','onayDurumu','onayKullanici','onayTarihi','onayNot','olusturma','guncelleme'],
   Fuw_Paketleme: ['id','company','orderCode','sku','siseTipi','hacim','adet','batchId','etiketDosya','sevkiyatTermini','gonderim','not','olusturan','olusturma','guncelleme'],
   Fuw_Gantt: ['id','company','orderCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme']
 };

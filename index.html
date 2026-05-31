@@ -473,7 +473,7 @@ const COLS={
   Fuw_Siparis:['id','company','orderCode','musteri','musteriKisaltma','urun','hedefMiktar','birim','hedefSpek','baslangic','termin','durum','sorumlu','sartnameDosyalar','etiketDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
   Fuw_Lot:['id','company','orderCode','lotNo','lotAdi','planlananMiktar','gerceklesenMiktar','birim','durum','sorumlu','baslangic','bitis','not','olusturan','olusturma','guncelleme'],
   Fuw_Yukleme:['id','company','orderCode','lotId','yuklemeNo','methodId','methodAd','sicaklik','basinc','co2Akis','sure','hammadKutle','ciktiKutle','verim','sfeSnapshot','operator','baslangic','bitis','not','olusturma','guncelleme'],
-  Fuw_Formulasyon:['id','company','orderCode','tarih','lotIds','oranlar','hedefSpek','gerceklesenSpek','notalar','sorumlu','onayDurumu','onayKullanici','onayTarihi','onayNot','olusturma','guncelleme'],
+  Fuw_Formulasyon:['id','company','orderCode','tarih','lotIds','oranlar','hedefSpek','gerceklesenSpek','notalar','sorumlu','planlananBitis','onayDurumu','onayKullanici','onayTarihi','onayNot','olusturma','guncelleme'],
   Fuw_Paketleme:['id','company','orderCode','sku','siseTipi','hacim','adet','batchId','etiketDosya','sevkiyatTermini','gonderim','not','olusturan','olusturma','guncelleme'],
   Fuw_Gantt:['id','company','orderCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme']
 };
@@ -3894,6 +3894,9 @@ function lotYeni(orderCode){
   if(o.durum==='İptal'){toast('İptal edilmiş siparişe lot eklenemez.','err');return;}
   const lotNo=(fuwLotsFor(orderCode).length||0)+1;
   const userOpts=fuwUsersFuwell().map(u=>`<option value="${u.username}" ${u.username===currentUser.username?'selected':''}>${esc(u.ad||u.username)}</option>`).join('');
+  // Default planlanan bitiş: today + 28d, capped by order termin if earlier
+  const def=new Date(Date.now()+28*86400000).toISOString().slice(0,10);
+  const defBitis=o.termin&&o.termin<def?o.termin:def;
   showModal('Yeni Lot · '+orderCode,`
     <div class="form-row">
       <div class="form-group"><label>Lot No *</label><input type="number" id="lt-no" value="${lotNo}" min="1"></div>
@@ -3905,16 +3908,24 @@ function lotYeni(orderCode){
     </div>
     <div class="form-row">
       <div class="form-group"><label>Sorumlu</label><select id="lt-sor">${userOpts}</select></div>
-      <div class="form-group"><label>Başlangıç</label><input type="date" id="lt-bas" value="${today()}"></div>
+      <div class="form-group"><label>Başlangıç *</label><input type="date" id="lt-bas" value="${today()}"></div>
     </div>
+    <div class="form-row">
+      <div class="form-group"><label>Planlanan Bitiş *</label><input type="date" id="lt-bit" value="${defBitis}"></div>
+      <div class="form-group"></div>
+    </div>
+    <div class="text-sm text-muted">Bu lotun planlanan bitiş tarihi çizelgede çubuk uzunluğunu belirler. Tamamlanma tarihi sonradan ayrıca işlenir.</div>
     <div class="form-group"><label>Not</label><textarea id="lt-not" style="min-height:60px"></textarea></div>
   `,`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="lotKaydet('${orderCode}')">Kaydet</button>`);
 }
 async function lotKaydet(orderCode){
   const lotNo=document.getElementById('lt-no').value.trim();
-  if(!lotNo){toast('Lot no zorunlu.','err');return;}
+  const bas=document.getElementById('lt-bas').value;
+  const bit=document.getElementById('lt-bit').value;
+  if(!lotNo||!bas||!bit){toast('Lot no, başlangıç ve planlanan bitiş zorunlu.','err');return;}
+  if(bit<bas){toast('Bitiş, başlangıçtan önce olamaz.','err');return;}
   const now=new Date().toISOString();
-  const row={id:uid(),company:'fuwell',orderCode,lotNo,lotAdi:document.getElementById('lt-ad').value.trim(),planlananMiktar:document.getElementById('lt-plan').value,gerceklesenMiktar:'',birim:document.getElementById('lt-birim').value,durum:'Aktif',sorumlu:document.getElementById('lt-sor').value,baslangic:document.getElementById('lt-bas').value,bitis:'',not:document.getElementById('lt-not').value.trim(),olusturan:currentUser.username,olusturma:now,guncelleme:now};
+  const row={id:uid(),company:'fuwell',orderCode,lotNo,lotAdi:document.getElementById('lt-ad').value.trim(),planlananMiktar:document.getElementById('lt-plan').value,gerceklesenMiktar:'',birim:document.getElementById('lt-birim').value,durum:'Aktif',sorumlu:document.getElementById('lt-sor').value,baslangic:bas,bitis:bit,not:document.getElementById('lt-not').value.trim(),olusturan:currentUser.username,olusturma:now,guncelleme:now};
   C.Fuw_Lot.push(row);
   const o=C.Fuw_Siparis.find(x=>x.orderCode===orderCode);
   if(o&&(o.durum==='Onay Bekliyor'||o.durum==='Üretim Planlandı')){o.durum='Lot Üretimi';o.guncelleme=now;save('Fuw_Siparis').catch(()=>{});}
@@ -3938,6 +3949,10 @@ function lotDuzenle(id){
       <div class="form-group"><label>Sorumlu</label><select id="lt-sor">${userOpts}</select></div>
       <div class="form-group"><label>Başlangıç</label><input type="date" id="lt-bas" value="${l.baslangic||''}"></div>
     </div>
+    <div class="form-row">
+      <div class="form-group"><label>Planlanan Bitiş</label><input type="date" id="lt-bit" value="${l.bitis||''}"></div>
+      <div class="form-group"></div>
+    </div>
     <div class="form-group"><label>Not</label><textarea id="lt-not" style="min-height:60px">${esc(l.not||'')}</textarea></div>
   `,`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="lotGuncelle('${id}')">Güncelle</button>`);
 }
@@ -3949,6 +3964,7 @@ async function lotGuncelle(id){
   l.birim=document.getElementById('lt-birim').value;
   l.sorumlu=document.getElementById('lt-sor').value;
   l.baslangic=document.getElementById('lt-bas').value;
+  l.bitis=document.getElementById('lt-bit').value;
   l.not=document.getElementById('lt-not').value.trim();
   l.guncelleme=new Date().toISOString();
   closeModalDirect();siparisYonetim();
@@ -3958,7 +3974,7 @@ async function lotDurum(id,yeni){
   const l=C.Fuw_Lot.find(x=>x.id===id);if(!l)return;
   const o=C.Fuw_Siparis.find(x=>x.orderCode===l.orderCode);if(!fuwLotCanManage(o)){toast('Yetkin yok.','err');return;}
   l.durum=yeni;l.guncelleme=new Date().toISOString();
-  if(yeni==='Tamamlandı'){l.bitis=new Date().toISOString().slice(0,10);}
+  // bitis = planlanan bitiş (lot oluştururken alındı). Tamamlandı durumunda üzerine yazmıyoruz.
   siparisYonetim();
   save('Fuw_Lot').then(()=>toast('Lot durumu: '+yeni)).catch(e=>toast('Hata: '+e.message,'err'));
 }
@@ -4172,9 +4188,14 @@ function formulYeni(orderCode){
   </tr>`).join(''):'<tr><td colspan="4" class="text-muted">Henüz lot yok. Önce lot ekleyin.</td></tr>';
   const hedefText=fuwSpekRender(fuwSpekParse(o.hedefSpek));
   const gercekText=existing?fuwSpekRender(fuwSpekParse(existing.gerceklesenSpek)):'';
+  const defBitis=existing?.planlananBitis||new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   showModal((existing?'Formülasyonu Düzenle':'Yeni Formülasyon')+' · '+orderCode,`
-    <div class="form-group"><label>Sorumlu</label><select id="fm-sor">${userOpts}</select></div>
-    <div class="form-group"><label>Tarih</label><input type="date" id="fm-tar" value="${existing?.tarih||today()}"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Sorumlu</label><select id="fm-sor">${userOpts}</select></div>
+      <div class="form-group"><label>Başlangıç</label><input type="date" id="fm-tar" value="${existing?.tarih||today()}"></div>
+    </div>
+    <div class="form-group"><label>Planlanan Bitiş *</label><input type="date" id="fm-bit" value="${defBitis}"></div>
+    <div class="text-sm text-muted" style="margin-top:-6px">Formülasyon hazırlama + onay süreci için tahmini bitiş — çizelgede çubuk uzunluğunu belirler.</div>
     <div><strong style="font-size:12px;color:var(--text2)">Lot Karışımı (toplam %100 olmalı)</strong>
       <div class="table-wrap" style="margin-top:6px"><table style="font-size:12px"><thead><tr><th></th><th>Lot</th><th>Mevcut</th><th>Oran %</th></tr></thead><tbody>${lotRows}</tbody></table></div>
       <div class="text-sm" style="margin-top:6px">Toplam: <strong id="fm-toplam" style="color:var(--accent)">0</strong>%</div>
@@ -4196,6 +4217,9 @@ function formulOranToplam(){
 async function formulKaydet(orderCode,existingId){
   const sorumlu=document.getElementById('fm-sor').value;
   const tarih=document.getElementById('fm-tar').value;
+  const planlananBitis=document.getElementById('fm-bit').value;
+  if(!planlananBitis){toast('Planlanan bitiş zorunlu.','err');return;}
+  if(planlananBitis<tarih){toast('Bitiş, başlangıçtan önce olamaz.','err');return;}
   const gercek=document.getElementById('fm-gercek').value;
   const notalar=document.getElementById('fm-not').value.trim();
   const oranlar={};
@@ -4207,10 +4231,10 @@ async function formulKaydet(orderCode,existingId){
   const lotIds=Object.keys(oranlar).join(',');
   const gerceklesenSpek=JSON.stringify(fuwSpekFromText(gercek));
   if(existingId){
-    const f=C.Fuw_Formulasyon.find(x=>x.id===existingId);if(f){f.sorumlu=sorumlu;f.tarih=tarih;f.lotIds=lotIds;f.oranlar=JSON.stringify(oranlar);f.gerceklesenSpek=gerceklesenSpek;f.notalar=notalar;f.guncelleme=now;}
+    const f=C.Fuw_Formulasyon.find(x=>x.id===existingId);if(f){f.sorumlu=sorumlu;f.tarih=tarih;f.planlananBitis=planlananBitis;f.lotIds=lotIds;f.oranlar=JSON.stringify(oranlar);f.gerceklesenSpek=gerceklesenSpek;f.notalar=notalar;f.guncelleme=now;}
   } else {
     const o=C.Fuw_Siparis.find(x=>x.orderCode===orderCode);
-    C.Fuw_Formulasyon.push({id:uid(),company:'fuwell',orderCode,tarih,lotIds,oranlar:JSON.stringify(oranlar),hedefSpek:o?.hedefSpek||'{}',gerceklesenSpek,notalar,sorumlu,onayDurumu:'Taslak',onayKullanici:'',onayTarihi:'',onayNot:'',olusturma:now,guncelleme:now});
+    C.Fuw_Formulasyon.push({id:uid(),company:'fuwell',orderCode,tarih,lotIds,oranlar:JSON.stringify(oranlar),hedefSpek:o?.hedefSpek||'{}',gerceklesenSpek,notalar,sorumlu,planlananBitis,onayDurumu:'Taslak',onayKullanici:'',onayTarihi:'',onayNot:'',olusturma:now,guncelleme:now});
     if(o&&o.durum==='Lot Üretimi'){o.durum='Formülasyon';o.guncelleme=now;save('Fuw_Siparis').catch(()=>{});}
   }
   closeModalDirect();siparisYonetim();
@@ -4359,8 +4383,9 @@ function fuwOrderGanttRows(o){
   if(oStart&&oEnd)rows.push({label:'SİPARİŞ',sub:o.orderCode,stages:[{label:'Onay → Termin',klass:'proje',start:oStart,end:oEnd,ongoing:!o.termin}],readonly:true});
   const lots=fuwLotsFor(o.orderCode);
   if(lots.length){
+    // Üretim planı zarfı planlanan tarihleri kullanır; yoksa olusturma + 28 gün
     const lotStarts=lots.map(l=>l.baslangic||l.olusturma).filter(Boolean).sort();
-    const lotEnds=lots.map(l=>l.bitis||l.guncelleme).filter(Boolean).sort();
+    const lotEnds=lots.map(l=>{if(l.bitis)return l.bitis;const s=l.baslangic||l.olusturma;return s?new Date(new Date(s).getTime()+28*86400000).toISOString().slice(0,10):'';}).filter(Boolean).sort();
     if(lotStarts.length){
       const ongoing=lots.some(l=>l.durum!=='Tamamlandı'&&l.durum!=='İptal');
       rows.push({label:'ÜRETİM PLANI',sub:`${lots.length} lot · ${lots.filter(l=>l.durum==='Tamamlandı').length} tamam`,stages:[{label:'Üretim Aralığı',klass:'muh',start:lotStarts[0],end:lotEnds[lotEnds.length-1]||lotStarts[0],ongoing}],readonly:true});
@@ -4368,13 +4393,17 @@ function fuwOrderGanttRows(o){
   }
   lots.forEach((l,i)=>{
     const yuks=fuwYuklemelerFor(l.id);
-    const allStarts=[],allEnds=[];
-    yuks.forEach(y=>{const s=y.baslangic||y.bitis||y.olusturma;const e=y.bitis||y.baslangic||y.olusturma;if(s)allStarts.push(s);if(e)allEnds.push(e);});
-    if(l.baslangic)allStarts.push(l.baslangic);
-    if(l.bitis)allEnds.push(l.bitis);
+    // Lot envelope: tercihen lot.baslangic + lot.bitis (planlanan); yoksa
+    // yüklemelerin tarih aralığı; o da yoksa olusturma + 28 gün fallback.
+    let lotStart=l.baslangic||l.olusturma;
+    let lotEnd=l.bitis;
+    if(!lotEnd){
+      const yukEnds=yuks.map(y=>y.bitis||y.baslangic).filter(Boolean).sort();
+      lotEnd=yukEnds.length?yukEnds[yukEnds.length-1]:(lotStart?new Date(new Date(lotStart).getTime()+28*86400000).toISOString().slice(0,10):'');
+    }
     const open=!!_fuwGanttOpenLots[l.id];
-    const envStages=allStarts.length?[{label:`Lot ${l.lotNo||''}`,klass:'body-envelope',start:allStarts.sort()[0],end:allEnds.sort().pop()||allStarts[0],ongoing:l.durum!=='Tamamlandı'}]:[];
-    rows.push({label:`LOT ${(l.lotNo||'').toString().toUpperCase()}${l.lotAdi?' · '+l.lotAdi:''}`,sub:`${yuks.length} yükleme · ${esc(fuwSorumluLabel(l.sorumlu))} · ${l.durum||'Aktif'} · tıklayın`,stages:envStages,readonly:true,bodyHeader:l.id,bodyOpen:open,subRaw:true});
+    const envStages=(lotStart&&lotEnd)?[{label:`Lot ${l.lotNo||''}`,klass:'body-envelope',start:lotStart,end:lotEnd,ongoing:l.durum!=='Tamamlandı'}]:[];
+    rows.push({label:`LOT ${(l.lotNo||'').toString().toUpperCase()}${l.lotAdi?' · '+l.lotAdi:''}`,sub:`${yuks.length} yükleme · ${esc(fuwSorumluLabel(l.sorumlu))} · ${l.durum||'Aktif'} · plan: ${fuwFmtDate(lotEnd)} · tıklayın`,stages:envStages,readonly:true,bodyHeader:l.id,bodyOpen:open,subRaw:true});
     if(!open)return;
     yuks.forEach((y,yi)=>{
       const colorClass='sub-'+((i*3+yi)%8);
@@ -4387,9 +4416,11 @@ function fuwOrderGanttRows(o){
   const f=fuwFormulFor(o.orderCode);
   if(f){
     const fStart=f.tarih||f.olusturma;
-    const fEnd=f.onayTarihi||f.guncelleme||fStart;
+    // Planlanan bitiş tercih edilir; onaylanmışsa onay tarihi; yoksa +7 gün fallback
+    let fEnd=f.planlananBitis||f.onayTarihi||'';
+    if(!fEnd&&fStart)fEnd=new Date(new Date(fStart).getTime()+7*86400000).toISOString().slice(0,10);
     const klass=f.onayDurumu==='reddedildi'?'sub-3':'muh';
-    rows.push({label:'FORMÜLASYON',sub:`${f.onayDurumu||'Taslak'} · ${esc(fuwSorumluLabel(f.sorumlu))}`,stages:fStart?[{label:'Formülasyon',klass,start:fStart,end:fEnd,ongoing:f.onayDurumu!=='onaylandı'&&f.onayDurumu!=='reddedildi'}]:[],readonly:true,subRaw:true});
+    rows.push({label:'FORMÜLASYON',sub:`${f.onayDurumu||'Taslak'} · ${esc(fuwSorumluLabel(f.sorumlu))}${f.planlananBitis?' · plan: '+fuwFmtDate(f.planlananBitis):''}`,stages:fStart?[{label:'Formülasyon',klass,start:fStart,end:fEnd||fStart,ongoing:f.onayDurumu!=='onaylandı'&&f.onayDurumu!=='reddedildi'}]:[],readonly:true,subRaw:true});
   }
   const skus=fuwPaketlemelerFor(o.orderCode);
   if(skus.length){
