@@ -246,6 +246,7 @@ tbody tr:last-child td{border-bottom:none;}tbody tr:hover td{background:var(--bg
 .gantt-bar.sa{background:#3ecf8e;color:#0a2a1e;}
 .gantt-bar.done{background:#16a571;}
 .gantt-bar.uretim{background:#9b59b6;}
+.gantt-bar.body-envelope{background:rgba(90,166,255,0.18);border:1px dashed rgba(90,166,255,0.55);color:var(--text2);font-style:italic;}
 .gantt-bar.editable{cursor:pointer;}
 .gantt-bar.editable:hover{filter:brightness(1.1);box-shadow:0 0 0 2px rgba(255,255,255,0.4);}
 .gantt-empty-cell{position:absolute;top:50%;transform:translateY(-50%);height:16px;left:2px;display:flex;align-items:center;}
@@ -2330,6 +2331,41 @@ async function muhBodyKaydet(){
   muhWorkspace(projectCode);
   save('Syn2_Ekipman').then(()=>toast(body+' kaydedildi ✓ ('+meaningful.length+' satır)')).catch(e=>toast('Hata: '+e.message,'err'));
 }
+// Özet table state — which body rows are expanded to show sub-parts.
+let _ozetOpenBodies={};
+function ozetToggleBody(b){_ozetOpenBodies[b]=!_ozetOpenBodies[b];if(_wsProject)projeWorkspace();else if(_muhSelectedProjectCode)muhWorkspace(_muhSelectedProjectCode);}
+// Open a print-friendly window with body + sub-parts so the user can Save as PDF from the browser.
+function ozetPdfPrint(projectCode){
+  const p=(C.Syn2_Projeler||[]).find(x=>x.projectCode===projectCode);if(!p){toast('Proje bulunamadı.','err');return;}
+  const eqByBody={};SYN_BODY_LIST.forEach(b=>{eqByBody[b]=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode&&r.body===b);});
+  const bodyHTML=SYN_BODY_LIST.filter(b=>eqByBody[b].length).map(b=>`
+    <section style="margin:18px 0;page-break-inside:avoid">
+      <h2 style="font:600 14px/1.3 -apple-system,sans-serif;margin:0 0 8px;border-bottom:2px solid #333;padding-bottom:4px">${esc(b)} <span style="font-weight:400;color:#666;font-size:11px">(${eqByBody[b].length} alt-parça)</span></h2>
+      <table style="width:100%;border-collapse:collapse;font:11px -apple-system,sans-serif">
+        <thead><tr style="background:#f3f3f3">${['Sıra','Alt-Parça','Adet','Ölçü','Malzeme','Kalite','Amaç','Termin','Not'].map(h=>`<th style="text-align:left;padding:5px 7px;border:1px solid #ccc">${h}</th>`).join('')}</tr></thead>
+        <tbody>${eqByBody[b].map((r,i)=>`<tr>
+          <td style="padding:5px 7px;border:1px solid #ccc">${i+1}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${esc(r.altParca||'—')}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${esc(r.adet||'—')}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${esc(r.olcu||'—')}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${esc(r.malzemeCinsi||'—')}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${esc(r.malzemeKalitesi||'—')}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${esc(r.amac||'—')}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${synFmtDate(r.termin)||'—'}</td>
+          <td style="padding:5px 7px;border:1px solid #ccc">${esc(r.not||'—')}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </section>`).join('');
+  const total=Object.values(eqByBody).reduce((a,b)=>a+b.length,0);
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(projectCode)} · Ekipman Özeti</title><style>@page{size:A4;margin:14mm}body{font:13px -apple-system,sans-serif;color:#111;margin:0;padding:0}h1{font:600 18px/1.2 -apple-system,sans-serif;margin:0 0 4px}.head{border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:14px}.muted{color:#666;font-size:11px}</style></head><body>
+    <div class="head"><h1>${esc(p.projectCode)} · ${esc(p.projeAdi||'')}</h1><div class="muted">Müşteri: ${esc(p.musteri||'—')} · Sorumlu: ${esc(synSorumluLabel(p.sorumlu))} · Termin: ${synFmtDate(p.termin)||'—'} · Toplam alt-parça: <strong>${total}</strong></div></div>
+    ${bodyHTML||'<p>Henüz alt-parça girilmemiş.</p>'}
+    <div class="muted" style="margin-top:30px;text-align:right">Arşen Process · ${new Date().toLocaleString('tr-TR')}</div>
+    <script>window.addEventListener('load',function(){setTimeout(function(){window.print();},250);});<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');if(!w){toast('Açılır pencere engellendi. İzin verip tekrar deneyin.','err');return;}
+  w.document.open();w.document.write(html);w.document.close();
+}
 function muhGonderSection(p,mh){
   const meEng=p.sorumlu===currentUser.username||isUmbrella();
   // Count alt-parça per body — prefer drafts when present, fall back to persisted rows.
@@ -2347,10 +2383,24 @@ function muhGonderSection(p,mh){
   });
   const total=Object.values(byBody).reduce((a,b)=>a+b,0);
   const yiyecekliUsers=synUsersAll();
-  const bodyList=SYN_BODY_LIST.map(b=>`<tr><td class="td-main">${esc(b)}${draftBodies.includes(b)?' <span class="badge badge-amber" style="margin-left:6px">kaydedilmemiş</span>':''}</td><td class="text-mono" style="text-align:right">${byBody[b]||0}</td></tr>`).join('');
+  // Each body row toggles a detail table of its sub-parts. PDF button at top exports the whole summary.
+  const ekipmanRowsFor=(b)=>{
+    const k=muhBodyDraftKey(p.projectCode,b);
+    return _muhBodyDrafts[k]?_muhBodyDrafts[k].filter(r=>(r.altParca||'').trim()):(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode&&r.body===b);
+  };
+  const detailHeaders='<tr><th>Alt-Parça</th><th style="text-align:right">Adet</th><th>Ölçü</th><th>Malzeme</th><th>Kalite</th><th>Amaç</th><th>Termin</th></tr>';
+  const bodyList=SYN_BODY_LIST.map(b=>{
+    const open=!!_ozetOpenBodies[b];
+    const rows=ekipmanRowsFor(b);
+    const header=`<tr style="cursor:pointer" onclick="ozetToggleBody(${JSON.stringify(b).replace(/"/g,'&quot;')})"><td class="td-main"><span style="display:inline-block;width:14px;color:var(--accent)">${open?'▾':'▸'}</span> ${esc(b)}${draftBodies.includes(b)?' <span class="badge badge-amber" style="margin-left:6px">kaydedilmemiş</span>':''}</td><td class="text-mono" style="text-align:right">${byBody[b]||0}</td></tr>`;
+    if(!open)return header;
+    if(!rows.length)return header+`<tr><td colspan="2"><div class="empty-state" style="padding:14px"><div style="font-size:13px">Bu gövdede henüz alt-parça yok.</div></div></td></tr>`;
+    const sub=rows.map(r=>`<tr><td class="td-main">${esc(r.altParca||'—')}</td><td class="text-mono" style="text-align:right">${esc(r.adet||'—')}</td><td>${esc(r.olcu||'—')}</td><td>${esc(r.malzemeCinsi||'—')}</td><td>${esc(r.malzemeKalitesi||'—')}</td><td>${esc(r.amac||'—')}</td><td class="text-mono text-sm">${synFmtDate(r.termin)||'—'}</td></tr>`).join('');
+    return header+`<tr><td colspan="2" style="padding:0;background:var(--bg2)"><div style="padding:8px 12px"><table style="width:100%;font-size:12px">${detailHeaders}<tbody>${sub}</tbody></table></div></td></tr>`;
+  }).join('');
   const draftWarn=draftBodies.length?`<div class="alert alert-amber" style="font-size:12px">⚠ ${draftBodies.length} gövdede henüz kaydedilmemiş satır var (${draftBodies.join(', ')}). Önce ilgili sekmede <strong>Kaydet</strong>'e basın, sonra göndermeyi tekrar deneyin.</div>`:'';
   return `<div class="card">
-    <div class="card-header"><span class="card-title">Özet</span><span class="text-muted text-sm">Toplam alt-parça: <strong>${total}</strong></span></div>
+    <div class="card-header"><span class="card-title">Özet</span><div style="display:flex;align-items:center;gap:12px"><span class="text-muted text-sm">Toplam alt-parça: <strong>${total}</strong></span><button class="btn btn-ghost btn-sm" onclick="ozetPdfPrint(${JSON.stringify(p.projectCode).replace(/"/g,'&quot;')})">📄 PDF</button></div></div>
     <div class="table-wrap"><table style="font-size:13px">
       <thead><tr><th>Gövde</th><th style="text-align:right">Alt-Parça</th></tr></thead>
       <tbody>${bodyList}</tbody>
@@ -2425,7 +2475,7 @@ async function muhOnayaGonder(){
 async function muhOnayla(){
   const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===_muhSelectedProjectCode);if(!mh)return;
   const p=C.Syn2_Projeler.find(x=>x.projectCode===_muhSelectedProjectCode);if(!p)return;
-  if(!await confirmDialog('Mühendislik çizimleri onaylanıyor. Sonra ekipman listesi aşamasına geçilecek. Onaylıyor musun?'))return;
+  if(!await confirmDialog('Mühendislik çizimleri onaylanıyor. Sonra ekipman listesi aşamasına geçilecek. Onaylıyor musun?','Onayla',false))return;
   mh.durum='Onaylandı';mh.sonKararKullanici=currentUser.username;mh.sonKararTarih=new Date().toISOString();mh.guncelleme=mh.sonKararTarih;
   let hist=[];try{hist=JSON.parse(mh.revizyonGecmisi||'[]')||[];}catch(e){}
   hist.push({karar:'Onaylandı',not:'',kullanici:currentUser.username,tarih:mh.sonKararTarih});
@@ -2762,11 +2812,28 @@ function ganttBodiesWithEquipment(projectCode){
   return SYN_BODY_LIST.filter(b=>set.has(b));
 }
 function ganttAutoTestBlock(p){
-  // Last deadline among satinalma/uretim/muhendislik bitis → project termin
-  const entries=(C.Syn2_Gantt||[]).filter(g=>g.projectCode===p.projectCode&&g.tip!=='test'&&g.bitis);
-  const lastEnd=entries.map(g=>g.bitis).sort().pop();
-  return {start:lastEnd||'',end:p.termin||''};
+  // Suggest the last 4 weeks before the project termin (mirrors Mühendislik's 4-week block).
+  if(!p.termin)return {start:'',end:''};
+  const end=String(p.termin).slice(0,10);
+  const start=new Date(new Date(end).getTime()-28*86400000).toISOString().slice(0,10);
+  return {start,end};
 }
+// Per sub-part lookups used by the body-grouped Gantt.
+function ganttFindUretimSub(projectCode,body,altParca){
+  return (C.Syn2_Gantt||[]).find(g=>g.projectCode===projectCode&&g.tip==='uretim'&&(g.body||'')===body&&(g.baslik||'')===altParca);
+}
+function ganttSubPurchase(projectCode,ekipmanId){
+  const mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===projectCode);
+  const approval=mh&&mh.durum==='Onaylandı'&&mh.sonKararTarih?mh.sonKararTarih.slice(0,10):null;
+  if(!approval)return null;
+  const win=(C.Syn2_Teklif||[]).find(t=>t.projectCode===projectCode&&t.ekipmanId===ekipmanId&&t.kazanan==='true'&&t.termin);
+  if(!win||!win.termin)return null;
+  const end=String(win.termin).slice(0,10);
+  if(end<approval)return null;
+  return {start:approval,end,tedarikci:win.tedarikci,fiyat:win.fiyat,paraBirimi:win.paraBirimi};
+}
+let _ganttOpenBodies={};
+function ganttToggleBody(b){_ganttOpenBodies[b]=!_ganttOpenBodies[b];if(_wsProject)projeWorkspace();}
 function projectGanttHtml(p){
   ganttEnsureSeed(p);
   const year=_ganttYear||new Date().getFullYear();
@@ -2780,18 +2847,40 @@ function projectGanttHtml(p){
   rows.push({label:'PROJE',sub:p.projectCode,readonly:true,stages:[{label:'Onay → Termin',klass:'proje',start:projeStart,end:projeEnd,ongoing:!p.termin}]});
   // 2) MÜHENDİSLİK — editable
   rows.push(ganttEditableRow(p,'muhendislik','','MÜHENDİSLİK','4 haftalık plan',canEdit));
-  // 3) SATIN ALMA per body
-  bodies.forEach(b=>rows.push(ganttEditableRow(p,'satinalma',b,'SATIN ALMA · '+b,'satın alma termini',canEdit)));
-  // 4) ÜRETİM per body
-  bodies.forEach(b=>rows.push(ganttEditableRow(p,'uretim',b,'ÜRETİM · '+b,'imalat termini',canEdit)));
-  // 5) custom (ozel) entries
+  // 3) BODIES — each body is a collapsible group. Header row shows the envelope of its sub-parts.
+  bodies.forEach(b=>{
+    const subs=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode&&r.body===b);
+    // Envelope across all sub-part bars (purchase + production)
+    const allStarts=[],allEnds=[];
+    subs.forEach(sub=>{
+      const pur=ganttSubPurchase(p.projectCode,sub.id);
+      if(pur){allStarts.push(pur.start);allEnds.push(pur.end);}
+      const ur=ganttFindUretimSub(p.projectCode,b,sub.altParca);
+      if(pur&&ur&&ur.bitis){allStarts.push(pur.end);allEnds.push(String(ur.bitis).slice(0,10));}
+    });
+    const open=!!_ganttOpenBodies[b];
+    const envStages=allStarts.length?[{label:b+' (zarf)',klass:'body-envelope',start:allStarts.sort()[0],end:allEnds.sort().pop(),ongoing:false}]:[];
+    rows.push({label:b.toUpperCase(),sub:`${subs.length} alt-parça · tıklayın`,stages:envStages,readonly:true,bodyHeader:b,bodyOpen:open});
+    if(!open)return;
+    subs.forEach(sub=>{
+      const pur=ganttSubPurchase(p.projectCode,sub.id);
+      const purStages=pur?[{label:'Satın Alma · '+(pur.tedarikci||''),klass:'sa',start:pur.start,end:pur.end,ongoing:false}]:[];
+      rows.push({label:'  · '+sub.altParca,sub:pur?`tedarik: ${pur.tedarikci||'—'}`:'kazanan teklif yok',stages:purStages,readonly:true,subRow:true});
+      const ur=ganttFindUretimSub(p.projectCode,b,sub.altParca);
+      let urStages=[];
+      if(pur&&ur&&ur.bitis){urStages=[{label:'Üretim',klass:'uretim',start:pur.end,end:String(ur.bitis).slice(0,10),ongoing:false}];}
+      const editKey=pur?{tip:'uretim',body:b,baslik:sub.altParca,ekipmanId:sub.id,subPart:true}:null;
+      rows.push({label:'    Üretim',sub:ur?.bitis?'termin: '+ganttFmt(ur.bitis):(pur?'termin gir':'satın alma onayını bekliyor'),stages:urStages,editKey:canEdit?editKey:null,canEdit,subRow:true});
+    });
+  });
+  // 4) custom (ozel) entries
   (C.Syn2_Gantt||[]).filter(g=>g.projectCode===p.projectCode&&g.tip==='ozel').forEach(g=>{
     rows.push({label:(g.baslik||'ÖZEL').toUpperCase(),sub:'özel aşama',tip:'ozel',body:g.baslik,stages:g.baslangic&&g.bitis?[{label:g.baslik,klass:'sa',start:g.baslangic,end:g.bitis,ongoing:false,edit:()=>0,id:g.id}]:[],editKey:{tip:'ozel',body:g.baslik,baslik:g.baslik,id:g.id},canEdit});
   });
-  // 6) TEST + MONTAJ + SEVKİYAT — editable, auto-seeded suggestion
+  // 5) TEST + MONTAJ + SEVKİYAT — editable, auto-suggested as the last 4 weeks before project termin
   const testEntry=ganttFindEntry(p.projectCode,'test','');
   const auto=ganttAutoTestBlock(p);
-  rows.push(ganttEditableRow(p,'test','','TEST + MONTAJ + SEVKİYAT','son teslim bloğu',canEdit,auto));
+  rows.push(ganttEditableRow(p,'test','','TEST + MONTAJ + SEVKİYAT','son 4 hafta',canEdit,auto));
   // Render
   const months=ganttMonthSpans(year);
   const totalW=54*_ganttCellW;
@@ -2801,10 +2890,18 @@ function projectGanttHtml(p){
   const bodyRows=rows.map(r=>{
     let cells='';
     if(r.stages&&r.stages.length){cells=r.stages.map(s=>ganttBarHtml(s,year,r.editKey&&canEdit?r.editKey:null)).join('');}
-    else if(r.editKey&&canEdit){cells=`<div class="gantt-empty-cell"><button class="gantt-set-btn" onclick='ganttEditStage(${JSON.stringify(p.projectCode)},${JSON.stringify(r.editKey.tip)},${JSON.stringify(r.editKey.body||"")},${JSON.stringify(r.editKey.baslik)})'>+ termin gir</button></div>`;}
-    return `<div class="gantt-row">
-      <div class="gantt-row-label">
-        <div class="text-mono" style="color:var(--accent);font-weight:600;font-size:11px">${esc(r.label)}</div>
+    else if(r.editKey&&canEdit){
+      const ek=r.editKey;
+      const onclick=ek.subPart?`ganttEditUretimSub(${JSON.stringify(p.projectCode)},${JSON.stringify(ek.body)},${JSON.stringify(ek.baslik)},${JSON.stringify(ek.ekipmanId)})`:`ganttEditStage(${JSON.stringify(p.projectCode)},${JSON.stringify(ek.tip)},${JSON.stringify(ek.body||"")},${JSON.stringify(ek.baslik)})`;
+      cells=`<div class="gantt-empty-cell"><button class="gantt-set-btn" onclick='${onclick}'>+ termin gir</button></div>`;
+    }
+    const labelClass='text-mono';
+    const labelStyle=r.subRow?'color:var(--text2);font-weight:500;font-size:11px':'color:var(--accent);font-weight:600;font-size:11px';
+    const labelOnclick=r.bodyHeader?` style="cursor:pointer" onclick="ganttToggleBody(${JSON.stringify(r.bodyHeader).replace(/"/g,'&quot;')})"`:'';
+    const indicator=r.bodyHeader?`<span style="color:var(--accent);margin-right:4px">${r.bodyOpen?'▾':'▸'}</span>`:'';
+    return `<div class="gantt-row"${r.bodyHeader?' style="background:var(--bg2)"':''}>
+      <div class="gantt-row-label"${labelOnclick}>
+        <div class="${labelClass}" style="${labelStyle}">${indicator}${esc(r.label)}</div>
         <div style="font-size:10px;color:var(--text3)">${esc(r.sub||'')}</div>
       </div>
       <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">${todayLine}${cells}</div>
@@ -2847,6 +2944,32 @@ function ganttEditableRow(p,tip,body,label,sub,canEdit,autoSuggest){
   // No saved dates yet → show empty row (with "termin gir" if editable). For test, show auto-suggested faded hint via sub text.
   const subText=(tip==='test'&&autoSuggest&&autoSuggest.end)?`öneri: ${ganttFmt(autoSuggest.start)} → ${ganttFmt(autoSuggest.end)}`:sub;
   return {label,sub:subText,stages:[],editKey:{tip,body,baslik},canEdit};
+}
+// Per sub-part production termini: start = computed purchase end (read-only); user only enters bitiş.
+function ganttEditUretimSub(projectCode,body,altParca,ekipmanId){
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);if(p&&!ganttCanEdit(p)){toast('Termin düzenleme yetkin yok.','err');return;}
+  const pur=ganttSubPurchase(projectCode,ekipmanId);
+  if(!pur){toast('Önce kazanan teklif seçilmeli (Satın Alma sekmesi).','err');return;}
+  const e=ganttFindUretimSub(projectCode,body,altParca);
+  const bit=e?.bitis||'';
+  showModal(`Üretim Termini · ${body} · ${altParca}`,`
+    <div class="form-group"><label>Başlangıç (otomatik · satın alma bitiminde)</label><div class="text-mono" style="padding:8px;background:var(--bg3);border-radius:5px;font-size:13px">${ganttFmt(pur.end)}</div></div>
+    <div class="form-group"><label>Üretim Bitiş Termini *</label><input type="date" id="gtu-bit" value="${esc(bit)}" min="${esc(pur.end)}"></div>
+    <div class="text-sm text-muted">Satın alma terminine (${ganttFmt(pur.end)}) eklenen ekstra üretim süresini elle belirleyin.</div>`,
+    `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button>${e?`<button class="btn btn-danger" onclick="ganttDeleteStage('${e.id}')">Sil</button>`:''}<button class="btn btn-primary" onclick='ganttSaveUretimSub(${JSON.stringify(projectCode)},${JSON.stringify(body)},${JSON.stringify(altParca)})'>Kaydet</button>`);
+}
+function ganttSaveUretimSub(projectCode,body,altParca){
+  const bit=document.getElementById('gtu-bit').value;
+  if(!bit){toast('Üretim termini zorunlu.','err');return;}
+  const sub=(C.Syn2_Ekipman||[]).find(r=>r.projectCode===projectCode&&r.body===body&&r.altParca===altParca);
+  if(!sub){toast('Alt-parça bulunamadı.','err');return;}
+  const pur=ganttSubPurchase(projectCode,sub.id);if(!pur){toast('Satın alma onayı bekleniyor.','err');return;}
+  if(bit<pur.end){toast('Üretim bitişi satın alma terminden önce olamaz.','err');return;}
+  let e=ganttFindUretimSub(projectCode,body,altParca);
+  if(e){e.baslangic=pur.end;e.bitis=bit;e.guncelleme=new Date().toISOString();}
+  else{e={id:uid(),company:currentCompany,projectCode,tip:'uretim',body,baslik:altParca,baslangic:pur.end,bitis:bit,kullanici:currentUser.username,olusturma:new Date().toISOString(),guncelleme:new Date().toISOString()};C.Syn2_Gantt.push(e);}
+  closeModalDirect();projeWorkspace();
+  save('Syn2_Gantt').then(()=>toast('Üretim termini kaydedildi ✓')).catch(err=>toast('Hata: '+err.message,'err'));
 }
 function ganttEditStage(projectCode,tip,body,baslik){
   const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
