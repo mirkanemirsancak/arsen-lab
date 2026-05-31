@@ -3054,24 +3054,52 @@ function ganttProjectInYear(p,year){
   const stages=ganttProjectStages(p);
   return stages.some(s=>{const c1=ganttDateToCol(s.start,year),c2=ganttDateToCol(s.end,year);return c1!==null&&c2!==null&&c1<=54&&c2>=1;});
 }
+// Full stage list for a project — derived from Syn2_Gantt entries + body envelopes,
+// so any edit on the per-project Gantt reflects on the cross-project Timetable view.
+function ganttProjectFullStages(p){
+  const stages=[];
+  const projeStart=ganttApprovalDate(p)||p.olusturma;
+  const projeEnd=p.termin||(p.durum==='Tamamlandı'?p.guncelleme:new Date().toISOString());
+  if(projeStart&&projeEnd)stages.push({label:p.projectCode,klass:'proje',start:projeStart,end:projeEnd,ongoing:!p.termin});
+  const muh=ganttFindEntry(p.projectCode,'muhendislik','');
+  if(muh&&muh.baslangic&&muh.bitis)stages.push({label:'Mühendislik',klass:'muh',start:muh.baslangic,end:muh.bitis,ongoing:false});
+  ganttBodiesWithEquipment(p.projectCode).forEach((b,bi)=>{
+    const subs=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===p.projectCode&&r.body===b);
+    const starts=[],ends=[];
+    subs.forEach(sub=>{
+      const pur=ganttSubPurchase(p.projectCode,sub.id);
+      if(pur){starts.push(pur.start);ends.push(pur.end);}
+      const ur=ganttFindUretimSub(p.projectCode,b,sub.altParca);
+      if(pur&&ur&&ur.bitis){starts.push(pur.end);ends.push(String(ur.bitis).slice(0,10));}
+    });
+    if(starts.length)stages.push({label:b,klass:'body-envelope',start:starts.sort()[0],end:ends.sort().pop(),ongoing:false});
+  });
+  const test=ganttFindEntry(p.projectCode,'test','');
+  if(test&&test.baslangic&&test.bitis)stages.push({label:'T+M+S',klass:'sub-0 uretim-mark',start:test.baslangic,end:test.bitis,ongoing:false});
+  return stages;
+}
 function gantt(){
   const year=_ganttYear||new Date().getFullYear();_ganttYear=year;
   document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year-1};gantt()">← ${year-1}</button><strong style="padding:0 12px;font-family:var(--mono);color:var(--accent)">${year}</strong><button class="btn btn-ghost btn-sm" onclick="_ganttYear=${year+1};gantt()">${year+1} →</button>`;
-  const projects=(C.Syn2_Projeler||[]).filter(p=>ganttProjectInYear(p,year)).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
+  const allProjects=(C.Syn2_Projeler||[]).filter(p=>!['Taslak','İptal'].includes(p.durum));
+  const projects=allProjects.filter(p=>{
+    const st=ganttProjectFullStages(p);
+    return st.some(s=>{const c1=ganttDateToCol(s.start,year),c2=ganttDateToCol(s.end,year);return c1!==null&&c2!==null&&c1<=54&&c2>=1;});
+  }).sort((a,b)=>new Date(a.olusturma||0)-new Date(b.olusturma||0));
   const months=ganttMonthSpans(year);
   const totalW=54*_ganttCellW;
   const monthRow=months.map(m=>`<div class="gantt-month-cell" style="flex-basis:${m.weeks*_ganttCellW}px">${m.name}</div>`).join('');
   const weekRow=Array.from({length:54},(_,i)=>`<div class="gantt-week-cell">${i+1}</div>`).join('');
   const todayLine=ganttTodayLine(year);
   const rows=projects.map(p=>{
-    const stages=ganttProjectStages(p);
+    const stages=ganttProjectFullStages(p);
     return `<div class="gantt-row">
-      <div class="gantt-row-label">
+      <div class="gantt-row-label" style="cursor:pointer" onclick="_wsProject='${p.projectCode}';_wsTab='gantt';projeYonetim()">
         <div class="text-mono" style="color:var(--accent);font-weight:600;font-size:11px">${esc(p.projectCode)}</div>
         <div style="font-size:11px;color:var(--text)">${esc(p.projeAdi||'')}</div>
-        <div style="font-size:10px;color:var(--text3)">${esc(p.musteri||'')}</div>
+        <div style="font-size:10px;color:var(--text3)">${esc(p.musteri||'—')} · ${esc(p.durum||'')}</div>
       </div>
-      <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px" onclick="projeDetay('${p.id}')">
+      <div class="gantt-timeline" style="width:${totalW}px;--gw:${_ganttCellW}px">
         ${todayLine}
         ${stages.map(s=>ganttBarHtml(s,year)).join('')}
       </div>
@@ -3084,8 +3112,8 @@ function gantt(){
         <span class="gantt-legend">
           <span><span class="gantt-legend-dot" style="background:#5aa6ff"></span>Proje</span>
           <span><span class="gantt-legend-dot" style="background:#f5a623"></span>Mühendislik</span>
-          <span><span class="gantt-legend-dot" style="background:#3ecf8e"></span>Satın Alma</span>
-          <span><span class="gantt-legend-dot" style="background:#16a571"></span>Tamamlandı</span>
+          <span><span class="gantt-legend-dot" style="background:linear-gradient(90deg,rgba(0,188,212,0.55),rgba(0,188,212,0.35));border:1px dashed #00838f"></span>Gövde Zarfı</span>
+          <span><span class="gantt-legend-dot" style="background:#2ecc71;background-image:repeating-linear-gradient(135deg,transparent 0,transparent 3px,rgba(0,0,0,0.32) 3px,rgba(0,0,0,0.32) 6px)"></span>T+M+S</span>
           <span style="color:var(--red)">— Bugün</span>
         </span>
       </div>
@@ -3099,7 +3127,7 @@ function gantt(){
         </div>
         ${rows}
       </div></div>
-      <div class="text-sm text-muted mt-16">Bir proje çubuğuna tıklayınca detay açılır. Yıl başlangıcı her zaman 1 Ocak; haftalar bu tarihten itibaren 7'şer günlük parçalardır.</div>
+      <div class="text-sm text-muted mt-16">Her satır bir projedir. Proje sekmesinde mühendislik tamamlanınca, kazanan teklif seçilince, üretim/T+M+S terminleri girilince çubuklar otomatik güncellenir. Sol etikete tıklayarak projenin detay çizelgesine geçebilirsin.</div>
       `:'<div class="empty-state"><div class="empty-icon">▦</div><div>'+year+' yılında aktif proje yok. Bir önceki/sonraki yıla geçebilir veya yeni proje açabilirsiniz.</div></div>'}
     </div>`;
 }
@@ -3782,21 +3810,47 @@ const PARA=['TRY','USD','EUR'];
 function synProjectName(id){const p=C.SynProjeler.find(x=>x.id===id);return p?`${p.projeKodu||''} ${p.projeAdi||p.musteri||''}`.trim():'—';}
 function synProjectOptions(sel=''){return `<option value="">Proje seçin</option>${C.SynProjeler.map(p=>`<option value="${p.id}" ${sel===p.id?'selected':''}>${esc(synProjectName(p.id))}</option>`).join('')}`;}
 function synMoney(v,c='TRY'){const n=parseFloat(v)||0;return n?n.toLocaleString('tr-TR')+' '+(c||'TRY'):'—';}
+function syn2ProjectTable(rows){
+  if(!rows.length)return '<div class="empty-state"><div class="empty-icon">▦</div><div>Henüz proje yok</div></div>';
+  return `<div class="table-wrap"><table><thead><tr><th>Kod</th><th>Proje</th><th>Müşteri</th><th>Durum</th><th>Termin</th><th></th></tr></thead><tbody>${rows.map(p=>`<tr>
+    <td class="text-mono text-sm" style="color:var(--accent)">${esc(p.projectCode||'—')}</td>
+    <td class="td-main">${esc(p.projeAdi||'—')}</td>
+    <td>${esc(p.musteri||'—')}</td>
+    <td><span class="badge badge-blue">${esc(p.durum||'—')}</span></td>
+    <td class="text-mono text-sm">${synFmtDate(p.termin)||'—'}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="_wsProject='${p.projectCode}';_wsTab='proje';projeYonetim()">Aç →</button></td>
+  </tr>`).join('')}</tbody></table></div>`;
+}
+function syn2UpcomingTable(p_byCode,limit){
+  const future=(C.Syn2_Gantt||[]).filter(g=>g.bitis&&new Date(g.bitis)>=new Date(new Date().toDateString())).sort((a,b)=>new Date(a.bitis)-new Date(b.bitis)).slice(0,limit||8);
+  if(!future.length)return '<div class="empty-state"><div class="empty-icon">▤</div><div>Yaklaşan termin yok</div></div>';
+  const stageLabel=g=>g.tip==='muhendislik'?'Mühendislik':(g.tip==='test'?'Test+Montaj+Sevkiyat':(g.tip==='uretim'?'Üretim · '+g.baslik:g.baslik||g.tip));
+  return `<div class="table-wrap"><table><thead><tr><th>Proje</th><th>Aşama</th><th>Bitiş</th></tr></thead><tbody>${future.map(g=>{
+    const p=p_byCode[g.projectCode];
+    return `<tr><td class="text-mono text-sm" style="color:var(--accent)">${esc(g.projectCode||'—')}<div class="text-sm text-muted">${esc(p?.projeAdi||'')}</div></td><td>${esc(stageLabel(g))}</td><td class="text-mono text-sm">${synFmtDate(g.bitis)}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
 function synDashboard(){
-  const total=C.SynProjeler.length,active=C.SynProjeler.filter(p=>!['Kapandı','İptal','Tamamlandı'].includes(p.durum)).length,risk=C.SynProjeler.filter(p=>['Riskli','Gecikti'].includes(p.durum)).length;
-  const planned=C.SynMaliyet.reduce((s,r)=>s+(parseFloat(r.planlanan)||0),0),actual=C.SynMaliyet.reduce((s,r)=>s+(parseFloat(r.gerceklesen)||0),0);
+  const projects=C.Syn2_Projeler||[];
+  const total=projects.length;
+  const active=projects.filter(p=>!['Taslak','İptal','Tamamlandı'].includes(p.durum)).length;
+  const now=new Date();
+  const risk=projects.filter(p=>p.termin&&new Date(p.termin)<now&&!['Tamamlandı','İptal'].includes(p.durum)).length;
+  const ganttCount=(C.Syn2_Gantt||[]).length;
+  const byCode={};projects.forEach(p=>{byCode[p.projectCode]=p;});
+  const activeProjects=projects.filter(p=>!['İptal','Tamamlandı'].includes(p.durum)).sort((a,b)=>new Date(b.olusturma||0)-new Date(a.olusturma||0)).slice(0,8);
   document.getElementById('content').innerHTML=`
     ${dashboardGoalsBox()}
-    <div class="alert alert-blue mb-16"><strong>Syntegra imalat alanı</strong> proje, mühendislik, satın alma, maliyet ve müşteri raporlama süreci için yapılandırıldı.</div>
+    <div class="alert alert-blue mb-16"><strong>Syntegra imalat alanı</strong> proje, mühendislik, satın alma ve üretim süreci için yapılandırıldı.</div>
     <div class="mb-24 grid-4">
       <div class="stat-card"><div class="stat-label">Proje</div><div class="stat-value stat-blue">${total}</div><div class="stat-sub">${active} aktif</div></div>
-      <div class="stat-card"><div class="stat-label">Risk/Gecikme</div><div class="stat-value ${risk?'stat-red':'stat-green'}">${risk}</div><div class="stat-sub">takip gerektiren proje</div></div>
-      <div class="stat-card"><div class="stat-label">Timetable</div><div class="stat-value stat-amber">${C.SynTimeline.length}</div><div class="stat-sub">iş kalemi</div></div>
-      <div class="stat-card"><div class="stat-label">Maliyet</div><div class="stat-value stat-green">${synMoney(actual||planned)}</div><div class="stat-sub">gerçekleşen / planlanan</div></div>
+      <div class="stat-card"><div class="stat-label">Termin Geçmiş</div><div class="stat-value ${risk?'stat-red':'stat-green'}">${risk}</div><div class="stat-sub">takip gerektiren proje</div></div>
+      <div class="stat-card"><div class="stat-label">Çizelge</div><div class="stat-value stat-amber">${ganttCount}</div><div class="stat-sub">termin kaydı</div></div>
+      <div class="stat-card"><div class="stat-label">Tamamlanan</div><div class="stat-value stat-green">${projects.filter(p=>p.durum==='Tamamlandı').length}</div><div class="stat-sub">teslim edilen proje</div></div>
     </div>
     <div class="grid-2 gap-16">
-      <div class="card"><div class="card-header"><span class="card-title">Aktif Projeler</span></div>${synProjectTable(C.SynProjeler.slice(0,8),false)}</div>
-      <div class="card"><div class="card-header"><span class="card-title">Yaklaşan Terminler</span></div>${synTimelineTable([...C.SynTimeline].sort((a,b)=>new Date(a.bitis||'2999')-new Date(b.bitis||'2999')).slice(0,8),false)}</div>
+      <div class="card"><div class="card-header"><span class="card-title">Aktif Projeler</span></div>${syn2ProjectTable(activeProjects)}</div>
+      <div class="card"><div class="card-header"><span class="card-title">Yaklaşan Terminler</span></div>${syn2UpcomingTable(byCode,8)}</div>
     </div>
     <div id="team-schedule-overview" class="mt-16"></div>`;
   renderTeamScheduleOverview();
