@@ -3624,7 +3624,7 @@ function siparisWorkspace(o){
   let body='';
   if(_siparisTab==='siparis')body=siparisBilgiBody(o);
   else if(_siparisTab==='lotlar')body=siparisLotlarBody(o);
-  else if(_siparisTab==='formul')body=`<div class="card"><div class="empty-state"><div class="empty-icon">⚗</div><div style="margin-top:8px"><strong>Formülasyon & Paketleme — Faz 3'te gelecek.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">Lot karışımı, Arşen onayı ve çoklu SKU paketleme burada olacak.</div></div></div>`;
+  else if(_siparisTab==='formul')body=siparisFormulBody(o);
   else if(_siparisTab==='cizelge')body=`<div class="card"><div class="empty-state"><div class="empty-icon">▦</div><div style="margin-top:8px"><strong>Zaman Çizelgesi — Faz 4'te gelecek.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">Üretim planı → Lotlar → Formülasyon → Paketleme → Teslim Gantt'ı burada olacak.</div></div></div>`;
   document.getElementById('content').innerHTML=head+tabBar+body;
 }
@@ -3909,6 +3909,274 @@ async function yuklemeSil(id){
   C.Fuw_Yukleme=C.Fuw_Yukleme.filter(x=>x.id!==id);
   siparisYonetim();
   save('Fuw_Yukleme').then(()=>toast('Yükleme silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+
+// ── Formülasyon & Paketleme (Tab 3) ──
+function fuwFormulOnayBadge(d){const map={'Taslak':'badge-gray','Bekliyor':'badge-amber','onaylandı':'badge-green','reddedildi':'badge-red'};return `<span class="badge ${map[d]||'badge-gray'}">${esc(d||'Taslak')}</span>`;}
+function fuwFormulFor(orderCode){return (C.Fuw_Formulasyon||[]).find(f=>f.orderCode===orderCode);}
+function fuwPaketlemelerFor(orderCode){return (C.Fuw_Paketleme||[]).filter(p=>p.orderCode===orderCode);}
+function fuwSpekParse(s){try{return JSON.parse(s||'{}')||{};}catch(e){return {};}}
+function fuwSpekRender(obj){const k=Object.keys(obj||{});if(!k.length)return '';return k.map(x=>`${x}: ${obj[x]}`).join('\n');}
+function fuwSpekFromText(t){const out={};(String(t||'').split('\n')).forEach(line=>{const m=line.match(/^\s*([^:]+):\s*(.+)\s*$/);if(m)out[m[1].trim()]=m[2].trim();});return out;}
+function fuwLotsOranlariParse(s){try{const o=JSON.parse(s||'{}');return o&&typeof o==='object'?o:{};}catch(e){return {};}}
+
+function siparisFormulBody(o){
+  const f=fuwFormulFor(o.orderCode);
+  const canManage=fuwLotCanManage(o);
+  const lots=fuwLotsFor(o.orderCode);
+  let main='';
+  if(!f){
+    main=`<div class="card">
+      <div class="card-header"><span class="card-title">Formülasyon</span>${canManage?`<button class="btn btn-primary btn-sm" onclick="formulYeni('${o.orderCode}')">+ Formülasyon Hazırla</button>`:''}</div>
+      <div class="empty-state"><div class="empty-icon">⚗</div><div style="margin-top:8px"><strong>Henüz formülasyon yok.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">${lots.filter(l=>l.durum==='Tamamlandı').length?'Tamamlanmış lotları seçip karışım oranlarını belirleyebilirsin.':'Önce lotları tamamlamalısın (Lotlar sekmesi).'}</div></div>
+    </div>`;
+  } else {
+    main=fuwFormulCard(f,o,canManage,lots);
+  }
+  const paketleme=(f&&f.onayDurumu==='onaylandı')?fuwPaketlemeSection(o,canManage):`<div class="card mt-16"><div class="card-header"><span class="card-title">Paketleme</span></div><div class="empty-state"><div class="empty-icon">📦</div><div class="text-muted" style="margin-top:8px;font-size:13px">Paketleme, formülasyon Arşen tarafından onaylandığında açılır.</div></div></div>`;
+  return main+paketleme;
+}
+
+function fuwFormulCard(f,o,canManage,lots){
+  const oranlar=fuwLotsOranlariParse(f.oranlar);
+  const used=lots.filter(l=>oranlar[l.id]!==undefined);
+  const toplam=Object.values(oranlar).reduce((s,v)=>s+(parseFloat(v)||0),0);
+  const lotRows=used.length?used.map(l=>`<tr>
+    <td class="text-mono">Lot ${esc(l.lotNo||'')}${l.lotAdi?' · '+esc(l.lotAdi):''}</td>
+    <td class="text-mono">${esc(l.gerceklesenMiktar||'—')}</td>
+    <td class="text-mono" style="color:var(--accent)">%${esc(oranlar[l.id])}</td>
+  </tr>`).join(''):'<tr><td colspan="3" class="text-muted">Hiç lot seçilmemiş.</td></tr>';
+  const hedef=fuwSpekParse(o.hedefSpek);const gercek=fuwSpekParse(f.gerceklesenSpek);
+  const allKeys=[...new Set([...Object.keys(hedef),...Object.keys(gercek)])];
+  const spekRows=allKeys.length?allKeys.map(k=>`<tr><td class="text-mono text-sm">${esc(k)}</td><td>${esc(hedef[k]||'—')}</td><td>${esc(gercek[k]||'—')}</td></tr>`).join(''):'<tr><td colspan="3" class="text-muted">Spek girilmemiş.</td></tr>';
+  const arsenAdmin=isArsenAdmin();
+  const actions=[];
+  if(canManage&&(f.onayDurumu==='Taslak'||f.onayDurumu==='reddedildi')){
+    actions.push(`<button class="btn btn-amber btn-sm" onclick="formulOnayaGonder('${f.id}')">📤 Arşen Onayına Gönder</button>`);
+    actions.push(`<button class="btn btn-ghost btn-sm" onclick="formulYeni('${o.orderCode}')">Düzenle</button>`);
+  }
+  if(arsenAdmin&&f.onayDurumu==='Bekliyor'){
+    actions.push(`<button class="btn btn-success btn-sm" onclick="formulOnayla('${f.id}')">✓ Onayla</button>`);
+    actions.push(`<button class="btn btn-danger btn-sm" onclick="formulReddet('${f.id}')">Reddet</button>`);
+  }
+  if(arsenAdmin&&(f.onayDurumu==='onaylandı'||f.onayDurumu==='reddedildi')){
+    actions.push(`<button class="btn btn-ghost btn-sm" onclick="formulGeriAl('${f.id}')" title="Kararı geri al">↺ Geri Al</button>`);
+  }
+  if(canManage)actions.push(`<button class="btn btn-danger btn-sm" onclick="formulSil('${f.id}')">Sil</button>`);
+  const onayNote=f.onayNot?`<div class="alert alert-${f.onayDurumu==='reddedildi'?'red':'green'}" style="font-size:12px;margin-top:10px">${f.onayDurumu==='reddedildi'?'Reddetme sebebi':'Onay notu'}: <em>${esc(f.onayNot)}</em> — ${esc(fuwSorumluLabel(f.onayKullanici))} · ${fuwFmtDate(f.onayTarihi)}</div>`:'';
+  return `<div class="card">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div style="min-width:0">
+        <span class="card-title">Formülasyon</span>
+        <div class="text-sm text-muted" style="margin-top:4px">Sorumlu: ${esc(fuwSorumluLabel(f.sorumlu))} · ${fuwFmtDate(f.tarih||f.olusturma)} · Toplam karışım: <strong>%${toplam.toFixed(1)}</strong></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        ${fuwFormulOnayBadge(f.onayDurumu)}
+        ${actions.join('')}
+      </div>
+    </div>
+    <div class="grid-2 gap-16">
+      <div><strong style="font-size:12px;color:var(--text2)">Lot Karışımı</strong>
+        <div class="table-wrap" style="margin-top:6px"><table style="font-size:12px"><thead><tr><th>Lot</th><th>Gerçekleşen</th><th>Oran</th></tr></thead><tbody>${lotRows}</tbody></table></div>
+      </div>
+      <div><strong style="font-size:12px;color:var(--text2)">Hedef vs Gerçekleşen Spek</strong>
+        <div class="table-wrap" style="margin-top:6px"><table style="font-size:12px"><thead><tr><th>Parametre</th><th>Hedef</th><th>Gerçekleşen</th></tr></thead><tbody>${spekRows}</tbody></table></div>
+      </div>
+    </div>
+    ${f.notalar?`<div class="text-sm text-muted" style="margin-top:10px">📝 ${esc(f.notalar)}</div>`:''}
+    ${onayNote}
+  </div>`;
+}
+
+function formulYeni(orderCode){
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===orderCode);if(!o||!fuwLotCanManage(o)){toast('Yetkin yok.','err');return;}
+  const existing=fuwFormulFor(orderCode);
+  const lots=fuwLotsFor(orderCode);
+  const oranlar=existing?fuwLotsOranlariParse(existing.oranlar):{};
+  const sorumlu=existing?.sorumlu||o.sorumlu;
+  const userOpts=fuwUsersFuwell().map(u=>`<option value="${u.username}" ${u.username===sorumlu?'selected':''}>${esc(u.ad||u.username)}</option>`).join('');
+  const lotRows=lots.length?lots.map(l=>`<tr>
+    <td><input type="checkbox" class="fm-lot-chk" data-lot="${l.id}" ${oranlar[l.id]!==undefined?'checked':''} onchange="formulOranToplam()"></td>
+    <td>Lot ${esc(l.lotNo||'')}${l.lotAdi?' · '+esc(l.lotAdi):''}</td>
+    <td class="text-mono">${esc(l.gerceklesenMiktar||'—')} ${esc(l.birim||o.birim||'')}</td>
+    <td><input type="number" step="any" min="0" max="100" class="fm-lot-oran" data-lot="${l.id}" value="${esc(oranlar[l.id]||'')}" placeholder="%" style="width:80px;text-align:right" oninput="formulOranToplam()"></td>
+  </tr>`).join(''):'<tr><td colspan="4" class="text-muted">Henüz lot yok. Önce lot ekleyin.</td></tr>';
+  const hedefText=fuwSpekRender(fuwSpekParse(o.hedefSpek));
+  const gercekText=existing?fuwSpekRender(fuwSpekParse(existing.gerceklesenSpek)):'';
+  showModal((existing?'Formülasyonu Düzenle':'Yeni Formülasyon')+' · '+orderCode,`
+    <div class="form-group"><label>Sorumlu</label><select id="fm-sor">${userOpts}</select></div>
+    <div class="form-group"><label>Tarih</label><input type="date" id="fm-tar" value="${existing?.tarih||today()}"></div>
+    <div><strong style="font-size:12px;color:var(--text2)">Lot Karışımı (toplam %100 olmalı)</strong>
+      <div class="table-wrap" style="margin-top:6px"><table style="font-size:12px"><thead><tr><th></th><th>Lot</th><th>Mevcut</th><th>Oran %</th></tr></thead><tbody>${lotRows}</tbody></table></div>
+      <div class="text-sm" style="margin-top:6px">Toplam: <strong id="fm-toplam" style="color:var(--accent)">0</strong>%</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Hedef Spek (sipariş)</label><textarea id="fm-hedef" readonly style="min-height:90px;background:var(--bg3);color:var(--text2);font-family:var(--mono)">${esc(hedefText)}</textarea><span class="text-sm text-muted">"parametre: değer" — Sipariş sekmesinden güncellenebilir.</span></div>
+      <div class="form-group"><label>Gerçekleşen Spek</label><textarea id="fm-gercek" style="min-height:90px;font-family:var(--mono)" placeholder="asit: 0.3&#10;peroksit: 12&#10;polifenol: 250">${esc(gercekText)}</textarea><span class="text-sm text-muted">Her satıra "parametre: değer" yazın.</span></div>
+    </div>
+    <div class="form-group"><label>Notlar</label><textarea id="fm-not" style="min-height:60px">${esc(existing?.notalar||'')}</textarea></div>
+  `,`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="formulKaydet('${orderCode}','${existing?.id||''}')">Kaydet (Taslak)</button>`);
+  setTimeout(formulOranToplam,30);
+}
+function formulOranToplam(){
+  const chks=[...document.querySelectorAll('.fm-lot-chk')];
+  let t=0;
+  chks.forEach(c=>{if(c.checked){const inp=document.querySelector(`.fm-lot-oran[data-lot="${c.dataset.lot}"]`);t+=parseFloat(inp?.value)||0;}});
+  const el=document.getElementById('fm-toplam');if(el){el.textContent=t.toFixed(1);el.style.color=Math.abs(t-100)<0.01?'#3ecf8e':(t>100?'#e74c3c':'#f5a623');}
+}
+async function formulKaydet(orderCode,existingId){
+  const sorumlu=document.getElementById('fm-sor').value;
+  const tarih=document.getElementById('fm-tar').value;
+  const gercek=document.getElementById('fm-gercek').value;
+  const notalar=document.getElementById('fm-not').value.trim();
+  const oranlar={};
+  document.querySelectorAll('.fm-lot-chk:checked').forEach(c=>{const inp=document.querySelector(`.fm-lot-oran[data-lot="${c.dataset.lot}"]`);const v=parseFloat(inp?.value)||0;if(v>0)oranlar[c.dataset.lot]=v;});
+  const toplam=Object.values(oranlar).reduce((s,v)=>s+v,0);
+  if(Object.keys(oranlar).length===0){toast('En az bir lot seçip oran girin.','err');return;}
+  if(Math.abs(toplam-100)>0.5){if(!await confirmDialog(`Toplam %${toplam.toFixed(1)} (100 değil). Yine de kaydedilsin mi?`,'Yine de Kaydet',false))return;}
+  const now=new Date().toISOString();
+  const lotIds=Object.keys(oranlar).join(',');
+  const gerceklesenSpek=JSON.stringify(fuwSpekFromText(gercek));
+  if(existingId){
+    const f=C.Fuw_Formulasyon.find(x=>x.id===existingId);if(f){f.sorumlu=sorumlu;f.tarih=tarih;f.lotIds=lotIds;f.oranlar=JSON.stringify(oranlar);f.gerceklesenSpek=gerceklesenSpek;f.notalar=notalar;f.guncelleme=now;}
+  } else {
+    const o=C.Fuw_Siparis.find(x=>x.orderCode===orderCode);
+    C.Fuw_Formulasyon.push({id:uid(),company:'fuwell',orderCode,tarih,lotIds,oranlar:JSON.stringify(oranlar),hedefSpek:o?.hedefSpek||'{}',gerceklesenSpek,notalar,sorumlu,onayDurumu:'Taslak',onayKullanici:'',onayTarihi:'',onayNot:'',olusturma:now,guncelleme:now});
+    if(o&&o.durum==='Lot Üretimi'){o.durum='Formülasyon';o.guncelleme=now;save('Fuw_Siparis').catch(()=>{});}
+  }
+  closeModalDirect();siparisYonetim();
+  save('Fuw_Formulasyon').then(()=>toast('Formülasyon kaydedildi (Taslak)')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function formulOnayaGonder(id){
+  const f=C.Fuw_Formulasyon.find(x=>x.id===id);if(!f)return;
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===f.orderCode);if(!fuwLotCanManage(o)){toast('Yetkin yok.','err');return;}
+  f.onayDurumu='Bekliyor';f.guncelleme=new Date().toISOString();
+  siparisYonetim();
+  save('Fuw_Formulasyon').then(()=>{
+    toast('Arşen onayına gönderildi.');
+    // Arşen admin kullanıcılara bildirim
+    const arsenAdmins=C.Users.filter(u=>(u.active===true||u.active==='true')&&u.role==='admin'&&(userKurum(u)===UMBRELLA_KURUM));
+    if(arsenAdmins.length){notifyApi({recipients:arsenAdmins.map(u=>u.username),baslik:'Formülasyon onayı bekleniyor: '+f.orderCode,mesaj:`${o?.urun||''} (${o?.musteri||''})\nSipariş Takibi → ${f.orderCode} → Formülasyon & Paketleme sekmesinden Onayla / Reddet.`,tur:'Formülasyon',sayfa:'siparis',kayitId:f.id,sendEmail:true}).catch(()=>{});}
+  }).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function formulOnayla(id){
+  if(!isArsenAdmin()){toast('Onay yalnız Arşen admin tarafından yapılır.','err');return;}
+  const f=C.Fuw_Formulasyon.find(x=>x.id===id);if(!f)return;
+  const not=(await promptDialog('Onay notu (opsiyonel):','','Formülasyonu Onayla'))||'';
+  f.onayDurumu='onaylandı';f.onayKullanici=currentUser.username;f.onayTarihi=new Date().toISOString();f.onayNot=not.trim();f.guncelleme=f.onayTarihi;
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===f.orderCode);
+  if(o){o.durum='Paketleme';o.guncelleme=f.onayTarihi;save('Fuw_Siparis').catch(()=>{});}
+  siparisYonetim();
+  save('Fuw_Formulasyon').then(()=>{toast('Formülasyon onaylandı ✓');if(f.sorumlu&&f.sorumlu!==currentUser.username)notifyApi({recipients:[f.sorumlu],baslik:'Formülasyon onaylandı: '+f.orderCode,mesaj:`${o?.urun||''}\nPaketlemeye geçebilirsiniz.${not?'\n\nArşen notu: '+not:''}`,tur:'Formülasyon',sayfa:'siparis',kayitId:f.id,sendEmail:true}).catch(()=>{});}).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function formulReddet(id){
+  if(!isArsenAdmin()){toast('Reddetme yalnız Arşen admin.','err');return;}
+  const f=C.Fuw_Formulasyon.find(x=>x.id===id);if(!f)return;
+  const not=await promptDialog('Reddetme sebebi:','','Formülasyonu Reddet');if(not===null||!not.trim()){toast('Reddetme sebebi zorunlu.','err');return;}
+  f.onayDurumu='reddedildi';f.onayKullanici=currentUser.username;f.onayTarihi=new Date().toISOString();f.onayNot=not.trim();f.guncelleme=f.onayTarihi;
+  siparisYonetim();
+  save('Fuw_Formulasyon').then(()=>{toast('Formülasyon reddedildi.','err');if(f.sorumlu&&f.sorumlu!==currentUser.username)notifyApi({recipients:[f.sorumlu],baslik:'Formülasyon reddedildi: '+f.orderCode,mesaj:`Sebep: ${not.trim()}\n\nDüzeltip tekrar onaya gönderebilirsin.`,tur:'Formülasyon',sayfa:'siparis',kayitId:f.id,sendEmail:true}).catch(()=>{});}).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function formulGeriAl(id){
+  if(!isArsenAdmin()){toast('Geri alma yalnız Arşen admin.','err');return;}
+  const f=C.Fuw_Formulasyon.find(x=>x.id===id);if(!f)return;
+  if(!await confirmDialog('Formülasyon kararı geri alınsın? Durum tekrar "Bekliyor"a döner.','Geri Al',false))return;
+  const prev=f.onayDurumu;
+  f.onayDurumu='Bekliyor';f.onayKullanici=currentUser.username;f.onayTarihi=new Date().toISOString();f.onayNot='Geri alındı (önceki: '+prev+')';f.guncelleme=f.onayTarihi;
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===f.orderCode);
+  if(prev==='onaylandı'&&o&&o.durum==='Paketleme'){o.durum='Formülasyon';o.guncelleme=f.onayTarihi;save('Fuw_Siparis').catch(()=>{});}
+  siparisYonetim();
+  save('Fuw_Formulasyon').then(()=>{toast('Karar geri alındı.');if(f.sorumlu&&f.sorumlu!==currentUser.username)notifyApi({recipients:[f.sorumlu],baslik:'Formülasyon kararı geri alındı: '+f.orderCode,mesaj:'Arşen kararı geri aldı; formülasyon tekrar onay bekliyor.',tur:'Formülasyon',sayfa:'siparis',kayitId:f.id,sendEmail:true}).catch(()=>{});}).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function formulSil(id){
+  const f=C.Fuw_Formulasyon.find(x=>x.id===id);if(!f)return;
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===f.orderCode);if(!fuwLotCanManage(o)){toast('Yetkin yok.','err');return;}
+  if(!await confirmDialog('Formülasyon kaydı silinsin mi?'))return;
+  C.Fuw_Formulasyon=C.Fuw_Formulasyon.filter(x=>x.id!==id);
+  siparisYonetim();
+  save('Fuw_Formulasyon').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+
+function fuwPaketlemeSection(o,canManage){
+  const skus=fuwPaketlemelerFor(o.orderCode);
+  const toplamAdet=skus.reduce((s,p)=>s+(parseFloat(p.adet)||0),0);
+  const rows=skus.length?`<div class="table-wrap"><table style="font-size:12px">
+    <thead><tr><th>SKU</th><th>Şişe</th><th>Hacim</th><th>Adet</th><th>Batch</th><th>Sevkiyat</th><th>Gönderim</th><th>Not</th>${canManage?'<th></th>':''}</tr></thead>
+    <tbody>${skus.map(p=>`<tr>
+      <td class="text-mono">${esc(p.sku||'—')}</td>
+      <td>${esc(p.siseTipi||'—')}</td>
+      <td class="text-mono">${esc(p.hacim||'—')}</td>
+      <td class="text-mono">${esc(p.adet||'—')}</td>
+      <td class="text-mono text-sm">${esc(p.batchId||'—')}</td>
+      <td class="text-mono text-sm">${fuwFmtDate(p.sevkiyatTermini)}</td>
+      <td>${esc(p.gonderim||'—')}</td>
+      <td class="text-sm">${esc(p.not||'—')}</td>
+      ${canManage?`<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="paketDuzenle('${p.id}')">Düzenle</button><button class="btn btn-danger btn-sm" onclick="paketSil('${p.id}')">×</button></td>`:''}
+    </tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><div class="empty-icon">📦</div><div style="margin-top:8px"><strong>Henüz SKU yok.</strong></div><div class="text-muted" style="margin-top:6px;font-size:13px">+ Yeni SKU ile şişe-bazlı paketleme satırı ekleyebilirsin.</div></div>';
+  return `<div class="card mt-16">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div><span class="card-title">Paketleme</span> <span class="text-muted text-sm">· ${skus.length} SKU · toplam ${toplamAdet} adet</span></div>
+      ${canManage?`<button class="btn btn-primary btn-sm" onclick="paketYeni('${o.orderCode}')">+ Yeni SKU</button>`:''}
+    </div>
+    ${rows}
+  </div>`;
+}
+
+const FUW_SISE_TIPI=['Cam','PET','Teneke','Diğer'];
+const FUW_GONDERIM=['Hazırlanıyor','Hazır','Sevk Edildi','Teslim Edildi'];
+function paketYeni(orderCode){
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===orderCode);if(!o||!fuwLotCanManage(o)){toast('Yetkin yok.','err');return;}
+  showModal('Yeni SKU · '+orderCode,paketForm(),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="paketKaydet('${orderCode}')">Kaydet</button>`);
+}
+function paketForm(p){p=p||{};
+  return `<div class="form-row">
+      <div class="form-group"><label>SKU *</label><input type="text" id="pk-sku" value="${esc(p.sku||'')}" placeholder="ör: SZN-500-CAM"></div>
+      <div class="form-group"><label>Batch ID</label><input type="text" id="pk-batch" value="${esc(p.batchId||'')}"></div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group"><label>Şişe Tipi</label><select id="pk-sise">${FUW_SISE_TIPI.map(s=>`<option ${p.siseTipi===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Hacim (ml)</label><input type="number" id="pk-hacim" step="any" value="${esc(p.hacim||'')}"></div>
+      <div class="form-group"><label>Adet *</label><input type="number" id="pk-adet" min="1" value="${esc(p.adet||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Sevkiyat Termini</label><input type="date" id="pk-ter" value="${p.sevkiyatTermini||''}"></div>
+      <div class="form-group"><label>Gönderim Durumu</label><select id="pk-gon">${FUW_GONDERIM.map(s=>`<option ${p.gonderim===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label>Etiket Dosya Linki</label><input type="text" id="pk-etk" value="${esc(p.etiketDosya||'')}" placeholder="Drive linki veya dosya adı"></div>
+    <div class="form-group"><label>Not</label><textarea id="pk-not" style="min-height:60px">${esc(p.not||'')}</textarea></div>`;
+}
+function paketRead(){
+  const sku=document.getElementById('pk-sku').value.trim();
+  const adet=document.getElementById('pk-adet').value.trim();
+  if(!sku||!adet){toast('SKU ve adet zorunlu.','err');return null;}
+  return {sku,siseTipi:document.getElementById('pk-sise').value,hacim:document.getElementById('pk-hacim').value,adet,batchId:document.getElementById('pk-batch').value.trim(),sevkiyatTermini:document.getElementById('pk-ter').value,gonderim:document.getElementById('pk-gon').value,etiketDosya:document.getElementById('pk-etk').value.trim(),not:document.getElementById('pk-not').value.trim()};
+}
+async function paketKaydet(orderCode){
+  const v=paketRead();if(!v)return;
+  const now=new Date().toISOString();
+  C.Fuw_Paketleme.push({id:uid(),company:'fuwell',orderCode,...v,olusturan:currentUser.username,olusturma:now,guncelleme:now});
+  closeModalDirect();siparisYonetim();
+  save('Fuw_Paketleme').then(()=>toast('SKU eklendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+function paketDuzenle(id){
+  const p=C.Fuw_Paketleme.find(x=>x.id===id);if(!p)return;
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===p.orderCode);if(!fuwLotCanManage(o)){toast('Yetkin yok.','err');return;}
+  showModal('SKU Düzenle',paketForm(p),`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="paketGuncelle('${id}')">Güncelle</button>`);
+}
+async function paketGuncelle(id){
+  const p=C.Fuw_Paketleme.find(x=>x.id===id);if(!p)return;
+  const v=paketRead();if(!v)return;
+  Object.assign(p,v);p.guncelleme=new Date().toISOString();
+  closeModalDirect();siparisYonetim();
+  save('Fuw_Paketleme').then(()=>toast('Güncellendi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+async function paketSil(id){
+  const p=C.Fuw_Paketleme.find(x=>x.id===id);if(!p)return;
+  const o=C.Fuw_Siparis.find(x=>x.orderCode===p.orderCode);if(!fuwLotCanManage(o)){toast('Yetkin yok.','err');return;}
+  if(!await confirmDialog(`${p.sku||'SKU'} silinsin mi?`))return;
+  C.Fuw_Paketleme=C.Fuw_Paketleme.filter(x=>x.id!==id);
+  siparisYonetim();
+  save('Fuw_Paketleme').then(()=>toast('Silindi.','err')).catch(e=>toast('Hata: '+e.message,'err'));
 }
 
 async function siparisYeni(){
