@@ -4611,12 +4611,13 @@ function renderDosyalar(){
         <div class="flex gap-12"><div class="file-icon">▤</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">Klasör · ${fmtDt(f.created)}</div></div></div>
         <div class="file-actions" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" onclick="loadFolder('${f.id}')">Aç →</button><button class="btn btn-danger btn-sm" onclick="dosyaTreeSil('${f.id}',true,${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Sil</button></div>
       </div>`).join('')}
-      ${files.map(f=>`<div class="file-card">
+      ${files.map(f=>{const visBadge=fileVisibilityBadge(f.visibility);return `<div class="file-card">
         <div class="flex gap-12"><div class="file-icon">${fileIcon(f.mimeType,f.name)}</div><div style="min-width:0"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${fileSize(f.size)}</div></div></div>
+        ${visBadge}
         ${f.description?`<div class="text-sm text-muted">${esc(f.description)}</div>`:''}
         <div class="file-meta">Yükleyen: ${esc(f.uploadedBy||'—')}<br>${fmtDt(f.created)}</div>
-        <div class="file-actions"><a class="btn btn-ghost btn-sm" href="${esc(f.url)}" target="_blank">Aç ↗</a><a class="btn btn-ghost btn-sm" href="${esc(f.downloadUrl||f.url)}" target="_blank">İndir</a><button class="btn btn-danger btn-sm" onclick="dosyaTreeSil('${f.id}',false,${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Sil</button></div>
-      </div>`).join('')}
+        <div class="file-actions"><a class="btn btn-ghost btn-sm" href="${esc(f.url)}" target="_blank">Aç ↗</a><a class="btn btn-ghost btn-sm" href="${esc(f.downloadUrl||f.url)}" target="_blank">İndir</a>${isAdmin()?`<button class="btn btn-ghost btn-sm" onclick="dosyaGorunurluk('${f.id}',${JSON.stringify(f.visibility||'').replace(/"/g,'&quot;')},${JSON.stringify(f.name).replace(/"/g,'&quot;')})" title="Görünürlüğü değiştir">👁</button>`:''}<button class="btn btn-danger btn-sm" onclick="dosyaTreeSil('${f.id}',false,${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Sil</button></div>
+      </div>`;}).join('')}
     </div>`:`<div class="empty-state"><div class="empty-icon">▣</div><div>${fileSearch?'Eşleşen öğe yok.':'Bu klasör boş. Klasör oluşturabilir veya dosya yükleyebilirsiniz.'}</div></div>`}`;
 }
 async function dosyaKlasorYeni(){
@@ -4624,6 +4625,13 @@ async function dosyaKlasorYeni(){
   loading(true,'Klasör oluşturuluyor...');
   try{await driveApi('createTreeFolder',{parentId:fileTree.folderId,name:name.trim()});loading(false);toast('Klasör oluşturuldu ✓');await loadFolder(fileTree.folderId);}
   catch(e){loading(false);toast('Klasör hatası: '+e.message,'err');}
+}
+function fileVisibilityBadge(vis){
+  if(!vis)return '<div style="margin-top:4px"><span class="badge badge-gray" style="font-size:9px">Herkese Açık</span></div>';
+  const list=String(vis).split(',').filter(Boolean);
+  const both=list.includes('fuwell')&&list.includes('syntegra');
+  if(both)return '<div style="margin-top:4px"><span class="badge badge-blue" style="font-size:9px">Her İki Şirket</span></div>';
+  return '<div style="margin-top:4px">'+list.map(c=>`<span class="badge" style="font-size:9px;color:${COMPANIES[c]?.accent||'var(--accent)'};border:1px solid ${COMPANIES[c]?.accent||'var(--accent)'};background:transparent">${esc(COMPANIES[c]?.short||c)}</span>`).join(' ')+'</div>';
 }
 function dosyaModal(){
   showModal('Dosya Yükle',`
@@ -4634,18 +4642,44 @@ function dosyaModal(){
       <input type="file" id="file-input">
     </div>
     <div class="form-group mt-16"><label>Görünecek Ad (opsiyonel)</label><input type="text" id="file-name" placeholder="Boşsa dosya adı kullanılır"></div>
-    <div class="form-group"><label>Açıklama</label><textarea id="file-desc" placeholder="Kısa not, proje veya içerik bilgisi"></textarea></div>`,
+    <div class="form-group"><label>Açıklama</label><textarea id="file-desc" placeholder="Kısa not, proje veya içerik bilgisi"></textarea></div>
+    <div class="form-group"><label>Görünürlük *</label>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">
+        <label style="display:flex;gap:6px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" class="file-vis-chk" value="fuwell" ${currentCompany==='fuwell'?'checked':''} style="width:auto"> Fuwell</label>
+        <label style="display:flex;gap:6px;align-items:center;color:var(--text2);font-size:13px"><input type="checkbox" class="file-vis-chk" value="syntegra" ${currentCompany==='syntegra'?'checked':''} style="width:auto"> Syntegra</label>
+      </div>
+      <div class="text-sm text-muted" style="margin-top:6px">Hangi şirket bu dosyayı görmeli? Hiçbiri seçilmezse herkese açık olur (Arşen şemsiyesi her zaman tüm dosyaları görür).</div>
+    </div>`,
     `<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="dosyaYukle()">Yükle</button>`);
 }
 async function dosyaYukle(){
   const input=document.getElementById('file-input'),file=input.files&&input.files[0];if(!file){toast('Dosya seçmelisiniz.','err');return;}
   if(file.size>20*1024*1024&&!await confirmDialog('Dosya 20 MB üzerinde. Apps Script sınırına takılabilir, yine de denensin mi?'))return;
+  const visibility=[...document.querySelectorAll('.file-vis-chk:checked')].map(c=>c.value).join(',');
   loading(true,'Dosya Drive’a yükleniyor...');
   try{
     const base64=await fileToBase64(file);
-    await driveApi('uploadTreeFile',{folderId:fileTree.folderId,name:document.getElementById('file-name').value.trim()||file.name,mimeType:file.type||'application/octet-stream',base64,description:document.getElementById('file-desc').value});
+    await driveApi('uploadTreeFile',{folderId:fileTree.folderId,name:document.getElementById('file-name').value.trim()||file.name,mimeType:file.type||'application/octet-stream',base64,description:document.getElementById('file-desc').value,visibility});
     closeModalDirect();loading(false);toast('Dosya yüklendi ✓');await loadFolder(fileTree.folderId);
   }catch(e){loading(false);toast('Yükleme hatası: '+e.message,'err');}
+}
+function dosyaGorunurluk(fileId,currentVis,name){
+  if(!isAdmin()){toast('Görünürlük değiştirmek için admin yetkisi gerekli.','err');return;}
+  const list=String(currentVis||'').split(',').filter(Boolean);
+  showModal('Görünürlük · '+name,`
+    <div class="alert alert-blue mb-16" style="font-size:12px">Bu dosyayı hangi şirket(ler) görsün?</div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px">
+      <label style="display:flex;gap:6px;align-items:center;color:var(--text2);font-size:14px"><input type="checkbox" class="vis-chk" value="fuwell" ${list.includes('fuwell')?'checked':''} style="width:auto"> Fuwell</label>
+      <label style="display:flex;gap:6px;align-items:center;color:var(--text2);font-size:14px"><input type="checkbox" class="vis-chk" value="syntegra" ${list.includes('syntegra')?'checked':''} style="width:auto"> Syntegra</label>
+    </div>
+    <div class="text-sm text-muted" style="margin-top:8px">Hiçbiri seçilmezse "Herkese Açık" olur (yalnızca Arşen şemsiyesi kontrol eder).</div>
+  `,`<button class="btn btn-ghost" onclick="closeModalDirect()">İptal</button><button class="btn btn-primary" onclick="dosyaGorunurlukKaydet('${fileId}')">Kaydet</button>`);
+}
+async function dosyaGorunurlukKaydet(fileId){
+  const visibility=[...document.querySelectorAll('.vis-chk:checked')].map(c=>c.value).join(',');
+  loading(true,'Görünürlük güncelleniyor...');
+  try{await driveApi('updateFileVisibility',{fileId,visibility});closeModalDirect();loading(false);toast('Görünürlük güncellendi ✓');await loadFolder(fileTree.folderId);}
+  catch(e){loading(false);toast('Hata: '+e.message,'err');}
 }
 async function dosyaTreeSil(id,isFolder,name){
   if(!await confirmDialog(`"${name}" ${isFolder?'klasörü ve içindeki tüm dosyalar':'dosyası'} silinsin mi?`))return;

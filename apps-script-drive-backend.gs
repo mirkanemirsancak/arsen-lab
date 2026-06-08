@@ -704,14 +704,11 @@ function deleteFile(data, user) {
   return { ok: true };
 }
 
-// ── DRIVE FOLDER TREE (per-company, real subfolders, navigable like Drive) ──
-function companyDisplayName(company) { return company === 'syntegra' ? 'Syntegra' : 'Fuwell'; }
-function companyFilesRoot(company) {
-  var root = rootFolder();
-  var name = 'Dosyalar - ' + companyDisplayName(company);
-  var it = root.getFoldersByName(name);
-  return it.hasNext() ? it.next() : root.createFolder(name);
-}
+// ── DRIVE FOLDER TREE (ortak kök, dosya-bazlı şirket görünürlük etiketleri) ──
+// Klasörler tüm şirketlere ortak görünür; her DOSYA için "Visibility" etiketi
+// (fuwell / syntegra / fuwell,syntegra) ile hangi şirketin gördüğü belirlenir.
+// Umbrella (Arşen admin) her dosyayı görür. Etiketsiz eski dosyalar herkese
+// görünür (geriye uyumluluk).
 function folderIsWithin(folder, ancestorId) {
   var cur = folder;
   for (var g = 0; g < 60; g++) {
@@ -722,25 +719,37 @@ function folderIsWithin(folder, ancestorId) {
   }
   return false;
 }
-function resolveTreeFolder(company, folderId) {
-  var croot = companyFilesRoot(company);
+function resolveTreeFolder(user, folderId) {
+  var croot = rootFolder();
   if (!folderId || folderId === 'root') return croot;
   var f;
   try { f = DriveApp.getFolderById(folderId); } catch (e) { throw new Error('Klasor bulunamadi.'); }
   if (f.getId() !== croot.getId() && !folderIsWithin(f, croot.getId())) throw new Error('Bu klasore erisim yetkiniz yok.');
   return f;
 }
+function fileVisibilityList(file) {
+  var raw = metaValue(file.getDescription() || '', 'Visibility');
+  if (!raw) return null;
+  return raw.split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+}
+function userCanSeeFile(user, file, currentCompany) {
+  if (isUmbrella(user)) return true;
+  var vis = fileVisibilityList(file);
+  if (!vis || !vis.length) return true;
+  return vis.indexOf(currentCompany) >= 0;
+}
 function treeFileInfo(file) {
   var desc = file.getDescription() || '';
-  return { id: file.getId(), name: file.getName(), type: 'file', mimeType: file.getMimeType(), size: file.getSize(), url: file.getUrl(), downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId(), created: file.getDateCreated(), updated: file.getLastUpdated(), uploadedBy: metaValue(desc, 'Yukleyen'), description: cleanDescription(desc) };
+  var vis = fileVisibilityList(file);
+  return { id: file.getId(), name: file.getName(), type: 'file', mimeType: file.getMimeType(), size: file.getSize(), url: file.getUrl(), downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId(), created: file.getDateCreated(), updated: file.getLastUpdated(), uploadedBy: metaValue(desc, 'Yukleyen'), description: cleanDescription(desc), visibility: vis ? vis.join(',') : '' };
 }
 function listFolder(user, company, folderId) {
   company = requireCompany(user, company);
-  var croot = companyFilesRoot(company);
-  var folder = resolveTreeFolder(company, folderId);
+  var croot = rootFolder();
+  var folder = resolveTreeFolder(user, folderId);
   var crumbs = [], cur = folder;
   for (var g = 0; g < 60; g++) {
-    crumbs.unshift({ id: cur.getId(), name: cur.getId() === croot.getId() ? companyDisplayName(company) : cur.getName() });
+    crumbs.unshift({ id: cur.getId(), name: cur.getId() === croot.getId() ? DRIVE_ROOT_FOLDER_NAME : cur.getName() });
     if (cur.getId() === croot.getId()) break;
     var ps = cur.getParents();
     if (!ps.hasNext()) break;
@@ -749,33 +758,54 @@ function listFolder(user, company, folderId) {
   var folders = [], it = folder.getFolders();
   while (it.hasNext()) { var sf = it.next(); folders.push({ id: sf.getId(), name: sf.getName(), type: 'folder', created: sf.getDateCreated(), updated: sf.getLastUpdated() }); }
   var files = [], fit = folder.getFiles();
-  while (fit.hasNext()) files.push(treeFileInfo(fit.next()));
+  while (fit.hasNext()) {
+    var fl = fit.next();
+    if (userCanSeeFile(user, fl, company)) files.push(treeFileInfo(fl));
+  }
   folders.sort(function(a, b) { return String(a.name).localeCompare(String(b.name)); });
   files.sort(function(a, b) { return new Date(b.created).getTime() - new Date(a.created).getTime(); });
   return { ok: true, rootId: croot.getId(), folderId: folder.getId(), breadcrumb: crumbs, folders: folders, files: files };
 }
 function createTreeFolder(user, company, parentId, name) {
   company = requireCompany(user, company);
-  var parent = resolveTreeFolder(company, parentId);
+  var parent = resolveTreeFolder(user, parentId);
   var safe = String(name || '').replace(/[\\/]/g, '-').trim();
   if (!safe) throw new Error('Klasor adi gerekli.');
   if (parent.getFoldersByName(safe).hasNext()) throw new Error('Bu isimde klasor zaten var.');
   var f = parent.createFolder(safe);
   return { ok: true, folder: { id: f.getId(), name: f.getName(), type: 'folder', created: f.getDateCreated(), updated: f.getLastUpdated() } };
 }
-function uploadTreeFile(user, company, folderId, name, base64, mimeType, description) {
+function uploadTreeFile(user, company, folderId, name, base64, mimeType, description, visibility) {
   company = requireCompany(user, company);
   if (!base64 || !name) throw new Error('Dosya bilgisi eksik.');
-  var folder = resolveTreeFolder(company, folderId);
+  var folder = resolveTreeFolder(user, folderId);
   var blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType || 'application/octet-stream', name);
   var file = folder.createFile(blob);
-  file.setDescription((description || '') + '\nYukleyen: ' + (user.ad || user.username || '') + '\nYuklemeTarihi: ' + new Date().toISOString());
+  var visMeta = '';
+  if (visibility) {
+    var visList = String(visibility).split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(function(s) { return COMPANIES.indexOf(s) >= 0; });
+    if (visList.length) visMeta = '\nVisibility: ' + visList.join(',');
+  }
+  file.setDescription((description || '') + visMeta + '\nYukleyen: ' + (user.ad || user.username || '') + '\nYuklemeTarihi: ' + new Date().toISOString());
+  return { ok: true, file: treeFileInfo(file) };
+}
+function updateFileVisibility(user, data) {
+  if (!data.fileId) throw new Error('Dosya kimligi eksik.');
+  var file;
+  try { file = DriveApp.getFileById(data.fileId); } catch (e) { throw new Error('Dosya bulunamadi.'); }
+  var ps = file.getParents();
+  if (!ps.hasNext() || !folderIsWithin(ps.next(), rootFolder().getId())) throw new Error('Bu dosyaya erisim yetkiniz yok.');
+  var visList = String(data.visibility || '').split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(function(s) { return COMPANIES.indexOf(s) >= 0; });
+  var desc = file.getDescription() || '';
+  var lines = desc.split('\n').filter(function(line) { return line.indexOf('Visibility:') !== 0; });
+  if (visList.length) lines.push('Visibility: ' + visList.join(','));
+  file.setDescription(lines.join('\n'));
   return { ok: true, file: treeFileInfo(file) };
 }
 function deleteTreeItem(user, company, id, isFolder) {
   company = requireCompany(user, company);
   if (!id) throw new Error('Kimlik eksik.');
-  var croot = companyFilesRoot(company);
+  var croot = rootFolder();
   if (isFolder === true || isFolder === 'true') {
     var folder;
     try { folder = DriveApp.getFolderById(id); } catch (e) { throw new Error('Klasor bulunamadi.'); }
@@ -1010,6 +1040,7 @@ function doPost(e) {
       else if (data.action === 'createTreeFolder') result = createTreeFolder(user, data.company, data.parentId, data.name);
       else if (data.action === 'uploadTreeFile') result = uploadTreeFile(user, data.company, data.folderId, data.name, data.base64, data.mimeType, data.description);
       else if (data.action === 'deleteTreeItem') result = deleteTreeItem(user, data.company, data.id, data.isFolder);
+      else if (data.action === 'updateFileVisibility') result = updateFileVisibility(user, data);
       else if (data.action === 'nextOrderCode') result = nextOrderCode(data.customer);
       else if (data.action === 'previewOrderCode') result = nextOrderCodePreview(data.customer);
       else if (data.action === 'uploadOrderFile') result = uploadOrderFile(data, user);
