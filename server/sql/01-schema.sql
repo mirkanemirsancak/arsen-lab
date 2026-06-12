@@ -97,6 +97,32 @@ CREATE TABLE dbo.Ekipman (
 CREATE INDEX IX_Ekipman_company ON dbo.Ekipman(company);
 GO
 
+-- ── Eski/arşiv tablolar (UI artık kullanmıyor ama Excel'deki geçmiş veriler
+--    kaybolmasın diye şemada tutuyoruz; ileride istersen DROP edebilirsin). ──
+
+IF OBJECT_ID('dbo.Cikti','U') IS NULL
+CREATE TABLE dbo.Cikti (
+  id NVARCHAR(50) NOT NULL PRIMARY KEY,
+  batchId NVARCHAR(100) NULL, ad NVARCHAR(500) NULL,
+  hammadde NVARCHAR(500) NULL, hammaddeMiktar NVARCHAR(50) NULL,
+  hammaddeBirim NVARCHAR(50) NULL, ciktiMiktar NVARCHAR(50) NULL,
+  ciktiBirim NVARCHAR(50) NULL, tarih NVARCHAR(50) NULL,
+  operator NVARCHAR(200) NULL, kosullar NVARCHAR(MAX) NULL,
+  [not] NVARCHAR(MAX) NULL, kullanici NVARCHAR(100) NULL
+);
+GO
+
+IF OBJECT_ID('dbo.Girdi','U') IS NULL
+CREATE TABLE dbo.Girdi (
+  id NVARCHAR(50) NOT NULL PRIMARY KEY,
+  ad NVARCHAR(500) NULL, marka NVARCHAR(200) NULL, kategori NVARCHAR(100) NULL,
+  lab NVARCHAR(100) NULL, miktar NVARCHAR(50) NULL, birim NVARCHAR(50) NULL,
+  lotNo NVARCHAR(100) NULL, tedarikci NVARCHAR(300) NULL,
+  tarih NVARCHAR(50) NULL, skt NVARCHAR(50) NULL, fatura NVARCHAR(200) NULL,
+  [not] NVARCHAR(MAX) NULL, kullanici NVARCHAR(100) NULL
+);
+GO
+
 IF OBJECT_ID('dbo.KalibTarihce','U') IS NULL
 CREATE TABLE dbo.KalibTarihce (
   id NVARCHAR(50) NOT NULL PRIMARY KEY, company NVARCHAR(20) NOT NULL,
@@ -384,5 +410,5 @@ CREATE TABLE dbo.Files (
 CREATE INDEX IX_Files_parent ON dbo.Files(parentFolderId);
 GO
 
-PRINT '✓ Tüm tablolar oluşturuldu. (29 veri + 2 backend yardımcı)';
+PRINT '✓ Tüm tablolar oluşturuldu. (30 aktif + 2 arşiv + 2 backend yardımcı = 34)';
 GO
