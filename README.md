@@ -36,6 +36,21 @@ Guncelleme oncesi ana dosyalar bu lokal calisma alaninda `backups/` klasorune ko
 - Ana hedefler `Haftalik`, `Aylik`, `3 Aylik`, `6 Aylik` ve `Yillik` donemlerine ayrildi ve cizelge uzerinden filtrelenebilir hale getirildi.
 - `Superkritik CO2` hesaplayici sekmesi eklendi. CO2 kritik bolge kontrolu, CO2 tuketimi, solvent/hammadde orani, tahmini ekstrakt, co-solvent ve residence time hesaplari yapilir.
 
+## Syntegra akışı güncellemeleri (proje girişi → çıktı)
+
+- Mühendislik sekmesinde her alt parça satırına **çizim yükleme/indirme** eklendi (`Syn2_Ekipman.cizimler`).
+- Alt parçaların altına isteğe bağlı **alt-alt parça** (3. seviye) girilebilir (`Syn2_Ekipman.ustParca`).
+- Mühendislikte önceden tanımlı gövdelere ek olarak **yeni ana parça (gövde)** eklenebilir (`Syn2_Muhendislik.ekBodyler`).
+- **Satın almaya gönder** sonrası ekipman listesi kilitlenir; kime/ne zaman gönderildiği gösterilir; admin gönderimi geri alabilir (`satinalmaTarih`).
+- Yüklenen çizimler **satın alma sekmesinde** görüntülenip indirilebilir.
+- Girilmiş tekliflerin **tedarikçi + ürün detayları** (fiyat, para birimi, termin, ödeme, teslimat) düzenlenebilir.
+- **Tüm Syntegra değişiklikleri** `DuzenlemeLoglari`'na (Düzenleme Geçmişi) yazılır.
+- **Tüm onaylar admin yetkisine** sabitlendi (`canApproveSyn`). İleride belirli bir kişiye sabitlemek tek satırlık değişiklik.
+- **Zaman çizelgesi** skalası artık takvim yılına değil, girilen **ilk tarihe** göre başlar.
+- Proje içinden **Tam Rapor** butonu: proje + mühendislik + ekipman + satın alma + çizelge tek yazdırılabilir çıktı (PDF).
+
+> Not: `Syn2_Ekipman` ve `Syn2_Muhendislik` sheet'lerine yeni kolonlar eklendi. Frontend ilk yazımda başlık satırını otomatik genişletir; yine de tutarlılık için `apps-script-drive-backend.gs` tekrar yapıştırılıp **yeni deployment** alınması önerilir.
+
 ## Not
 
 Stok sheet semasina `dolap` kolonu eklendi. Uygulama ilk stok kaydinda/yaziminda Google Sheets tarafindaki Stok basligini yeni sirayla yazacaktir.

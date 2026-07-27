@@ -226,6 +226,7 @@ CREATE TABLE dbo.Syn2_Muhendislik (
   revizyonNumarasi NVARCHAR(20) NULL, revizyonGecmisi NVARCHAR(MAX) NULL,
   sonGonderim NVARCHAR(50) NULL, sonKararKullanici NVARCHAR(100) NULL,
   sonKararTarih NVARCHAR(50) NULL, satinalmaSorumlu NVARCHAR(100) NULL,
+  satinalmaTarih NVARCHAR(50) NULL, ekBodyler NVARCHAR(MAX) NULL,
   olusturan NVARCHAR(100) NULL, olusturma NVARCHAR(50) NULL, guncelleme NVARCHAR(50) NULL
 );
 CREATE INDEX IX_Syn2_Muhendislik_projectCode ON dbo.Syn2_Muhendislik(projectCode);
@@ -235,11 +236,12 @@ IF OBJECT_ID('dbo.Syn2_Ekipman','U') IS NULL
 CREATE TABLE dbo.Syn2_Ekipman (
   id NVARCHAR(50) NOT NULL PRIMARY KEY, company NVARCHAR(20) NOT NULL,
   projectCode NVARCHAR(50) NULL, body NVARCHAR(200) NULL,
-  altParca NVARCHAR(500) NULL, adet NVARCHAR(50) NULL,
+  altParca NVARCHAR(500) NULL, ustParca NVARCHAR(500) NULL, adet NVARCHAR(50) NULL,
   olcu NVARCHAR(200) NULL, malzemeCinsi NVARCHAR(200) NULL,
   malzemeKalitesi NVARCHAR(200) NULL, amac NVARCHAR(MAX) NULL,
   [not] NVARCHAR(MAX) NULL, termin NVARCHAR(50) NULL,
   uretimTermin NVARCHAR(50) NULL, siraNo NVARCHAR(20) NULL,
+  cizimler NVARCHAR(MAX) NULL,
   kullanici NVARCHAR(100) NULL, olusturma NVARCHAR(50) NULL, guncelleme NVARCHAR(50) NULL
 );
 CREATE INDEX IX_Syn2_Ekipman_projectCode ON dbo.Syn2_Ekipman(projectCode);
