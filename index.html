@@ -2289,6 +2289,7 @@ function muhWorkspaceHtml(projectCode,withHeader){
   const canAddBody=cizimOnayli&&!locked&&(p.sorumlu===currentUser.username||isUmbrella()||isAdmin());
   const tabs=[{key:'cizim',label:'Çizimler',disabled:false}];
   synProjeBodies(projectCode,mh).forEach(b=>tabs.push({key:'body:'+b,label:b,disabled:!cizimOnayli}));
+  tabs.push({key:'altalt',label:'Alt-Alt Parçalar',disabled:!cizimOnayli});
   tabs.push({key:'gonder',label:'Satın Almaya Gönder',disabled:!cizimOnayli});
   const tabBar=`<div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;border-bottom:1px solid var(--border)">${tabs.map(t=>`<button class="filter-btn ${_muhActiveTab===t.key?'active':''}" ${t.disabled?'disabled style="opacity:.4;cursor:not-allowed"':''} onclick="muhSetTab('${t.key}')" title="${t.disabled?'Önce Çizimler onaylanmalı':''}">${esc(t.label)}</button>`).join('')}${canAddBody?`<button class="filter-btn" style="border-style:dashed;color:var(--accent)" onclick="muhAnaParcaEkle()" title="Yeni ana parça (gövde) ekle">+ Ana Parça</button>`:''}</div>`;
   const header=withHeader?`<div class="card mb-16">
@@ -2310,6 +2311,7 @@ function muhWorkspaceHtml(projectCode,withHeader){
   let body='';
   if(_muhActiveTab==='cizim'){body=muhCizimSection(p,mh,revGecmisi);}
   else if(_muhActiveTab==='gonder'){body=muhGonderSection(p,mh);}
+  else if(_muhActiveTab==='altalt'){body=muhAltAltSection(p,mh);}
   else if(_muhActiveTab.startsWith('body:')){body=muhBodySection(p,mh,_muhActiveTab.slice(5));}
   return header+tabBar+body;
 }
@@ -2391,6 +2393,18 @@ function muhBodyRows(projectCode,body){
 }
 // Bir alt parçanın hiyerarşideki çocuklarını (alt-alt parça) döndürür. Çocuklar ustParca=üst-adı ile bağlanır.
 function muhChildRows(rows,parentName){return parentName?rows.filter(r=>(r.ustParca||'')===parentName):[];}
+// Aktif düzenlenen gövde: 'body:X' sekmesinde X, 'altalt' sekmesinde seçili gövde.
+function muhActiveBody(){return _muhActiveTab==='altalt'?_muhAltAltBody:(_muhActiveTab.startsWith('body:')?_muhActiveTab.slice(5):'');}
+function muhRerender(){if(_wsProject)projeWorkspace();else muhWorkspace(_muhSelectedProjectCode);}
+// Paylaşılan hücre render'ları (hem gövde tablosu hem alt-alt sekmesi kullanır).
+function muhCellInput(i,field,val,meEng,extra){return `<input type="text" value="${esc(val||'')}" oninput="muhRowEdit(${i},'${field}',this.value)" ${meEng?'':'readonly'} style="width:100%;background:transparent;border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text);${extra||''}">`;}
+function muhMalOpts(arr,sel){return arr.map(v=>`<option value="${esc(v)}" ${(sel||'')===v?'selected':''}>${esc(v||'—')}</option>`).join('');}
+function muhCizimCell(i,r,meEng){
+  const files=synParseFiles(r.cizimler);
+  const chips=files.map((f,j)=>synFileChip(f,meEng,`muhRowCizimSil(${i},${j})`)).join('')||'<span class="text-muted text-sm">—</span>';
+  const up=meEng?`<label class="btn btn-ghost btn-sm" style="margin-top:4px;display:inline-block;cursor:pointer">📎 Çizim<input type="file" multiple style="display:none" onchange="muhRowCizimYukle(${i},this)"></label>`:'';
+  return `<div style="min-width:150px">${chips}<div>${up}</div></div>`;
+}
 function muhBodySection(p,mh,body){
   const cizimOnayli=mh.durum==='Onaylandı';
   if(!cizimOnayli)return `<div class="card"><div class="empty-state">Önce çizimler onaylanmalı.</div></div>`;
@@ -2456,7 +2470,7 @@ function muhBodySection(p,mh,body){
   </div>`;
 }
 function muhRowEdit(i,field,val){
-  const k=muhBodyDraftKey(_muhSelectedProjectCode,_muhActiveTab.slice(5));
+  const k=muhBodyDraftKey(_muhSelectedProjectCode,muhActiveBody());
   const rows=_muhBodyDrafts[k];if(!rows||!rows[i])return;
   const old=rows[i][field];
   rows[i][field]=val;
@@ -2464,7 +2478,7 @@ function muhRowEdit(i,field,val){
   if(field==='altParca'&&!(rows[i].ustParca||'')&&old&&old!==val){rows.forEach(c=>{if((c.ustParca||'')===old)c.ustParca=val;});}
 }
 function muhRowEkle(){
-  const body=_muhActiveTab.slice(5);
+  const body=muhActiveBody();
   const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
   if(!_muhBodyDrafts[k])_muhBodyDrafts[k]=[];
   _muhBodyDrafts[k].push({id:'',altParca:'',ustParca:'',adet:'',olcu:'',malzemeCinsi:'',malzemeKalitesi:'',amac:'',not:'',cizimler:'[]',siraNo:_muhBodyDrafts[k].length+1,_new:true});
@@ -2472,7 +2486,7 @@ function muhRowEkle(){
 }
 // Bir alt parçanın altına alt-alt parça ekler (üst adı tıklama anında çözülür).
 function muhAltAltEkle(parentIdx){
-  const body=_muhActiveTab.slice(5);
+  const body=muhActiveBody();
   const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
   const rows=_muhBodyDrafts[k];if(!rows||!rows[parentIdx])return;
   const parentName=(rows[parentIdx].altParca||'').trim();
@@ -2481,7 +2495,7 @@ function muhAltAltEkle(parentIdx){
   muhWorkspace(_muhSelectedProjectCode);
 }
 async function muhRowSil(i){
-  const body=_muhActiveTab.slice(5);
+  const body=muhActiveBody();
   const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
   const rows=_muhBodyDrafts[k];if(!rows||!rows[i])return;
   const r=rows[i];const nm=(r.altParca||'').trim();
@@ -2493,7 +2507,7 @@ async function muhRowSil(i){
 // Satır bazlı çizim yükleme (alt / alt-alt parça). Dosya Drive'a gider, satırın cizimler alanına eklenir.
 async function muhRowCizimYukle(i,input){
   const files=Array.from(input.files||[]);if(!files.length)return;
-  const body=_muhActiveTab.slice(5);
+  const body=muhActiveBody();
   const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
   const rows=_muhBodyDrafts[k];if(!rows||!rows[i]){toast('Satır bulunamadı.','err');return;}
   const r=rows[i];let arr=synParseFiles(r.cizimler);
@@ -2510,14 +2524,14 @@ async function muhRowCizimYukle(i,input){
   toast('Çizim eklendi. Kalıcı olması için Kaydet.');
 }
 function muhRowCizimSil(i,j){
-  const body=_muhActiveTab.slice(5);
+  const body=muhActiveBody();
   const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
   const rows=_muhBodyDrafts[k];if(!rows||!rows[i])return;
   const arr=synParseFiles(rows[i].cizimler);arr.splice(j,1);rows[i].cizimler=JSON.stringify(arr);
   muhWorkspace(_muhSelectedProjectCode);
 }
 async function muhBodyKaydet(){
-  const body=_muhActiveTab.slice(5);
+  const body=muhActiveBody();
   const projectCode=_muhSelectedProjectCode;
   const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
   if(muhSatinalmaGonderildi(p)&&!isAdmin()){toast('Liste satın almaya gönderildi, düzenleme kilitli.','err');return;}
@@ -2545,6 +2559,64 @@ async function muhBodyKaydet(){
   delete _muhBodyDrafts[k];
   muhWorkspace(projectCode);
   save('Syn2_Ekipman').then(()=>toast(body+' kaydedildi ✓ ('+meaningful.length+' satır)')).catch(e=>toast('Hata: '+e.message,'err'));
+}
+// #10 · Ayrı 'Alt-Alt Parçalar' sekmesi — gövde + alt parça seçip alt-alt parçaları tek yerden yönet.
+let _muhAltAltBody='';
+let _muhAltAltParent='';
+function muhAltAltSetBody(v){_muhAltAltBody=v;_muhAltAltParent='';muhRerender();}
+function muhAltAltSetParent(v){_muhAltAltParent=v;muhRerender();}
+function muhAltAltEkleChild(){
+  const body=_muhAltAltBody,parent=_muhAltAltParent;
+  if(!parent){toast('Önce bir alt parça seçin.','err');return;}
+  const k=muhBodyDraftKey(_muhSelectedProjectCode,body);
+  if(!_muhBodyDrafts[k])muhBodyRows(_muhSelectedProjectCode,body);
+  _muhBodyDrafts[k].push({id:'',altParca:'',ustParca:parent,adet:'',olcu:'',malzemeCinsi:'',malzemeKalitesi:'',amac:'',not:'',cizimler:'[]',siraNo:_muhBodyDrafts[k].length+1,_new:true});
+  muhRerender();
+}
+function muhAltAltSection(p,mh){
+  const cizimOnayli=mh.durum==='Onaylandı';
+  if(!cizimOnayli)return `<div class="card"><div class="empty-state">Önce çizimler onaylanmalı.</div></div>`;
+  const locked=muhSatinalmaGonderildi(p);
+  const meEng=(p.sorumlu===currentUser.username||isUmbrella()||isAdmin())&&!locked;
+  const bodies=synProjeBodies(p.projectCode,mh).filter(b=>muhBodyRows(p.projectCode,b).some(r=>!(r.ustParca||'').trim()&&(r.altParca||'').trim()));
+  if(!bodies.length)return `<div class="card"><div class="empty-state"><div class="empty-icon">▤</div><div style="margin-top:8px">Önce bir gövde sekmesinde alt parça ekleyip <strong>Kaydet</strong> deyin; sonra buradan o alt parçalara alt-alt parça girebilirsiniz.</div></div></div>`;
+  if(!bodies.includes(_muhAltAltBody))_muhAltAltBody=bodies[0];
+  const body=_muhAltAltBody;
+  const rows=muhBodyRows(p.projectCode,body);
+  const parents=rows.map((r,i)=>({r,i})).filter(x=>!(x.r.ustParca||'').trim()&&(x.r.altParca||'').trim());
+  const parentNames=parents.map(x=>x.r.altParca);
+  if(!parentNames.includes(_muhAltAltParent))_muhAltAltParent=parentNames[0]||'';
+  const parent=_muhAltAltParent;
+  const children=rows.map((r,i)=>({r,i})).filter(x=>(x.r.ustParca||'').trim()===parent);
+  const rowHtml=(x)=>{const i=x.i,r=x.r;return `<tr>
+    <td>${muhCellInput(i,'altParca',r.altParca,meEng)}</td>
+    <td>${muhCellInput(i,'adet',r.adet,meEng,'text-align:right')}</td>
+    <td>${muhCellInput(i,'olcu',r.olcu,meEng)}</td>
+    <td>${meEng?`<select onchange="muhRowEdit(${i},'malzemeCinsi',this.value)" style="width:100%;background:var(--bg3);border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text)">${muhMalOpts(SYN_MALZEME_CINSI,r.malzemeCinsi)}</select>`:esc(r.malzemeCinsi||'—')}</td>
+    <td>${meEng?`<select onchange="muhRowEdit(${i},'malzemeKalitesi',this.value)" style="width:100%;background:var(--bg3);border:1px solid var(--border);padding:6px 8px;border-radius:6px;color:var(--text)">${muhMalOpts(SYN_MALZEME_KALITESI,r.malzemeKalitesi)}</select>`:esc(r.malzemeKalitesi||'—')}</td>
+    <td>${muhCellInput(i,'amac',r.amac||r.not,meEng)}</td>
+    <td>${muhCizimCell(i,r,meEng)}</td>
+    ${meEng?`<td><button class="btn btn-ghost btn-sm" onclick="muhRowSil(${i})" title="Kaldır" style="color:var(--red)">×</button></td>`:''}
+  </tr>`;};
+  const tbl=children.length?`<div class="table-wrap"><table style="font-size:12px">
+    <thead><tr><th style="min-width:160px">Alt-Alt Parça</th><th style="min-width:60px">Adet</th><th style="min-width:170px">Ölçü / Kapasite</th><th style="min-width:130px">Malzeme Cinsi</th><th style="min-width:130px">Malzeme Kalitesi</th><th style="min-width:150px">Amaç / Not</th><th style="min-width:150px">Çizimler</th>${meEng?'<th></th>':''}</tr></thead>
+    <tbody>${children.map(rowHtml).join('')}</tbody></table></div>`:`<div class="empty-state">“${esc(parent||'—')}” için alt-alt parça yok. ${meEng?'“+ Alt-Alt Parça” ile ekleyin.':''}</div>`;
+  const bodySel=`<select onchange="muhAltAltSetBody(this.value)" style="background:var(--bg3);border:1px solid var(--border);padding:6px 10px;border-radius:6px;color:var(--text)">${bodies.map(b=>`<option value="${esc(b)}" ${b===body?'selected':''}>${esc(b)}</option>`).join('')}</select>`;
+  const parentSel=parentNames.length?`<select onchange="muhAltAltSetParent(this.value)" style="background:var(--bg3);border:1px solid var(--border);padding:6px 10px;border-radius:6px;color:var(--text)">${parentNames.map(n=>`<option value="${esc(n)}" ${n===parent?'selected':''}>${esc(n)}</option>`).join('')}</select>`:'<span class="text-muted text-sm">Bu gövdede alt parça yok</span>';
+  return `<div class="card">
+    <div class="card-header"><span class="card-title">Alt-Alt Parçalar</span>
+      <div class="flex gap-8">
+        ${meEng&&parent?`<button class="btn btn-ghost btn-sm" onclick="muhAltAltEkleChild()">+ Alt-Alt Parça</button>`:''}
+        ${meEng?`<button class="btn btn-primary btn-sm" onclick="muhBodyKaydet()">Kaydet</button>`:''}
+      </div>
+    </div>
+    ${locked?'<div class="alert alert-amber" style="font-size:12px">🔒 Liste satın almaya gönderildi, düzenleme kilitli.</div>':'<div class="text-sm text-muted" style="margin-bottom:8px">Gövde ve alt parçayı seçip, o alt parçanın altına isteğe/gereğe göre alt-alt parça ekleyin. Değişiklikler <strong>Kaydet</strong> ile kalıcı olur.</div>'}
+    <div class="flex gap-8 items-center mb-16" style="flex-wrap:wrap">
+      <span class="text-sm text-muted">Gövde</span>${bodySel}
+      <span class="text-sm text-muted" style="margin-left:8px">Alt Parça</span>${parentSel}
+    </div>
+    ${tbl}
+  </div>`;
 }
 // Özet table state — which body rows are expanded to show sub-parts.
 let _ozetOpenBodies={};
