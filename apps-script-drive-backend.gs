@@ -243,7 +243,7 @@ function requireAuth(token) {
   for (var i = 0; i < users.length; i++) {
     if (users[i].id === payload.id && users[i].username === payload.username) {
       if (!(users[i].active === true || users[i].active === 'true')) throw new Error('Kullanici pasif.');
-      if (!normEmail(users[i].email)) throw new Error('Google e-posta tanimli degil.');
+      // E-posta artik giris icin zorunlu degil; aktif kullanici e-posta olmadan da erisebilir.
       return users[i];
     }
   }
@@ -256,7 +256,8 @@ function login(data) {
   var users = usersData();
   for (var i = 0; i < users.length; i++) {
     if (users[i].username === username && users[i].passwordHash === passwordHash && (users[i].active === true || users[i].active === 'true')) {
-      if (!normEmail(users[i].email)) throw new Error('Bu kullanici icin Google e-posta tanimli degil. Admin e-posta eklemeden sisteme erisim verilemez.');
+      // E-posta artik giris icin zorunlu degil; kullanici adi + sifre dogruysa ve hesap aktifse giris yapilir.
+      // (Drive islemleri backend sahibi olarak calisir; e-posta yalnizca Drive/Sheets paylasim izinleri icin kullanilir.)
       return { ok: true, token: makeToken(users[i]), user: publicUser(users[i]) };
     }
   }
