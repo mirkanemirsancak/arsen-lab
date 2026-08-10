@@ -27,7 +27,7 @@ var DEFAULT_SHEET_HEADERS = {
   SynMaliyet: ['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
   SynRaporlar: ['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler: ['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
-  Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','satinalmaTarih','ekBodyler','olusturan','olusturma','guncelleme'],
+  Syn2_Muhendislik: ['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','satinalmaTarih','ekBodyler','gizliBodyler','olusturan','olusturma','guncelleme'],
   Syn2_Ekipman: ['id','company','projectCode','body','altParca','ustParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','termin','uretimTermin','siraNo','cizimler','kullanici','olusturma','guncelleme'],
   Syn2_Teklif: ['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme'],
   Syn2_Gantt: ['id','company','projectCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme'],
@@ -243,7 +243,7 @@ function requireAuth(token) {
   for (var i = 0; i < users.length; i++) {
     if (users[i].id === payload.id && users[i].username === payload.username) {
       if (!(users[i].active === true || users[i].active === 'true')) throw new Error('Kullanici pasif.');
-      if (!normEmail(users[i].email)) throw new Error('Google e-posta tanimli degil.');
+      // E-posta artik giris icin zorunlu degil; aktif kullanici e-posta olmadan da erisebilir.
       return users[i];
     }
   }
@@ -256,7 +256,8 @@ function login(data) {
   var users = usersData();
   for (var i = 0; i < users.length; i++) {
     if (users[i].username === username && users[i].passwordHash === passwordHash && (users[i].active === true || users[i].active === 'true')) {
-      if (!normEmail(users[i].email)) throw new Error('Bu kullanici icin Google e-posta tanimli degil. Admin e-posta eklemeden sisteme erisim verilemez.');
+      // E-posta artik giris icin zorunlu degil; kullanici adi + sifre dogruysa ve hesap aktifse giris yapilir.
+      // (Drive islemleri backend sahibi olarak calisir; e-posta yalnizca Drive/Sheets paylasim izinleri icin kullanilir.)
       return { ok: true, token: makeToken(users[i]), user: publicUser(users[i]) };
     }
   }

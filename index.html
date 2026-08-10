@@ -488,7 +488,7 @@ const COLS={
   SynMaliyet:['id','company','projeId','kategori','aciklama','planlanan','gerceklesen','paraBirimi','tarih','faturaLink','not','kullanici'],
   SynRaporlar:['id','company','projeId','raporTarihi','baslik','ilerleme','tamamlanan','riskler','sonrakiAdimlar','fotoLink','sertifikaLink','paylasimDurumu','kullanici'],
   Syn2_Projeler:['id','company','projectCode','projeAdi','musteri','musteriKisaltma','sorumlu','baslangic','termin','durum','sartnameDosyalar','tasarimDosyalar','driveFolderId','aciklama','olusturan','olusturma','guncelleme'],
-  Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','satinalmaTarih','ekBodyler','olusturan','olusturma','guncelleme'],
+  Syn2_Muhendislik:['id','company','projectCode','durum','pidDosyalar','cizimDosyalar','revizyonNumarasi','revizyonGecmisi','sonGonderim','sonKararKullanici','sonKararTarih','satinalmaSorumlu','satinalmaTarih','ekBodyler','gizliBodyler','olusturan','olusturma','guncelleme'],
   Syn2_Ekipman:['id','company','projectCode','body','altParca','ustParca','adet','olcu','malzemeCinsi','malzemeKalitesi','amac','not','termin','uretimTermin','siraNo','cizimler','kullanici','olusturma','guncelleme'],
   Syn2_Teklif:['id','company','projectCode','ekipmanId','tedarikci','fiyat','paraBirimi','termin','odeme','teslimat','kazanan','kazanmaSebebi','onayDurumu','onayKullanici','onayTarihi','onayNot','durum','kullanici','olusturma','guncelleme'],
   Syn2_Gantt:['id','company','projectCode','tip','body','baslik','baslangic','bitis','kullanici','olusturma','guncelleme'],
@@ -2328,9 +2328,18 @@ async function muhAnaParcaEkle(){
   const ad=await promptDialog('Yeni ana parça (gövde) adı:','','Ana Parça Ekle');
   if(ad===null||!ad.trim())return;
   const name=ad.trim();
-  if(synProjeBodies(projectCode,mh).some(b=>b.toLowerCase()===name.toLowerCase())){toast('Bu ana parça zaten var.','err');muhSetTab('body:'+name);return;}
+  // Daha önce gizlenmiş (silinmiş) bir gövdeyse, gizlemeyi kaldır.
+  let hidden=[];try{hidden=JSON.parse(mh.gizliBodyler||'[]')||[];}catch(e){}
+  const wasHidden=hidden.some(b=>b.toLowerCase()===name.toLowerCase());
+  if(wasHidden){hidden=hidden.filter(b=>b.toLowerCase()!==name.toLowerCase());mh.gizliBodyler=JSON.stringify(hidden);}
+  if(synProjeBodies(projectCode,mh).some(b=>b.toLowerCase()===name.toLowerCase())){
+    // Zaten görünürse (gizli değilse) uyar; gizliyken yeni açıldıysa aşağıda devam.
+    if(!wasHidden){toast('Bu ana parça zaten var.','err');muhSetTab('body:'+name);return;}
+  }
   let extra=[];try{extra=JSON.parse(mh.ekBodyler||'[]')||[];}catch(e){}
-  extra.push(name);mh.ekBodyler=JSON.stringify(extra);mh.guncelleme=new Date().toISOString();
+  // Önceden tanımlı gövde değilse özel gövde olarak ekle.
+  if(!SYN_BODY_LIST.some(b=>b.toLowerCase()===name.toLowerCase())&&!extra.some(b=>b.toLowerCase()===name.toLowerCase()))extra.push(name);
+  mh.ekBodyler=JSON.stringify(extra);mh.guncelleme=new Date().toISOString();
   logDuz('Syntegra Mühendislik · Ana Parça',mh.id,{},{eklenen:name});
   _muhActiveTab='body:'+name;
   if(_wsProject)projeWorkspace();else muhWorkspace(projectCode);
@@ -2376,10 +2385,34 @@ function muhSatinalmaGonderildi(p){return p&&['Satın Alma Sürecinde','Tamamlan
 // Projenin gövde (ana parça) listesi = önceden tanımlı liste ∪ mühendislikte eklenen özel gövdeler ∪ ekipmanda geçen gövdeler.
 function synProjeBodies(projectCode,mh){
   if(!mh)mh=(C.Syn2_Muhendislik||[]).find(m=>m.projectCode===projectCode);
-  let extra=[];try{extra=JSON.parse(mh?.ekBodyler||'[]')||[];}catch(e){}
+  let extra=[],hidden=[];
+  try{extra=JSON.parse(mh?.ekBodyler||'[]')||[];}catch(e){}
+  try{hidden=JSON.parse(mh?.gizliBodyler||'[]')||[];}catch(e){}
   const eq=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode).map(r=>r.body);
   const all=[...SYN_BODY_LIST,...extra,...eq];
-  return all.filter((b,i)=>b&&all.indexOf(b)===i);
+  return all.filter((b,i)=>b&&all.indexOf(b)===i&&!hidden.includes(b));
+}
+// Bir gövdeyi (ana parça) projeden tamamen kaldır: parçalarını sil, sekmesini gizle.
+async function muhBodyGovdeSil(){
+  const body=muhActiveBody();if(!body)return;
+  const projectCode=_muhSelectedProjectCode;
+  const p=C.Syn2_Projeler.find(x=>x.projectCode===projectCode);
+  if(muhSatinalmaGonderildi(p)){toast('Liste satın almaya gönderildi, düzenleme kilitli.','err');return;}
+  const mh=C.Syn2_Muhendislik.find(m=>m.projectCode===projectCode);if(!mh)return;
+  const cnt=(C.Syn2_Ekipman||[]).filter(r=>r.projectCode===projectCode&&r.body===body).length;
+  if(!await confirmDialog(`"${body}" gövdesi ve ${cnt} parçası bu projeden silinsin mi? Sekme kaldırılacak. (İstersen sonra "+ Ana Parça" ile geri ekleyebilirsin.)`))return;
+  C.Syn2_Ekipman=(C.Syn2_Ekipman||[]).filter(r=>!(r.projectCode===projectCode&&r.body===body));
+  let extra=[],hidden=[];
+  try{extra=JSON.parse(mh.ekBodyler||'[]')||[];}catch(e){}
+  try{hidden=JSON.parse(mh.gizliBodyler||'[]')||[];}catch(e){}
+  extra=extra.filter(b=>b!==body);
+  if(SYN_BODY_LIST.includes(body)&&!hidden.includes(body))hidden.push(body); // önceden tanımlı gövde → sekmeyi gizle
+  mh.ekBodyler=JSON.stringify(extra);mh.gizliBodyler=JSON.stringify(hidden);mh.guncelleme=new Date().toISOString();
+  delete _muhBodyDrafts[muhBodyDraftKey(projectCode,body)];
+  _muhActiveTab='cizim';
+  logDuz('Syntegra Mühendislik · Gövde Sil',mh.id,{body,parca:cnt},{});
+  if(_wsProject)projeWorkspace();else muhWorkspace(projectCode);
+  Promise.all([save('Syn2_Ekipman'),save('Syn2_Muhendislik')]).then(()=>toast('Gövde silindi ✓')).catch(e=>toast('Hata: '+e.message,'err'));
 }
 function muhBodyRows(projectCode,body){
   const k=muhBodyDraftKey(projectCode,body);
@@ -2461,6 +2494,7 @@ function muhBodySection(p,mh,body){
     <div class="card-header">
       <span class="card-title">${esc(body)} · parçalar</span>
       <div class="flex gap-8">
+        ${meEng?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="muhBodyGovdeSil()" title="Bu gövdeyi (sekmeyi) projeden kaldır">🗑 Gövdeyi Sil</button>`:''}
         ${meEng?`<button class="btn btn-ghost btn-sm" onclick="muhRowEkle()">+ Yeni Alt Parça</button>`:''}
         ${meEng?`<button class="btn btn-primary btn-sm" onclick="muhBodyKaydet()">Kaydet</button>`:''}
       </div>
