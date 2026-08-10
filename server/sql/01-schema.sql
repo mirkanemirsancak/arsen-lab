@@ -226,7 +226,7 @@ CREATE TABLE dbo.Syn2_Muhendislik (
   revizyonNumarasi NVARCHAR(20) NULL, revizyonGecmisi NVARCHAR(MAX) NULL,
   sonGonderim NVARCHAR(50) NULL, sonKararKullanici NVARCHAR(100) NULL,
   sonKararTarih NVARCHAR(50) NULL, satinalmaSorumlu NVARCHAR(100) NULL,
-  satinalmaTarih NVARCHAR(50) NULL, ekBodyler NVARCHAR(MAX) NULL,
+  satinalmaTarih NVARCHAR(50) NULL, ekBodyler NVARCHAR(MAX) NULL, gizliBodyler NVARCHAR(MAX) NULL,
   olusturan NVARCHAR(100) NULL, olusturma NVARCHAR(50) NULL, guncelleme NVARCHAR(50) NULL
 );
 CREATE INDEX IX_Syn2_Muhendislik_projectCode ON dbo.Syn2_Muhendislik(projectCode);
